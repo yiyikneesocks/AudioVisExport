@@ -6,8 +6,9 @@
 >
 > | 文档 / 项目版本 | 日期 | tag（可）| 里程碑 |
 > |---|---|---|---|
-> | v0.3.1 | 2026-09-02 | `v0.3.1`（推荐打 tag）| GUI 上线 + 全英文 UI + 4 种 style + 双 target |
-> | v0.3.0 | 2026-09-02 | `v0.3.0`（首次 commit c495faf + docs 9d619f5）| Engine + 4 styles + CLI + GUI skeleton |
+> | v0.3.2 | 2026-09-02 | `v0.3.2`（推荐打 tag）| ARCHITECTURE.md GUI 章节重写：精确成员字段、类成员同步流程、导出线程原子轮询、面板回调、已知限制 |
+> | v0.3.1 | 2026-09-02 | `v0.3.1`（已 push）| GUI 上线 + 全英文 UI + 4 种 style + 双 target |
+> | v0.3.0 | 2026-09-02 | `v0.3.0`（已 push）| Engine + 4 styles + CLI + GUI skeleton |
 >
 > 协作时：若要修改功能，请先新建分支；文档末尾版本号 / 变更日志必须与代码 commit 同步更新。
 
@@ -212,32 +213,225 @@ class SpectrumStyle {
 4. `core.getBandFrame(bandFrame)` → `style.render(g, canvas, bandFrame, rp)`
 5. 返回 Image → PngSequenceEncoder 写帧
 
-### 4.5 GUI 实时预览（AudioVisGUI，v0.3 新增）
-**文件**：`source/gui/`（独立 target `AudioVisGUI`，与 CLI 共享全部引擎源）
+### 4.5 GUI 实时预览（AudioVisGUI，v0.3 上线）
+**Target**：`AudioVisGUI`（独立 GUI app，CMake `juce_add_gui_app`）
+**Source dir**：`source/gui/`（与 CLI 通过 `AVX_ENGINE_SOURCES` 变量**共享全部引擎源**，避免重复编译并确保行为一致）
+**链接依赖**：`juce_audio_utils juce_dsp juce_graphics juce_gui_basics juce_gui_extra`（juce_gui_extra 用于 `juce::ColourSelector` + `juce::CallOutBox::launchAsynchronously`）
 
-**架构（纯软件渲染，无 OpenGL）**：
+---
+
+#### 4.5.1 源文件与类映射（类名 / 基类 / 关键成员，按代码实态）
+
+| 文件 | 类 | 基类 | 核心字段 | 说明 |
+|---|---|---|---|---|
+| `Main.cpp` | `AVXGuiApplication` | `juce::JUCEApplication` | 全局 `LookAndFeel::setDefaultSansSerifTypefaceName("Segoe UI")` | 应用入口；启动时**全局固定字体为 Segoe UI**，避免非 Unicode locale 乱码 |
+| `Main.cpp` | `AVXGuiWindow` | `juce::DocumentWindow` | `setUsingNativeTitleBar(true)`；resize limits (960×640..8192×8192)；默认 1280×800 | 原生标题栏 + 可缩放 |
+| `MainComponent.h/.cpp` | `MainComponent` | `juce::Component, juce::Timer` | 见下文"成员字段速查表" | 顶层组件：布局、音频、同步、导出 |
+| `SpectrumCanvas.h/.cpp` | `SpectrumCanvas` | `juce::Component, juce::FileDragAndDropTarget` | `BandFrame frame; RenderParams rp; SpectrumStyle* style; bool hasAudio; bool showCheckerboard`；回调：`onFileDropped`, `onEmptyClicked` | 左画布：ARGB Image + style.render + 拖放目标 + 棋盘格预览 + 空状态文案 |
+| `ParamPanel.h/.cpp` | `ParamPanel` | `juce::Component` | `std::vector<Row> rows; OwnedArray<Component> widgets; std::map<Component*, unique_ptr<Label>> rowLabels; int contentHeight, exportAreaHeight;`；回调：`onParamsChanged, onExportClicked, onBrowseOutputDir`；API：`getCheckerPreview(), setProgressText(t), setOutputDirText(t), setExportEnabled(bool)` | 右侧可滚动参数面板（含 6 个 section + 导出区）|
+
+---
+
+#### 4.5.2 MainComponent 成员字段速查表（协作 AI 读/写参考）
+
+> 字段按职责分组。所有字段名均为代码中真实存在（来自 `MainComponent.h/cpp`）。
+
+| 分组 | 字段 | 类型 | 真实实现行为 |
+|---|---|---|---|
+| **音频播放** | `formatManager` | `juce::AudioFormatManager` | ctor 中 `registerBasicFormats()`（WAV/AIFF）|
+| | `deviceManager` | `juce::AudioDeviceManager` | `initialiseWithDefaultDevices(0, 2)`（0 进 2 出默认设备）|
+| | `player` | `juce::AudioSourcePlayer` | `setSource(&transport)` + `deviceManager.addAudioCallback(&player)` |
+| | `transport` | `juce::AudioTransportSource` | 播放时钟；play/pause 按钮 + seekBar 写位置；`getCurrentPosition()` 作为同步源 |
+| | `readerSource` | `unique_ptr<AudioFormatReaderSource>` | 生命周期：loadFile 时创建 / 下次 loadFile / 析构时 release 给 transport |
+| | `pcm` | `PcmSource` | **离线读取通道（与扬声器解耦）**，`readInterleavedStereo(frameIdx*spf, spf, dst)` 给 SpectrumCore。确保暂停/seek 时曲线仍可正确显示，不依赖环形 buffer |
+| | `audioFile` / `srcRate` | `juce::File / double` | 记录当前音频路径与采样率；hasAudio=false 时画布显示拖放提示 |
+| | `hasAudio` | `bool` | 供 canvas、playBtn、startExport 判断 |
+| **引擎** | `params` | `SpectrumParams` | **单源真值（single source of truth）**：GUI 面板改动直接写结构体字段；CLI/JSON 也写入同一字段 |
+| | `core` | `unique_ptr<SpectrumCore>` | 当前帧状态容器（双路 FFT + 平滑 + 峰值保持）|
+| | `style` | `unique_ptr<SpectrumStyle>` | 工厂产物，命名：`y2k-line / bar / polyline / crystal` |
+| | `currentStyleName` | `String` | 与 `params.style` 比较，不一致时重建 style（避免每个 tick 重建）|
+| | `paramsDirty` | `atomic<bool>` | ParamPanel 回调置 `true`；timer 中 `exchange(false)` 触发 core/style 重建。**原子变量，跨线程读安全** |
+| | `coreFramePos` | `int64_t` | SpectrumCore 已推进到第几帧（= pcm 已读到 `coreFramePos × frames_per_sample` 位置）|
+| | `pendingSeekFrame` | `int64_t` | `<0` 表示无 seek；≥0 时下一 tick 执行"重建 core→advanceTo 目标"（处理进度条拖尾 / 点击 播放末尾回到开头）|
+| **UI** | `canvas` | `SpectrumCanvas`（成员对象）| |
+| | `panel` | `ParamPanel`（成员对象）| |
+| | `panelViewport` | `juce::Viewport`（成员对象）| `setViewedComponent(&panel, false)` + 只显示垂直滚动条；窗口高度不够时面板可滚动 |
+| | `playBtn` / `seekBar` / `timeLabel` | Button / Slider / Label | 底部 40px 传输条；`userSeeking` 变量避免拖拽时 seekBar 值被 timer 覆盖 |
+| | `pausedPos` | `double` | 暂停时保留播放位置；播放末尾按停止时回 0 重新开始 |
+| **导出** | `exporting / exportPct / exportDone` | `atomic<bool / int / bool>` | 跨线程：后台 `exportThread` 写，UI timer 轮询。exportDone 用 `exchange(false)` 保证"只处理一次" |
+| | `exportMsgMtx` + `exportMsg` | `mutex + juce::String` | 完成字符串回传（"Done: N frames -> dir" / "Failed: ..."）|
+| | `exportDir` | `juce::File` | GUI 存储的导出目录（不落盘到 SpectrumParams，仅本次 GUI 会话保存）|
+| | `exportThread` | `std::thread` | 跑 VisPipeline::run；析构时 if (joinable()) join() |
+| | `fileChooser` / `lastDir` | `unique_ptr<FileChooser> / juce::File` | 默认初始目录 `userMusicDirectory`；每次关闭保存父目录 |
+
+---
+
+#### 4.5.3 同步引擎主循环（`MainComponent::timerCallback @30Hz`，逐行与代码一致）
+
+```cpp
+// (1) 参数重建分支：paramsDirty=true → 重建 core/style；coreFramePos 保持与播放位置一致，曲线自然恢复
+if (paramsDirty.exchange(false)) {
+    if (params.style != currentStyleName) {
+        currentStyleName = params.style;
+        style = SpectrumStyle::create(params.style);
+    }
+    rebuildCoreLight();          // 8 帧静音 warmup + 重新分配 FFT
+    coreFramePos = currentTargetFrame();
+}
+
+// (2) 显式 seek：progress dragEnd / play to end restart
+if (pendingSeekFrame >= 0) {
+    const int64_t target = pendingSeekFrame;
+    pendingSeekFrame = -1;
+    rebuildCoreLight();
+    coreFramePos = 0;
+    advanceCoreTo(target);       // 快进到 target
+}
+
+// (3) 正常推进（或倒退）：
+const int64_t target = currentTargetFrame();
+if (target < coreFramePos)       // 倒退：重置 core + 快进（SpectrumCore 无"读过去 PCM"能力）
+    rebuildCoreLight(); coreFramePos = 0;
+advanceCoreTo(target);
+
+// (4) 绘制
+core->getBandFrame(canvas.frame);
+canvas.rp = buildRp(params);
+canvas.style = style.get();
+canvas.showCheckerboard = panel.getCheckerPreview();
+canvas.repaint();
+
+// (5) 传输 UI 同步（拖拽 seek 时不覆盖）
+// (6) 导出进度（原子轮询 + exportDone.exchange(false) 一次性消费）
 ```
-拖入/选择音频 ──┬─ PcmSource（频谱用离线随机读取）
-                └─ AudioFormatReaderSource → AudioTransportSource → 扬声器
 
-juce::Timer @30fps:
-  1. paramsDirty? → 重建 SpectrumStyle/SpectrumCore（不回放历史，曲线自然恢复）
-  2. target = transport 位置 × fps
-  3. target > coreFramePos → advanceCoreTo(): 从 PcmSource 逐帧读 PCM
-     → SpectrumCore::pushInterleavedStereo + advanceTime（追赶同步，天然抗漂移）
-  4. getBandFrame → SpectrumCanvas 重绘（ARGB Image + style.render，与导出同源）
+**子函数行为**：
+- `currentTargetFrame() = floor( transport播放位置 × params.fps )`，暂停时用 `pausedPos` 作为替代值
+- `rebuildCoreLight()`：`core.reset(new SpectrumCore(params))` → `core->setSampleRate(srcRate)` → 8 帧 `spf` 静音 `pushInterleavedStereo` warmup（和离线管线 VisPipeline::run 同约定，消除 FFT 启动零值）
+- `advanceCoreTo(target)`：`pcm.readInterleavedStereo(frameIdx*spf, spf, dst)`，不足补零 → `core->pushInterleavedStereo` / `advanceTime(1/fps)`；每帧 1 次，循环 N=target-coreFramePos 次
+
+> 设计亮点：参数改动不回溯历史 PCM（"曲线自然恢复"策略），避免重新解码 0..N 分钟整段音频。
+
+---
+
+#### 4.5.4 ParamPanel 回调 / 状态通道
+
+| ParamPanel 侧 | 方向 | MainComponent 侧 |
+|---|---|---|
+| `onParamsChanged()` | 面板控件 → MC | MC 置 `paramsDirty = true`；**下一个 timer tick**（最长 1/30 秒）生效 |
+| `onExportClicked()` | 面板 "Export" 按钮 → MC | `MainComponent::startExport()`：无音频 → `AlertWindow`；无导出目录 → `chooseExportDir(true)` |
+| `onBrowseOutputDir()` | 面板 "Browse" 按钮 → MC | `MainComponent::chooseExportDir(false)`：`FileChooser` 以 `openMode + canSelectDirectories` 弹文件夹选择 |
+| `panel.getCheckerPreview()` | MC（tick 里） → 画布 | `canvas.showCheckerboard = ...`（**GUI-only，不写入 SpectrumParams**） |
+| `panel.setProgressText(s)` / `panel.setOutputDirText(s)` / `panel.setExportEnabled(b)` | MC → 面板 | UI 状态更新（进度条 / 目录文本 / 导出按钮 disable）|
+
+**内部布局**：`rows` 顺序记录每一行，`resized()` 按行 layout。特殊行：
+- Color 行：3 按钮平铺（Primary / Secondary / Peak，对应 3 个颜色选择弹层 via `ColourPickSelector : public ColourSelector, private ChangeListener`）
+- "W × H" 行：两个 `TextEditor`（左侧宽，右侧高，都通过自定义 `IntInputFilter` 限制只输数字）
+
+---
+
+#### 4.5.5 导出线程流程（后台 std::thread）
+
+```
+[UI thread]                                 [exportThread (detached; joined in destructor)]
+  │                                            │
+  └─ startExportJob()                          │
+       exporting = true                        │
+       exportPct = 0                           │
+       exportEnabled(false)                    │
+       exportThread = std::thread([cfg]{       │
+         VisPipeline vp;                        │
+         vp.run(cfg, [](int done, int total){   │
+           exportPct.store(100*done/total);     │
+         });                                    │
+         (mutex) exportMsg = ok/failed msg;     │
+         exportDone = true;                     │
+       })                                       │
+       │                                        │
+  timerCallback 每 tick 轮询：                  │
+    exporting ? setProgress("Exporting p%") ;   │
+    exportDone.exchange(false):                 │
+       join thread; exporting=false;            │
+       setProgress(msg); setExportEnabled(true);│
 ```
 
-**关键设计**：
-- **预览即所得**：画布与导出管线走同一 `SpectrumStyle::render`，参数改完导出结果一致
-- **同步模型**：以 transport 播放位置为唯一时钟，每 tick 推进 core 到目标帧（跳变时批量补帧）；回退 seek = 重建 core + 静默快进
-- **参数实时生效**：ParamPanel 直接写 `SpectrumParams` + `paramsDirty=true`，下一 tick 重建 core（重建成本 = 2 次 FFT 分配，30fps 下无感）
-- **导出**：后台 `std::thread` 跑 `VisPipeline::run`，原子进度轮询回 UI，完成后显示输出目录
+---
 
-**GUI 文件职责**：
-- `SpectrumCanvas` — Component + FileDragAndDropTarget；paint() 里建 ARGB Image → 棋盘格（可选）→ style.render；空文件时显示提示文案
-- `ParamPanel` — 行式布局（label + editor）；滑块（可拖+数字输入双方式）/下拉/开关/颜色弹层（ColourSelector via CallOutBox）/导出区
-- `MainComponent` — 组装一切：布局（左画布/右参数面板/底部传输条）、音频设备生命周期、导出线程
+#### 4.5.6 SpectrumCanvas 渲染管线（与导出同源，预览即所得）
+
+```cpp
+juce::Image img(ARGB, w, h, true);   // true = 初始全透明（与导出一致）
+{
+  juce::Graphics ig(img);
+  if (showCheckerboard) drawCheckerboard(ig, w, h);   // GUI 仅预览时的棋盘（不进导出 Image）
+  style->render(ig, canvas_rect, frame, rp);          // 与 VisPipeline::renderFrame 完全相同的调用签名 & 逻辑
+}
+g.drawImageAt(img, 0, 0);
+
+if (!hasAudio) 画中文案 "Drag & drop a WAV or AIFF file to begin\n(or click here to browse)"
+```
+
+拖放判定：`FileDragAndDropTarget::isAudioFile(path)` 仅接收 `.wav/.aif/.aiff` 扩展名（小写比较，大小写都接受）；点击空白区调 `onEmptyClicked` → MC 调 `chooseAudioFile()`。
+
+---
+
+#### 4.5.7 快速上手指南（基于当前 GUI 状态）
+
+```
+启动：双击 build/AudioVisGUI_artefacts/Release/AudioVisGUI.exe
+  初始窗口 1280×800：
+    左 = 画布（棋盘格灰 + "Drag & drop..." 提示）
+    右 = ParamPanel（Scrollable，Viewport 自动竖滚）
+    底部 = [Play] 按钮 + seekBar + "m:ss / m:ss" 时间
+
+第 1 步：加载音频
+   (a) 拖一个 .wav/.aiff/.aif 到画布 → 自动播放加载（提示：音频设备出错则 MC ctor 会 initialiseWithDefaultDevices(0,2)）
+   (b) 或 点击画布 → FileChooser 选文件
+   结果：底部 seekBar 解锁，时间显示 0:00 / 总时长；`paramsDirty = true` 触发重建 core（带正确 srcRate）
+
+第 2 步：播放 + 实时预览
+   点 [Play] → transport 启动 → timer 30Hz 逐帧 catch up → 曲线实时跳动
+   seekBar 可拖：onDragEnd 写 pendingSeekFrame → core 重建 + 快进到目标帧
+   [Play] 切换成 [Pause]；暂停后继续从 pausedPos 开始；播放到末尾则自动回到 0s
+
+第 3 步：即改即见
+   Style / Time / Dynamics / Appearance / Export 6 区控件：
+     Slider（可拖 + 右侧数字输入）/ ComboBox / Toggle / 颜色按钮（点击开 ColourSelector）
+   每次改动 → onParamsChanged → paramsDirty = true → 下一 tick 重建 core/style 生效
+
+第 4 步：导出
+   - Export section 底部：W × H（整数）、Encoder 下拉（png-seq / webm-vp9 / mov-qtrle）
+   - 点 [Browse] 选输出目录 → 目录文本显示在 Browse/Export 下方（helpText 显示完整路径）
+   - 点 [Export] → 后台线程跑 VisPipeline::run
+     · progress 显示 "Exporting xx% ..."
+     · 期间 Export 按钮 disabled 防止重入
+     · 完成后显示 "Done: N frames -> D:\\..." 或 "Failed: reason"，Export 按钮恢复可用
+
+第 5 步：查看结果
+   - PNG 序列 → 输出目录 frame_XXXXXX.png（ARGB 透明）
+   - WebM/MOV → 如果编码器是 webm-vp9 / mov-qtrle，且 PATH 中存在 ffmpeg，则自动 mux 为带 alpha 的视频
+```
+
+---
+
+#### 4.5.8 当前实现的已知限制（Important for future AI）
+
+> 这些不是 bug，是 v0.3.x 未实现的功能。后续 AI 改动前必须先确认是否属于此列表，避免误报。
+
+| # | 限制 | 影响 | 建议扩展点 |
+|---|---|---|---|
+| L1 | **音频输入格式仅 WAV/AIFF**（MP3/FLAC/OGG/M4A 未启用）| 无法拖入 FLAC 等 | `PcmSource::load` 扩展：在 `formatManager.registerBasicFormats()` 之后注册 `OggVorbisAudioFormat / FlacAudioFormat / MP3AudioFormat`（JUCE 需要 `juce::ogg_vorbis` / `juce::flac` 模块；MP3 需 `dr_mp3` 格式）|
+| L2 | **GUI 仅单音频替换，不支持 playlist 或 multi-clip timeline** | 每次 loadFile 会释放旧 readerSource + transport.setSource(nullptr) | 未来 timeline editing（ARCHITECTURE.md §7.2）|
+| L3 | **参数改动不回放历史 PCM** → 改参后，曲线需要 `attackMs+releaseMs` 秒才能稳定 | N/A（设计决策：避免重新解码全音频）| 若用户要"立即到达对应视觉稳态"，可在 advanceCoreTo 内部跳过前 N 帧不渲染 |
+| L4 | **多 pass 合成目前在单 Graphics 上叠加**，CrystalStyle::renderPass 的 glow 层没有真 blur | 水晶效果 bloom 是多层粗描边近似而非 GaussianBlur | ARCHITECTURE.md §7.4 多 pass 扩展：每 pass 到独立 Image + juce::ImageEffectFilter GaussianBlur |
+| L5 | **导出时 GUI 播放引擎不暂停**：后台线程开独立的 `VisPipeline::run` 再次解码同一个音频文件（当前是 OK 的，因为音频只读）| CPU 峰值略高 | 可加 if (exporting) transport.stop(); exportDone exchange 后可选恢复 |
+| L6 | **面板 paramsDirty 粒度是"任意字段修改即重建 core/style 全量"**：改颜色/画网格不需要重建 core，只用重绘 | 轻微性能浪费（30fps 下无感，但 60fps + 512 band 时会有影响）| 加细分 dirty flag：`dirtyEngine / dirtyStyle / dirtyRepaintOnly` |
+| L7 | **GUI 导出目录不落盘（仅本次会话有效）**：下次启动需重新选 | N/A | 加 `juce::ApplicationProperties` + OptionsPage 记忆最后导出目录 |
+| L8 | **颜色选择弹层的 OK/Cancel 不是显式按钮**：JUCE ColourSelector 是实时 change broadcaster，点外部关闭后最后一次选择的颜色立即生效（但如果用户"后悔"，没有 undo）| UX | 加 "Preset colours" combos 与 "Reset to default" 按钮 |
+| L9 | **minDb/maxDb/bgColor 没有 GUI 控件**（参见 §10 表中标注"无 GUI，预留"的 3 个字段）| 改 minDb/maxDb 必须用 CLI `--set dynamic.minDb=-96` 或 JSON | 补 2 个 Slider + 1 个 ColourPicker 到 Appearance section 末尾 |
+| L10 | **进度条 seekBar 没有播放头刻度样式**，只是标准 LinearHorizontal Slider | UX | 自定义 LookAndFeel method：drawLinearSlider 画一个带圆角的轨迹 + 拖动圆点 |
+
+
 
 ### 4.6 CLI
 **文件**：`source/cli/main.cpp` + `source/cli/CliArgs.h/.cpp`
@@ -284,11 +478,14 @@ build/AudioVisGUI_artefacts/Release/AudioVisGUI.exe         # GUI 实时预览
 ### GUI 使用
 ```
 AudioVisGUI.exe   # 双击启动
-1. 把 WAV/AIFF 拖进左侧画布（或点击画布选择文件）
-2. 点"播放"，频谱曲线随音乐实时跳动
-3. 右侧面板直接拖滑块 / 输数字 / 换颜色，画面即时响应
-4. 选导出目录 + 宽高 + 编码器 → 点"导出"，完成后提示 PNG/WebM 输出位置
+Step 1. Drag a WAV/AIFF onto the canvas (or click canvas to browse)
+Step 2. Click Play. Spectrum follows the music in real time.
+Step 3. Drag sliders / type numbers / pick colors in the right panel — changes take effect within one 30 Hz tick.
+Step 4. Browse → choose output dir; set W × H and Encoder; click Export.
+        Background thread runs VisPipeline::run and progress is polled every tick.
+        When finished you will see "Done: N frames -> <dir>" below the Browse/Export row.
 ```
+> Tip: Toggle **"Checkerboard BG"** off in the Appearance section before taking screenshots to judge real transparent (ARGB) pixels without the preview checkers — note this toggle is GUI-only and never affects exported PNG pixels.
 
 ### 运行示例
 ```powershell
@@ -520,6 +717,21 @@ SpectrumParams.h 默认值
 
 ## 12. 变更日志（每发版必更，同步文档末尾版本号）
 
+### v0.3.2 — 2026-09-02
+**变更（文档重写，纯 .md 变更，无代码修改）**：
+- 完全重写 **§4.5 GUI 章节**（v0.3 新增的 GUI skeleton 章节过于粗），拆成 8 个子节：
+  - 4.5.1 源文件 ↔ 类 ↔ 关键成员 映射表（5 个源文件，精确字段名）
+  - 4.5.2 MainComponent 成员字段速查表（6 大类 × 字段/类型/行为，全部源自 .h/.cpp）
+  - 4.5.3 `timerCallback @30Hz` 主循环伪代码 + `currentTargetFrame` / `rebuildCoreLight` / `advanceCoreTo` 子函数行为
+  - 4.5.4 ParamPanel ↔ MainComponent 5 条回调通道 + 2 种特殊行布局约定
+  - 4.5.5 后台导出线程（`exporting/exportPct/exportDone` 原子变量 + `exportMsgMtx` + UI tick 轮询 join）
+  - 4.5.6 SpectrumCanvas 渲染管线逐行（ARGB Image + checkerboard only-in-GUI）+ 拖放扩展名过滤
+  - 4.5.7 基于当前状态的 GUI 快速上手指南（5 步 + 窗口分区说明）
+  - 4.5.8 当前实现 10 条已知限制（L1-L10），附扩展建议，避免后续 AI 误报为 bug
+- §5 "GUI 使用" 章节替换为英文步骤 + Checkerboard toggle 行为说明
+- 顶部版本映射表新增 v0.3.2（本次）；末尾协作声明保留。
+- **协作注意**：本版本是纯文档修订，未涉及 `source/`、`CMakeLists.txt` 等代码文件，因此不触发 GUI target 重新编译。
+
 ### v0.3.1 — 2026-09-02
 **变更**：
 - GUI 文案全部改为英文（避免非 Unicode locale 下的乱码），全局 LookAndFeel 固定字体为 "Segoe UI"
@@ -536,6 +748,6 @@ SpectrumParams.h 默认值
 
 ---
 
-*文档版本：v0.3.1  ·  最后更新：2026-09-02*
+*文档版本：v0.3.2  ·  最后更新：2026-09-02*
 *维护者：AudioVisExport 项目（GPL-3.0）*
 *协作规则：任何功能修改后，必须在 §12 变更日志追加一条，并在文档版本号处 bump。*
