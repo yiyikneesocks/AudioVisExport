@@ -1,0 +1,60 @@
+{
+  "fft": {
+    "fftOrder": 11,
+    "fftOrderLo": 13,
+    "enableLowFreqPath": true,
+    "hopSize": 0,
+    "hopSizeLo": 0,
+    "windowFunc": "hann",
+    "crossoverHz": 500.0
+  },
+  "freq": {
+    "minHz": 20.0,
+    "maxHz": 20000.0,
+    "freqScale": "log",
+    "bandCount": 160
+  },
+  "time": {
+    "fps": 30,
+    "attackMs": 30.0,
+    "releaseMs": 200.0,
+    "peakHoldMs": 3500.0,
+    "peakDecayDbPerSec": 12.0,
+    "temporalSmoothing": 0.5
+  },
+  "dynamic": {
+    "curve": "linear",
+    "gain": 1.0,
+    "gamma": 1.0,
+    "slopeEnabled": true,
+    "slopeDbPerOct": 4.5,
+    "minDb": -80.0,
+    "maxDb": 0.0
+  },
+  "visual": {
+    "style": "y2k-line",
+    "colorMap": "solid",
+    "primaryColor": "#ec4899",
+    "secondaryColor": "#f9a8d4",
+    "peakColor": "#be185d",
+    "bgColor": "#00000000",
+    "lineWidth": 1.4,
+    "opacity": 1.0,
+    "drawGrid": true,
+    "drawAxisLabels": true
+  },
+  "output": {
+    "width": 1280,
+    "height": 720,
+    "encoder": "png-seq",
+    "digits": 6,
+    "baseName": "frame_",
+    "outputDir": "out_frames",
+    "outputVideoPath": "",
+    "ffmpegPath": "",
+    "bgCheckerboardPreview": false
+  },
+  "audio": {
+    "path": "test_tone.wav"
+  }
+}

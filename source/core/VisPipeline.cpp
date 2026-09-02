@@ -1,0 +1,376 @@
+// =============================================================================
+// VisPipeline.cpp — 高层编排器（v2 重写）
+//
+// 编排流程：
+//   1) 加载音频（PcmSource，缺失则 44100Hz 静音 5s fallback）
+//   2) 初始化 SpectrumCore（参数副本）
+//   3) 静音 warmup 8 帧（让 FFT FIFO 与平滑态稳定）
+//   4) 工厂创建 SpectrumStyle
+//   5) 主循环：pcm.read → core.push + advanceTime + getBandFrame
+//             → 创建 ARGB Image + style.render → enc.writeFrame → 进度回调
+//   6) finalize（PNG-seq 模式不调 ffmpeg；WebM/MOV 才调）
+//   7) 返回结构化结果
+// =============================================================================
+#include "VisPipeline.h"
+#include "PcmSource.h"
+#include "SpectrumCore.h"
+#include "SpectrumStyle.h"
+#include "PngSequenceEncoder.h"
+#include "FreqMap.h"
+
+#include <chrono>
+#include <vector>
+#include <iostream>
+
+namespace
+{
+    // 辅助：相对路径 → 绝对 File（与 v1 locateAsset 等价，简化版）
+    static juce::File locateAsset (const juce::String& rel)
+    {
+        if (rel.isEmpty()) return {};
+        juce::File f (rel);
+        if (f.exists()) return f;
+        auto cwd = juce::File::getCurrentWorkingDirectory().getChildFile (rel);
+        if (cwd.exists()) return cwd;
+        const auto exeDir = juce::File::getSpecialLocation (juce::File::currentExecutableFile).getParentDirectory();
+        auto fromExe = exeDir.getChildFile (rel);
+        if (fromExe.exists()) return fromExe;
+        // 向上 5 层
+        juce::File d = exeDir;
+        for (int up = 0; up < 6; ++up) {
+            auto cand = d.getChildFile (rel);
+            if (cand.exists()) return cand;
+            d = d.getParentDirectory();
+        }
+        return {};
+    }
+
+    // 从 SpectrumParams 构建 SpectrumStyle::RenderParams
+    static SpectrumStyle::RenderParams buildRenderParams (const SpectrumParams& p)
+    {
+        SpectrumStyle::RenderParams rp;
+        rp.width  = p.width;
+        rp.height = p.height;
+        rp.primary   = p.primaryColor;
+        rp.secondary = p.secondaryColor;
+        rp.peak      = p.peakColor;
+        rp.bg        = p.bgColor;
+        rp.lineWidth = p.lineWidth;
+        rp.opacity   = p.opacity;
+        rp.drawGrid       = p.drawGrid;
+        rp.drawAxisLabels = p.drawAxisLabels;
+        rp.minHz = p.minHz;
+        rp.maxHz = p.maxHz;
+        rp.minDb = p.minDb;
+        rp.maxDb = p.maxDb;
+        rp.colorMap = p.colorMap;
+        return rp;
+    }
+
+    // 画棋盘格（预览模式用）
+    static void drawCheckerboard (juce::Graphics& g, int w, int h, int cellSize = 8)
+    {
+        for (int y = 0; y < h; y += cellSize) {
+            for (int x = 0; x < w; x += cellSize) {
+                const bool light = (((x / cellSize) + (y / cellSize)) & 1) != 0;
+                g.setColour (light ? juce::Colours::lightgrey : juce::Colours::white);
+                g.fillRect (x, y, cellSize, cellSize);
+            }
+        }
+    }
+
+    // 渲染单帧到 ARGB Image
+    // 若 checkerboard=true，先画棋盘格（不透明背景）再画谱（透明区会显示棋盘）
+    static juce::Image renderFrame (SpectrumCore& core, SpectrumStyle& style,
+                                    const SpectrumParams& p,
+                                    const SpectrumStyle::RenderParams& rp,
+                                    bool checkerboard)
+    {
+        juce::Image img (juce::Image::ARGB, p.width, p.height, true);  // true = 清空（全 0 = 全透明）
+        juce::Graphics g (img);
+        g.setOpacity (rp.opacity);
+
+        // 棋盘格预览（在透明背景下画棋盘，肉眼判断 alpha）
+        if (checkerboard) {
+            drawCheckerboard (g, p.width, p.height);
+        } else if (rp.bg.getAlpha() > 0) {
+            // 半透明背景（非全透明时才画）
+            g.fillAll (rp.bg);
+        }
+
+        // 画布矩形（去掉边距）
+        auto canvas = juce::Rectangle<int>(
+            (int) rp.paddingLeft,
+            (int) rp.paddingTop,
+            p.width  - (int)(rp.paddingLeft + rp.paddingRight),
+            p.height - (int)(rp.paddingTop  + rp.paddingBottom));
+
+        BandFrame bandFrame;
+        core.getBandFrame (bandFrame);
+        style.render (g, canvas, bandFrame, rp);
+        return img;
+    }
+
+    // 把音频推进到第 targetFrameIndex 帧（含 warmup）
+    // 返回 false = 失败（errOut 填错误）
+    static bool advanceToFrame (PcmSource& pcm, bool hasAudio, double sr,
+                                SpectrumCore& core, const SpectrumParams& p,
+                                int targetFrameIndex, juce::String& errOut)
+    {
+        errOut.clear();
+        const int spf = std::max<int>(1, (int)(sr / p.fps));
+
+        // warmup：8 帧静音让 FFT FIFO 与平滑态稳定
+        const int warmup = 8;
+        {
+            std::vector<float> zeros(spf * 2, 0.0f);
+            for (int w = 0; w < warmup; ++w) {
+                core.pushInterleavedStereo (zeros.data(), spf);
+                core.advanceTime (1.0 / p.fps);
+            }
+        }
+
+        // 推到第 targetFrameIndex 帧
+        std::vector<float> frameBuf(spf * 2, 0.0f);
+        for (int i = 0; i < targetFrameIndex; ++i) {
+            int got = 0;
+            if (hasAudio)
+                got = pcm.readInterleavedStereo ((int64_t) i * spf, spf, frameBuf.data());
+            if (got < spf) std::fill (frameBuf.begin() + got * 2, frameBuf.end(), 0.0f);
+            core.pushInterleavedStereo (frameBuf.data(), spf);
+            core.advanceTime (1.0 / p.fps);
+        }
+        return true;
+    }
+}
+
+// =============================================================================
+// run：完整导出
+// =============================================================================
+juce::StringPairArray VisPipeline::run (const Config& cfg, ProgressCallback cb)
+{
+    const auto& p = cfg.params;
+    juce::StringPairArray result;
+    auto t0 = std::chrono::steady_clock::now();
+    auto elapsed = [&]() -> double {
+        auto now = std::chrono::steady_clock::now();
+        return std::chrono::duration<double>(now - t0).count();
+    };
+
+    // 1) 加载音频
+    PcmSource pcm;
+    bool hasAudio = false;
+    juce::File audioFile = locateAsset (p.audioPath);
+    if (audioFile.existsAsFile() && pcm.load (audioFile.getFullPathName())) {
+        hasAudio = true;
+    }
+    const double sr = hasAudio ? pcm.getSampleRate() : 44100.0;
+    const int64_t pcmTotal = hasAudio ? pcm.getNumSamples() : (int64_t)(sr * 5.0);
+    const int spf = std::max<int>(1, (int)(sr / p.fps));
+    const int64_t totalFrames = (pcmTotal + spf - 1) / spf;
+
+    // 2) 初始化 SpectrumCore
+    SpectrumCore core (p);
+    core.setSampleRate (sr);
+
+    // 3) warmup
+    {
+        std::vector<float> zeros(spf * 2, 0.0f);
+        for (int w = 0; w < 8; ++w) {
+            core.pushInterleavedStereo (zeros.data(), spf);
+            core.advanceTime (1.0 / p.fps);
+        }
+    }
+
+    // 4) 创建 style
+    auto style = SpectrumStyle::create (p.style);
+    if (! style) {
+        result.set ("ok", "false");
+        result.set ("error", "unknown style: " + p.style);
+        return result;
+    }
+    auto rp = buildRenderParams (p);
+
+    // 5) 初始化 PngSequenceEncoder
+    PngSequenceEncoder enc;
+    PngSequenceEncoder::Config ecfg;
+    ecfg.outputDir = p.outputDir;
+    ecfg.baseName  = p.baseName;
+    ecfg.width = p.width;
+    ecfg.height = p.height;
+    ecfg.fps = (int) p.fps;
+    ecfg.digits = p.digits;
+    if (! enc.startSession (ecfg)) {
+        result.set ("ok", "false");
+        result.set ("error", "PngSequenceEncoder::startSession failed: " + p.outputDir);
+        return result;
+    }
+
+    // 6) 主循环
+    std::vector<float> frameBuf(spf * 2, 0.0f);
+    int done = 0;
+    for (int64_t i = 0; i < totalFrames; ++i) {
+        int got = 0;
+        if (hasAudio)
+            got = pcm.readInterleavedStereo (i * spf, spf, frameBuf.data());
+        if (got < spf) std::fill (frameBuf.begin() + got * 2, frameBuf.end(), 0.0f);
+
+        core.pushInterleavedStereo (frameBuf.data(), spf);
+        core.advanceTime (1.0 / p.fps);
+
+        // 渲染
+        auto img = renderFrame (core, *style, p, rp, false);
+        enc.writeFrame (img);
+        ++done;
+        if (cb) cb (done, (int) totalFrames, elapsed());
+    }
+
+    // 7) finalize（PNG-seq 模式不调 ffmpeg；WebM/MOV 才调）
+    int muxExit = 0;
+    if (p.encoder != SpectrumParams::PngSeq) {
+        // Step 4+ 实现 WebM/MOV 编码
+        juce::String audioPathForMux = hasAudio ? audioFile.getFullPathName() : juce::String();
+        muxExit = enc.finalizeAndMux (audioPathForMux, p.outputVideoPath, p.ffmpegPath);
+    }
+
+    // 8) 结果
+    result.set ("ok", "true");
+    result.set ("frames_written", juce::String (done));
+    result.set ("png_dir", enc.getOutputDir());
+    result.set ("elapsed_sec", juce::String (elapsed(), 2));
+    if (p.encoder != SpectrumParams::PngSeq) {
+        result.set ("mp4_path", p.outputVideoPath);
+        result.set ("mp4_status", muxExit == 0 ? "ok" : ("ffmpeg exit " + juce::String (muxExit)));
+    } else {
+        result.set ("mp4_status", "skipped (png-seq mode)");
+    }
+    return result;
+}
+
+// =============================================================================
+// previewFrame：单帧预览
+// =============================================================================
+juce::StringPairArray VisPipeline::previewFrame (const Config& cfg, int frameIndex,
+                                                  const juce::String& outPngPath)
+{
+    const auto& p = cfg.params;
+    juce::StringPairArray result;
+
+    // 加载音频
+    PcmSource pcm;
+    bool hasAudio = false;
+    juce::File audioFile = locateAsset (p.audioPath);
+    if (audioFile.existsAsFile() && pcm.load (audioFile.getFullPathName())) {
+        hasAudio = true;
+    }
+    const double sr = hasAudio ? pcm.getSampleRate() : 44100.0;
+
+    // SpectrumCore
+    SpectrumCore core (p);
+    core.setSampleRate (sr);
+
+    // 推到第 frameIndex 帧
+    juce::String err;
+    if (! advanceToFrame (pcm, hasAudio, sr, core, p, frameIndex, err)) {
+        result.set ("ok", "false");
+        result.set ("error", err);
+        return result;
+    }
+
+    // style
+    auto style = SpectrumStyle::create (p.style);
+    if (! style) {
+        result.set ("ok", "false");
+        result.set ("error", "unknown style: " + p.style);
+        return result;
+    }
+    auto rp = buildRenderParams (p);
+
+    // 渲染
+    auto img = renderFrame (core, *style, p, rp, p.bgCheckerboardPreview);
+
+    // 写 PNG
+    juce::File outFile (outPngPath);
+    outFile.deleteFile();
+    auto ostream = outFile.createOutputStream();
+    if (! ostream) {
+        result.set ("ok", "false");
+        result.set ("error", "cannot open for write: " + outPngPath);
+        return result;
+    }
+    juce::PNGImageFormat pngFmt;
+    if (! pngFmt.writeImageToStream (img, *ostream)) {
+        result.set ("ok", "false");
+        result.set ("error", "PNG write failed");
+        return result;
+    }
+    ostream->flush();
+
+    result.set ("ok", "true");
+    result.set ("png_path", outPngPath);
+    result.set ("frame_index", juce::String (frameIndex));
+    result.set ("size_bytes", juce::String (outFile.getSize()));
+    return result;
+}
+
+// =============================================================================
+// probeSpectrum：数值调试
+// =============================================================================
+juce::StringPairArray VisPipeline::probeSpectrum (const Config& cfg, int frameIndex)
+{
+    const auto& p = cfg.params;
+    juce::StringPairArray result;
+
+    PcmSource pcm;
+    bool hasAudio = false;
+    juce::File audioFile = locateAsset (p.audioPath);
+    if (audioFile.existsAsFile() && pcm.load (audioFile.getFullPathName())) {
+        hasAudio = true;
+    }
+    const double sr = hasAudio ? pcm.getSampleRate() : 44100.0;
+
+    SpectrumCore core (p);
+    core.setSampleRate (sr);
+
+    juce::String err;
+    if (! advanceToFrame (pcm, hasAudio, sr, core, p, frameIndex, err)) {
+        result.set ("ok", "false");
+        result.set ("error", err);
+        return result;
+    }
+
+    BandFrame bandFrame;
+    core.getBandFrame (bandFrame);
+
+    // dump 前 16 带
+    std::cout << "=== Probe Spectrum: frame " << frameIndex << " ===\n";
+    std::cout << "  bandCount = " << bandFrame.bandCount << "\n";
+    std::cout << "  first 16 bands (idx / centerHz / db / peakDb / normalized):\n";
+    const int showCount = std::min (16, bandFrame.bandCount);
+    for (int i = 0; i < showCount; ++i) {
+        // 中心频率（用 FreqMap 算）
+        FreqMap fm;
+        fm.configure (p.freqScale, p.minHz, p.maxHz, p.bandCount);
+        float centerHz = fm.bandCenterHz (i);
+        std::cout << "    [" << i << "] "
+                  << "f=" << centerHz << "Hz  "
+                  << "db=" << bandFrame.db[i] << "  "
+                  << "peak=" << bandFrame.peakDb[i] << "  "
+                  << "norm=" << bandFrame.normalized[i] << "\n";
+    }
+
+    // 也 dump 原始 FFT mag（前 16 bin）
+    std::vector<float> magHi;
+    core.getRawMagnitudesHi (magHi);
+    std::cout << "  raw FFT mag (first 16 bins, fftSize=" << p.fftSize() << "):\n";
+    const int showMag = std::min (16, (int) magHi.size());
+    for (int i = 0; i < showMag; ++i) {
+        double binHz = (sr / 2.0) * (double) i / (double) (magHi.size());
+        std::cout << "    bin[" << i << "] " << binHz << "Hz  mag=" << magHi[i] << "\n";
+    }
+
+    result.set ("ok", "true");
+    result.set ("frame_index", juce::String (frameIndex));
+    result.set ("band_count", juce::String (bandFrame.bandCount));
+    return result;
+}

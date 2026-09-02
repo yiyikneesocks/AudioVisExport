@@ -1,0 +1,48 @@
+# AudioVisExport .gitignore
+
+# === CMake 构建产物 ===
+/build/
+/build-*/
+/cmake-build-*/
+/out/
+/CMakeUserPresets.json
+
+# === IDE / 编辑器 ===
+/.vs/
+/.vscode/
+/.idea/
+/.cache/
+/.clion*/
+*.user
+*.suo
+*.userprefs
+
+# === 操作系统 ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === 编译产物 ===
+*.obj
+*.o
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.exe
+
+# === 动态库（运行时从 projectM 官方下载，不入 git）===
+# 与 Y2Kmeter 一致：bin/*.dll 都从 release 包提取
+/third_party/projectm/bin/*.dll
+
+# === 中间产物 ===
+/temp_frames/
+/temp/
+/output/
+*.mp4
+*.mov
+*.mkv
+*.webm
+
+# === JUCE FetchContent 缓存 ===
+/_deps/
