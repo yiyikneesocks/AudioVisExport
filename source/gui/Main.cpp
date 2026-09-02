@@ -1,7 +1,8 @@
 // =============================================================================
-// Main.cpp — AudioVisGUI 应用入口
+// Main.cpp — AudioVisGUI entry point
 //
-// 窗口：1280x800，原生标题栏，内容 = MainComponent
+// Global LookAndFeel override pins UI font to Segoe UI (Windows standard) so
+// that rendering is stable regardless of the system locale.
 // =============================================================================
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "MainComponent.h"
@@ -36,8 +37,15 @@ namespace
     {
     public:
         const juce::String getApplicationName() override    { return "AudioVisGUI"; }
-        const juce::String getApplicationVersion() override { return "0.3.0"; }
+        const juce::String getApplicationVersion() override { return "0.3.1"; }
         bool moreThanOneInstanceAllowed() override          { return true; }
+
+        AVXGuiApplication()
+        {
+            auto& lf = juce::LookAndFeel::getDefaultLookAndFeel();
+            lf.setDefaultSansSerifTypefaceName ("Segoe UI");
+            // JUCE 8 API: setDefaultSansSerifFont also accepts options
+        }
 
         void initialise (const juce::String&) override
         {

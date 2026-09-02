@@ -32,7 +32,7 @@ void SpectrumCanvas::paint (juce::Graphics& g)
     {
         g.setColour (juce::Colours::white.withAlpha (0.85f));
         g.setFont (juce::FontOptions (18.0f, juce::Font::bold));
-        g.drawFittedText ("拖入 WAV / AIFF 音频文件开始\n（点击此处也可选择文件）",
+        g.drawFittedText ("Drag & drop a WAV or AIFF file to begin\n(or click here to browse)",
                           getLocalBounds(), juce::Justification::centred, 2);
     }
 }

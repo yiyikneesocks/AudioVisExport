@@ -39,7 +39,7 @@ MainComponent::MainComponent() : panel (params)
         {
             pausedPos = transport.getCurrentPosition();
             transport.stop();
-            playBtn.setButtonText ("播放");
+            playBtn.setButtonText ("Play");
         }
         else
         {
@@ -50,7 +50,7 @@ MainComponent::MainComponent() : panel (params)
             }
             transport.setPosition (pausedPos);
             transport.start();
-            playBtn.setButtonText ("暂停");
+            playBtn.setButtonText ("Pause");
         }
     };
     addAndMakeVisible (playBtn);
@@ -71,6 +71,7 @@ MainComponent::MainComponent() : panel (params)
     };
     addAndMakeVisible (seekBar);
 
+    playBtn.setButtonText ("Play");
     timeLabel.setColour (juce::Label::textColourId, juce::Colours::white);
     timeLabel.setJustificationType (juce::Justification::centredRight);
     timeLabel.setText ("0:00 / 0:00", juce::dontSendNotification);
@@ -183,7 +184,7 @@ void MainComponent::timerCallback()
     if (exporting.load())
     {
         const int pct = exportPct.load();
-        panel.setProgressText ("导出中 " + juce::String (pct) + "% ...");
+        panel.setProgressText ("Exporting " + juce::String (pct) + "% ...");
     }
     if (exportDone.exchange (false))
     {
@@ -203,15 +204,16 @@ void MainComponent::timerCallback()
 void MainComponent::loadFile (const juce::File& f)
 {
     transport.stop();
-    playBtn.setButtonText ("播放");
+    playBtn.setButtonText ("Play");
     transport.setSource (nullptr);
     readerSource.reset();
 
     if (! pcm.load (f.getFullPathName()))
     {
         juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
-                                                "加载失败",
-                                                "无法读取该音频文件（当前支持 WAV / AIFF）");
+                                                "Load failed",
+                                                "Could not read that audio file. "
+                                                "Supported formats: WAV, AIFF.");
         hasAudio = false;
         canvas.hasAudio = false;
         canvas.repaint();
@@ -344,7 +346,8 @@ void MainComponent::startExport()
     if (! hasAudio)
     {
         juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
-                                                "无法导出", "请先拖入音频文件");
+                                                "Cannot export",
+                                                "Drop an audio file first, then try again.");
         return;
     }
     if (! exportDir.getFullPathName().isEmpty() && exportDir.exists())
@@ -379,9 +382,9 @@ void MainComponent::startExportJob()
 
         juce::String msg;
         if (res.getValue ("ok", "false") == "true")
-            msg = "完成: " + res.getValue ("frames_written", "0") + " 帧 -> " + res.getValue ("png_dir", "");
+            msg = "Done: " + res.getValue ("frames_written", "0") + " frames -> " + res.getValue ("png_dir", "");
         else
-            msg = "失败: " + res.getValue ("error", "unknown");
+            msg = "Failed: " + res.getValue ("error", "unknown");
 
         { std::lock_guard<std::mutex> lk (exportMsgMtx); exportMsg = msg; }
         exportDone = true;

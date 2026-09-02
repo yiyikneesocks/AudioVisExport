@@ -1,18 +1,18 @@
 // =============================================================================
-// ParamPanel.cpp — 右侧参数面板实现
+// ParamPanel.cpp — Right-side parameter panel (English UI, avoids code-page issues)
 //
-// 布局模型：
-//   · rows: 顺序记录 (label, editor, height)，resized() 逐行排布
-//   · 每行 = 左侧 88px 标签 + 右侧控件；标签按需懒创建存 rowLabels
-//   · 特殊行：颜色行（3 按钮平铺）、宽高行（双编辑框）
-//   · 底部导出区（rows 之外手工排布）
+// Layout model:
+//   · rows: ordered list of (label, editor, height), laid out top-to-bottom in resized()
+//   · Each row = 88px label on left + editor on the right; labels are lazy-created
+//   · Special rows: color row (3 colour buttons tiled), width-height row (2 editors)
+//   · Export section: hand-laid out below the scrollable rows block
 // =============================================================================
 #include "ParamPanel.h"
 #include <juce_gui_extra/juce_gui_extra.h>
 
 namespace
 {
-    // 颜色选择弹层（ColourSelector 是 ChangeBroadcaster，用 ChangeListener 接收回调）
+    // Colour picker popup (ColourSelector is a ChangeBroadcaster)
     struct ColourPickSelector : juce::ColourSelector,
                                 private juce::ChangeListener
     {
@@ -31,7 +31,7 @@ namespace
         }
     };
 
-    // 整数输入过滤器（宽/高编辑框）
+    // Integer-only input filter for width/height editors
     struct IntInputFilter : juce::TextEditor::InputFilter
     {
         juce::String filterNewText (juce::TextEditor&, const juce::String& newInput) override
@@ -45,19 +45,19 @@ namespace
 
 ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
 {
-    // ---- 样式 ----
-    addHeader ("样式");
-    addCombo ("风格", { "y2k-line", "bar", "polyline", "crystal" }, 1,
+    // ---- Style ----
+    addHeader ("Style");
+    addCombo ("Render style", { "y2k-line", "bar", "polyline", "crystal" }, 1,
               [this] (int id)
               {
                   static const char* names[] = { "y2k-line", "bar", "polyline", "crystal" };
                   params.style = names[id - 1];
                   notify();
               });
-    addSlider ("频带数", 16, 512, 1, 1.0,
+    addSlider ("Band count", 16, 512, 1, 1.0,
                [this] { return (double) params.bandCount; },
                [this] (double v) { params.bandCount = (int) v; notify(); });
-    addCombo ("频率标度", { "log", "linear", "mel", "bark" }, 1,
+    addCombo ("Freq scale", { "log", "linear", "mel", "bark" }, 1,
               [this] (int id)
               {
                   switch (id)
@@ -69,44 +69,44 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
                   }
                   notify();
               });
-    addSlider ("最低频率 Hz", 20, 2000, 1, 0.5,
+    addSlider ("Min Hz", 20, 2000, 1, 0.5,
                [this] { return (double) params.minHz; },
                [this] (double v) { params.minHz = (float) v;
                                    if (params.maxHz < params.minHz * 2)
                                        params.maxHz = params.minHz * 2;
                                    notify(); });
-    addSlider ("最高频率 Hz", 1000, 20000, 10, 0.5,
+    addSlider ("Max Hz", 1000, 20000, 10, 0.5,
                [this] { return (double) params.maxHz; },
                [this] (double v) { params.maxHz = (float) v; notify(); });
 
-    // ---- 时间响应 ----
-    addHeader ("时间响应");
-    addCombo ("帧率", { "24", "30", "60" }, 2,
+    // ---- Time response ----
+    addHeader ("Time");
+    addCombo ("FPS", { "24", "30", "60" }, 2,
               [this] (int id)
               {
                   static const double fps[] = { 24.0, 30.0, 60.0 };
                   params.fps = fps[id - 1];
                   notify();
               });
-    addSlider ("上升 attack ms", 5, 500, 1, 0.5,
+    addSlider ("Attack ms", 5, 500, 1, 0.5,
                [this] { return (double) params.attackMs; },
                [this] (double v) { params.attackMs = (float) v; notify(); });
-    addSlider ("下降 release ms", 20, 2000, 1, 0.5,
+    addSlider ("Release ms", 20, 2000, 1, 0.5,
                [this] { return (double) params.releaseMs; },
                [this] (double v) { params.releaseMs = (float) v; notify(); });
-    addSlider ("峰值保持 ms", 0, 10000, 50, 0.5,
+    addSlider ("Peak hold ms", 0, 10000, 50, 0.5,
                [this] { return (double) params.peakHoldMs; },
                [this] (double v) { params.peakHoldMs = (float) v; notify(); });
-    addSlider ("峰值衰减 dB/s", 1, 60, 1, 1.0,
+    addSlider ("Peak decay dB/s", 1, 60, 1, 1.0,
                [this] { return (double) params.peakDecayDbPerSec; },
                [this] (double v) { params.peakDecayDbPerSec = (float) v; notify(); });
-    addSlider ("时间平滑 0-1", 0, 1, 0.01, 1.0,
+    addSlider ("Temporal smooth 0..1", 0, 1, 0.01, 1.0,
                [this] { return (double) params.temporalSmoothing; },
                [this] (double v) { params.temporalSmoothing = (float) v; notify(); });
 
-    // ---- 动态强度 ----
-    addHeader ("动态强度");
-    addCombo ("纵轴曲线", { "linear", "sqrt", "loglog", "perceptual" }, 1,
+    // ---- Dynamics ----
+    addHeader ("Dynamics");
+    addCombo ("Y-axis curve", { "linear", "sqrt", "loglog", "perceptual" }, 1,
               [this] (int id)
               {
                   switch (id)
@@ -118,35 +118,35 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
                   }
                   notify();
               });
-    addSlider ("增益 gain", 0.2, 3.0, 0.01, 1.0,
+    addSlider ("Gain", 0.2, 3.0, 0.01, 1.0,
                [this] { return (double) params.dynGain; },
                [this] (double v) { params.dynGain = (float) v; notify(); });
     addSlider ("Gamma", 0.3, 3.0, 0.01, 1.0,
                [this] { return (double) params.dynGamma; },
                [this] (double v) { params.dynGamma = (float) v; notify(); });
-    addToggle ("每八度斜率补偿", params.slopeEnabled,
+    addToggle ("Slope comp (dB/oct)", params.slopeEnabled,
                [this] (bool b) { params.slopeEnabled = b; notify(); });
-    addSlider ("斜率 dB/Oct", 0, 12, 0.1, 1.0,
+    addSlider ("Slope dB/oct", 0, 12, 0.1, 1.0,
                [this] { return (double) params.slopeDbPerOct; },
                [this] (double v) { params.slopeDbPerOct = (float) v; notify(); });
 
-    // ---- 外观 ----
-    addHeader ("外观");
-    addSlider ("线宽", 0.5, 5.0, 0.1, 1.0,
+    // ---- Appearance ----
+    addHeader ("Appearance");
+    addSlider ("Line width", 0.5, 5.0, 0.1, 1.0,
                [this] { return (double) params.lineWidth; },
                [this] (double v) { params.lineWidth = (float) v; notify(); });
-    addSlider ("不透明度", 0.05, 1.0, 0.01, 1.0,
+    addSlider ("Opacity", 0.05, 1.0, 0.01, 1.0,
                [this] { return (double) params.opacity; },
                [this] (double v) { params.opacity = (float) v; notify(); });
-    addToggle ("绘制网格", params.drawGrid,
+    addToggle ("Draw grid", params.drawGrid,
                [this] (bool b) { params.drawGrid = b; notify(); });
-    addToggle ("绘制坐标轴标签", params.drawAxisLabels,
+    addToggle ("Axis labels", params.drawAxisLabels,
                [this] (bool b) { params.drawAxisLabels = b; notify(); });
-    addToggle ("预览棋盘格背景", true,
+    addToggle ("Checkerboard BG", true,
                [this] (bool) { notify(); });
 
-    // ---- 颜色行（3 按钮平铺）----
-    addRow ("颜色", &primaryBtn);
+    // ---- Color row (3 buttons tiled) ----
+    addRow ("Colors", &primaryBtn);
 
     swatchPrimary   = params.primaryColor;
     swatchSecondary = params.secondaryColor;
@@ -190,8 +190,8 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
         });
     };
 
-    // ---- 导出 ----
-    addHeader ("导出");
+    // ---- Export ----
+    addHeader ("Export");
     widthEditor.setInputFilter (new IntInputFilter(), true);
     heightEditor.setInputFilter (new IntInputFilter(), true);
     widthEditor.setText (juce::String (params.width), juce::dontSendNotification);
@@ -206,9 +206,9 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
         auto v = heightEditor.getText().getIntValue();
         if (v >= 64) { params.height = v; notify(); }
     };
-    addRow ("宽 x 高", &widthEditor);
+    addRow ("W x H", &widthEditor);
 
-    addCombo ("编码器", { "png-seq", "webm-vp9 (alpha)", "mov-qtrle (alpha)" }, 1,
+    addCombo ("Encoder", { "png-seq", "webm-vp9 (alpha)", "mov-qtrle (alpha)" }, 1,
               [this] (int id)
               {
                   switch (id)
@@ -347,7 +347,7 @@ void ParamPanel::resized()
         auto rowBounds = area.removeFromTop (r.height);
         area.removeFromTop (4);
 
-        // 特殊行 1：颜色按钮（主/辅/峰值平铺）
+        // Special: color row — 3 tiled buttons
         if (r.editor == &primaryBtn)
         {
             auto w = rowBounds.getWidth() / 3;
@@ -356,7 +356,7 @@ void ParamPanel::resized()
             peakBtn.setBounds (rowBounds.reduced (2));
             continue;
         }
-        // 特殊行 2：宽高双编辑框
+        // Special: width/height — 2 editors
         if (r.editor == &widthEditor)
         {
             auto w = rowBounds.getWidth() / 2;
@@ -364,19 +364,19 @@ void ParamPanel::resized()
             heightEditor.setBounds (rowBounds.reduced (2));
             continue;
         }
-        // 头部（Label 作为 editor）
+        // Header label editor (no side label)
         if (auto* asLabel = dynamic_cast<juce::Label*> (r.editor))
         {
             asLabel->setBounds (rowBounds);
             continue;
         }
-        // ToggleButton 自带文字
+        // ToggleButton carries its own text
         if (auto* asToggle = dynamic_cast<juce::ToggleButton*> (r.editor))
         {
             asToggle->setBounds (rowBounds);
             continue;
         }
-        // 常规行：label + editor
+        // Regular row: label + editor
         auto labelBounds = rowBounds.removeFromLeft (kLabelWidth);
         if (r.editor != nullptr)
             r.editor->setBounds (rowBounds);
@@ -402,7 +402,7 @@ void ParamPanel::resized()
         }
     }
 
-    // 导出区
+    // Export section
     auto exp = area.removeFromTop (exportAreaHeight);
     auto line1 = exp.removeFromTop (30);
     browseBtn.setBounds (line1.removeFromLeft (90).reduced (2));

@@ -47,12 +47,12 @@ private:
 
     // 控件（固定成员）
     juce::ComboBox styleBox, freqScaleBox, dynCurveBox, fpsBox, encoderBox;
-    juce::ToggleButton slopeToggle{ "每八度斜率补偿" };
-    juce::ToggleButton gridToggle{ "绘制网格" };
-    juce::ToggleButton axisLabelToggle{ "绘制坐标轴标签" };
-    juce::ToggleButton checkerToggle{ "预览棋盘格背景" };
-    juce::TextButton primaryBtn{ "主色" }, secondaryBtn{ "辅色" }, peakBtn{ "峰值" };
-    juce::TextButton browseBtn{ "浏览..." }, exportBtn{ "导出" };
+    juce::ToggleButton slopeToggle    { "Slope comp (dB/oct)" };
+    juce::ToggleButton gridToggle     { "Draw grid" };
+    juce::ToggleButton axisLabelToggle{ "Axis labels" };
+    juce::ToggleButton checkerToggle  { "Checkerboard BG" };
+    juce::TextButton primaryBtn{ "Primary" }, secondaryBtn{ "Secondary" }, peakBtn{ "Peak" };
+    juce::TextButton browseBtn{ "Browse" }, exportBtn{ "Export" };
     juce::TextEditor widthEditor, heightEditor;
     juce::Label outputDirLabel, progressLabel;
     juce::Colour swatchPrimary, swatchSecondary, swatchPeak;
