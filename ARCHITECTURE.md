@@ -72,11 +72,15 @@ AudioVisExport/
 │       ├── CliArgs.h/.cpp          # 命令行参数解析（糖 flag + --set key=val + --config）
 │       └── main.cpp                # CLI 主入口（--export / --preview-frame / --probe-spectrum / --probe-pcm / --config）
 │
-└── build/                     # CMake 构建目录
-    └── AudioVisExport_artefacts/Release/
-        ├── AudioVisExport.exe      # 可执行文件
-        ├── compare_10s/            # 对比视频目录（6+3 组 10s MP4）
-        └── out_pupa_30s_y2k/      # 30s 完整导出示例
+├── gui/ (source/gui/)         # ===== GUI 实时预览界面（v0.3 新增）=====
+│   ├── Main.cpp                    # JUCEApplication 入口 + DocumentWindow
+│   ├── MainComponent.h/.cpp        # 布局 + 音频播放 + 定时器同步 + 导出线程
+│   ├── SpectrumCanvas.h/.cpp       # 实时渲染画布（ARGB Image + style.render + 拖放）
+│   └── ParamPanel.h/.cpp           # 右侧参数面板（滑块/下拉/颜色/导出）
+│
+└── build/                     # CMake 构建目录（gitignore）
+    ├── AudioVisExport_artefacts/Release/AudioVisExport.exe   # CLI
+    └── AudioVisGUI_artefacts/Release/AudioVisGUI.exe          # GUI
 ```
 
 ---
@@ -170,7 +174,34 @@ class SpectrumStyle {
 4. `core.getBandFrame(bandFrame)` → `style.render(g, canvas, bandFrame, rp)`
 5. 返回 Image → PngSequenceEncoder 写帧
 
-### 4.5 CLI
+### 4.5 GUI 实时预览（AudioVisGUI，v0.3 新增）
+**文件**：`source/gui/`（独立 target `AudioVisGUI`，与 CLI 共享全部引擎源）
+
+**架构（纯软件渲染，无 OpenGL）**：
+```
+拖入/选择音频 ──┬─ PcmSource（频谱用离线随机读取）
+                └─ AudioFormatReaderSource → AudioTransportSource → 扬声器
+
+juce::Timer @30fps:
+  1. paramsDirty? → 重建 SpectrumStyle/SpectrumCore（不回放历史，曲线自然恢复）
+  2. target = transport 位置 × fps
+  3. target > coreFramePos → advanceCoreTo(): 从 PcmSource 逐帧读 PCM
+     → SpectrumCore::pushInterleavedStereo + advanceTime（追赶同步，天然抗漂移）
+  4. getBandFrame → SpectrumCanvas 重绘（ARGB Image + style.render，与导出同源）
+```
+
+**关键设计**：
+- **预览即所得**：画布与导出管线走同一 `SpectrumStyle::render`，参数改完导出结果一致
+- **同步模型**：以 transport 播放位置为唯一时钟，每 tick 推进 core 到目标帧（跳变时批量补帧）；回退 seek = 重建 core + 静默快进
+- **参数实时生效**：ParamPanel 直接写 `SpectrumParams` + `paramsDirty=true`，下一 tick 重建 core（重建成本 = 2 次 FFT 分配，30fps 下无感）
+- **导出**：后台 `std::thread` 跑 `VisPipeline::run`，原子进度轮询回 UI，完成后显示输出目录
+
+**GUI 文件职责**：
+- `SpectrumCanvas` — Component + FileDragAndDropTarget；paint() 里建 ARGB Image → 棋盘格（可选）→ style.render；空文件时显示提示文案
+- `ParamPanel` — 行式布局（label + editor）；滑块（可拖+数字输入双方式）/下拉/开关/颜色弹层（ColourSelector via CallOutBox）/导出区
+- `MainComponent` — 组装一切：布局（左画布/右参数面板/底部传输条）、音频设备生命周期、导出线程
+
+### 4.6 CLI
 **文件**：`source/cli/main.cpp` + `source/cli/CliArgs.h/.cpp`
 
 **命令**：
@@ -203,12 +234,22 @@ AudioVisExport --config                                 # 打印当前参数 JSO
 
 ### 构建
 ```powershell
-# 配置（使用 Y2Kmeter 本地 JUCE）
-cmake -S . -B build -DAVX_USE_LOCAL_JUCE=ON
-# 编译
+cmake -S . -B build
+# 编译（两个 target：CLI + GUI）
 cmake --build build --config Release
 # 产物
-build/AudioVisExport_artefacts/Release/AudioVisExport.exe
+build/AudioVisExport_artefacts/Release/AudioVisExport.exe   # CLI
+build/AudioVisGUI_artefacts/Release/AudioVisGUI.exe         # GUI 实时预览
+```
+> JUCE 8.0.12 通过 FetchContent 自动从 GitHub 拉取（首次配置需联网）。
+
+### GUI 使用
+```
+AudioVisGUI.exe   # 双击启动
+1. 把 WAV/AIFF 拖进左侧画布（或点击画布选择文件）
+2. 点"播放"，频谱曲线随音乐实时跳动
+3. 右侧面板直接拖滑块 / 输数字 / 换颜色，画面即时响应
+4. 选导出目录 + 宽高 + 编码器 → 点"导出"，完成后提示 PNG/WebM 输出位置
 ```
 
 ### 运行示例
@@ -247,6 +288,7 @@ ffmpeg -framerate 30 -i out_bar/frame_%06d.png -i PUPA_10s.wav -c:v libvpx-vp9 -
 | Step 7 | BarStyle 完整实现（柱状图 + 渐变填充 + 峰值帽） | ✅ |
 | Step 8 | PolylineStyle 完整实现（折线 + 填充 + 描边 + 峰值） | ✅ |
 | Step 9 | CrystalStyle 完整实现（3-pass 水晶效果：辉光 + 玻璃体 + 高光） | ✅ |
+| Step 10 | AudioVisGUI 实时预览界面（拖入音频 + 播放同步 + 参数面板 + 一键导出） | ✅ |
 
 ---
 

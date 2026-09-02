@@ -62,26 +62,14 @@ if (WIN32 AND TARGET juceaide)
 endif()
 
 # =============================================================================
-# 可执行 target
-#
-# 用 juce_add_console_app（而非裸 add_executable），让 JUCE 自动生成 JuceHeader.h
-# 并处理 Windows GUI 子系统、DLL manifest 等细节。
+# 共享引擎源（core + styles）：CLI 与 GUI 两个 target 复用
 # =============================================================================
-juce_add_console_app(AudioVisExport
-    PRODUCT_NAME "AudioVisExport"
-    VERSION "0.2.0"
-    COMPANY_NAME "AudioVisExport"
-)
-
-target_sources(AudioVisExport PRIVATE
-    # 复用（不动）
+set(AVX_ENGINE_SOURCES
     source/Y2KLogging.h
     source/core/PcmSource.h
     source/core/PcmSource.cpp
     source/core/PngSequenceEncoder.h
     source/core/PngSequenceEncoder.cpp
-
-    # v2 新增：参数系统
     source/core/SpectrumParams.h
     source/core/SpectrumParams.cpp
     source/core/BandFrame.h
@@ -89,12 +77,8 @@ target_sources(AudioVisExport PRIVATE
     source/core/FreqMap.cpp
     source/core/ColorMap.h
     source/core/ColorMap.cpp
-
-    # v2 新增：频谱分析引擎
     source/core/SpectrumCore.h
     source/core/SpectrumCore.cpp
-
-    # v2 新增：样式系统
     source/core/SpectrumStyle.h
     source/core/SpectrumStyle.cpp
     source/styles/Y2KLineStyle.h
@@ -105,20 +89,53 @@ target_sources(AudioVisExport PRIVATE
     source/styles/PolylineStyle.cpp
     source/styles/CrystalStyle.h
     source/styles/CrystalStyle.cpp
-
-    # v2 新增：CLI 参数解析
-    source/cli/CliArgs.h
-    source/cli/CliArgs.cpp
-
-    # 重写
     source/core/VisPipeline.h
     source/core/VisPipeline.cpp
-    source/cli/main.cpp
 )
 
-target_include_directories(AudioVisExport PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}         # 让 #include "source/Y2KLogging.h" 能解析
-    ${CMAKE_CURRENT_SOURCE_DIR}/source
+# 两个 target 的公共配置（include / defs / MSVC 选项）
+function(avx_configure_target tgt)
+    target_include_directories(${tgt} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}         # 让 #include "source/Y2KLogging.h" 能解析
+        ${CMAKE_CURRENT_SOURCE_DIR}/source
+    )
+    target_compile_definitions(${tgt} PRIVATE
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        JUCE_VST3_CAN_REPLACE_VST2=0
+        JUCE_PLUGINHOST_ARA=0
+        JUCE_PLUGINHOST_LV2=0
+    )
+    if (MSVC)
+        target_compile_options(${tgt} PRIVATE /utf-8 /MP)
+        # Debug 信息：/Z7 嵌入 obj（与 Y2Kmeter 一致，避免 mspdbsrv 竞争）
+        target_compile_options(${tgt} PRIVATE
+            $<$<CONFIG:Debug>:/Z7>
+            $<$<CONFIG:RelWithDebInfo>:/Z7>
+        )
+        target_compile_options(${tgt} PRIVATE
+            $<$<CONFIG:Release>:/O2 /Ob3 /Oi /Ot /Gy /Gw>
+        )
+        target_link_options(${tgt} PRIVATE
+            $<$<CONFIG:Release>:/OPT:REF /OPT:ICF>
+        )
+    endif()
+endfunction()
+
+# =============================================================================
+# Target 1：AudioVisExport（CLI）
+# =============================================================================
+juce_add_console_app(AudioVisExport
+    PRODUCT_NAME "AudioVisExport"
+    VERSION "0.3.0"
+    COMPANY_NAME "AudioVisExport"
+)
+
+target_sources(AudioVisExport PRIVATE
+    ${AVX_ENGINE_SOURCES}
+    source/cli/CliArgs.h
+    source/cli/CliArgs.cpp
+    source/cli/main.cpp
 )
 
 target_link_libraries(AudioVisExport PRIVATE
@@ -127,26 +144,37 @@ target_link_libraries(AudioVisExport PRIVATE
     juce::juce_graphics         # Graphics / Path / Image (ARGB) / PNG encoder
     juce::juce_gui_basics       # Image / ColourHelpers（被 graphics 拉但显式列出更稳）
 )
+avx_configure_target(AudioVisExport)
 
-target_compile_definitions(AudioVisExport PRIVATE
-    JUCE_WEB_BROWSER=0
-    JUCE_USE_CURL=0
-    JUCE_VST3_CAN_REPLACE_VST2=0
-    JUCE_PLUGINHOST_ARA=0
-    JUCE_PLUGINHOST_LV2=0
+# =============================================================================
+# Target 2：AudioVisGUI（实时预览界面）
+#
+# 拖入音频 → AudioTransportSource 播放 + SpectrumCore 实时同步 →
+# SpectrumStyle 实时渲染；右侧参数面板（滑块/下拉/颜色）即改即见；
+# 支持一键导出 PNG 序列 / WebM / MOV（复用 VisPipeline::run）。
+# =============================================================================
+juce_add_gui_app(AudioVisGUI
+    PRODUCT_NAME "AudioVisGUI"
+    VERSION "0.3.0"
+    COMPANY_NAME "AudioVisExport"
 )
 
-if (MSVC)
-    target_compile_options(AudioVisExport PRIVATE /utf-8 /MP)
-    # Debug 信息：/Z7 嵌入 obj（与 Y2Kmeter 一致，避免 mspdbsrv 竞争）
-    target_compile_options(AudioVisExport PRIVATE
-        $<$<CONFIG:Debug>:/Z7>
-        $<$<CONFIG:RelWithDebInfo>:/Z7>
-    )
-    target_compile_options(AudioVisExport PRIVATE
-        $<$<CONFIG:Release>:/O2 /Ob3 /Oi /Ot /Gy /Gw>
-    )
-    target_link_options(AudioVisExport PRIVATE
-        $<$<CONFIG:Release>:/OPT:REF /OPT:ICF>
-    )
-endif()
+target_sources(AudioVisGUI PRIVATE
+    ${AVX_ENGINE_SOURCES}
+    source/gui/Main.cpp
+    source/gui/MainComponent.h
+    source/gui/MainComponent.cpp
+    source/gui/ParamPanel.h
+    source/gui/ParamPanel.cpp
+    source/gui/SpectrumCanvas.h
+    source/gui/SpectrumCanvas.cpp
+)
+
+target_link_libraries(AudioVisGUI PRIVATE
+    juce::juce_audio_utils      # AudioDeviceManager + AudioTransportSource + AudioFormatManager
+    juce::juce_dsp
+    juce::juce_graphics
+    juce::juce_gui_basics
+    juce::juce_gui_extra        # ColourSelector（颜色选择弹层）
+)
+avx_configure_target(AudioVisGUI)
