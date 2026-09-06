@@ -113,13 +113,19 @@ namespace
         const juce::Image im = loadImageForLayer (layer.path);
         if (im.isNull()) return;
 
+        // 图片元素基础矩形 = 图片自然尺寸（与 GUI SpectrumCanvas 完全同源）。
+        // identity 变换（set=false）= 等比 contain 居中（v0.5.1 起替代旧"强制拉伸铺满"）。
+        const float ew = (float) im.getWidth();
+        const float eh = (float) im.getHeight();
+        const VisTransform tf = layer.transform.set
+            ? layer.transform
+            : makeContainTransform (ew, eh, (float) w, (float) h);
+
         g.saveState();
         if (layer.opacity < 1.0f)
             g.setOpacity (juce::jlimit (0.0f, 1.0f, layer.opacity));
-        if (layer.transform.set)
-            g.addTransform (buildVisAffine (layer.transform));
-        g.drawImage (im, 0, 0, w, h,
-                     0, 0, im.getWidth(), im.getHeight(), false);
+        g.addTransform (buildVisAffine (tf));
+        g.drawImageAt (im, 0, 0);
         g.restoreState();
     }
 

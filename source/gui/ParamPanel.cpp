@@ -244,9 +244,17 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     layerUpBtn.onClick     = [this] { if (onLayerUp)     onLayerUp(); };
     layerDownBtn.onClick   = [this] { if (onLayerDown)   onLayerDown(); };
     layerRemoveBtn.onClick = [this] { if (onLayerRemove) onLayerRemove(); };
-    addSlider ("Img opacity %", 0, 100, 1, 1.0,
+    // v0.5.1: 图层上下（选中图片时与频谱的层级关系）
+    addRow ("Above spec", &layerAboveToggle);
+    addAndMakeVisible (layerAboveToggle);
+    layerAboveToggle.onClick = [this]
+    {
+        if (onWriteLayerAbove) onWriteLayerAbove (layerAboveToggle.getToggleState());
+    };
+    auto* opacitySlider = addSlider ("Img opacity %", 0, 100, 1, 1.0,
                [this] { return onReadLayerOpacity ? onReadLayerOpacity() : 100.0; },
                [this] (double v) { if (onWriteLayerOpacity) onWriteLayerOpacity (v); });
+    layerOpacitySliderPtr = opacitySlider;
 
     // ---- Export ----
     addHeader ("Export");
@@ -417,6 +425,15 @@ void ParamPanel::setExportEnabled (bool b)
 {
     exportBtn.setEnabled (b);
     exportVideoBtn.setEnabled (b);
+}
+
+// v0.5.1: 画布选中元素变化时同步图层区控件（每 tick 由 MainComponent 调用）
+void ParamPanel::refreshLayerControls (bool imageSelected, bool above, double opacityPct)
+{
+    layerAboveToggle.setEnabled (imageSelected);
+    layerAboveToggle.setToggleState (imageSelected && above, juce::dontSendNotification);
+    if (layerOpacitySliderPtr != nullptr)
+        layerOpacitySliderPtr->setValue (opacityPct, juce::dontSendNotification);
 }
 
 void ParamPanel::resized()

@@ -924,6 +924,31 @@ SpectrumParams.h 默认值
     onNativeFilesDropped 回调**（同消息线程确定性交付：图片→图层 / 音频→loadFile / 其他→提示），
     JUCE 链降为后备。T2 对照同时证实：非管理员禁止符已消失（无条件 DragAcceptFiles 生效，
     Explorer 全程走 WM_DROPFILES —— 即 OLE RegisterDragDrop 在该环境静默失败，与杀软无关）
+- **T2/T3/T4 最终闭环（2026-09-07）**：T3 降权重启修复验证通过（Documents 误开根因 =
+  explorer.exe 代理无法传命令行参数，改环境变量 AVX_DEELEVATED）；T4 wmDropFiles+1 定位
+  JUCE 分发链断点 → 直连交付修复，拖放全场景可用。杀软对照结论：开关无差异，与杀软无关。
+  git push 链路（gitenv openssl git + HTTP/1.1 + PAT）已固化，见 §12 发版流程注记与 §9.5 速查。
+
+**追加（v0.5.1 — 2026-09-07，图片图层系统重构）**：
+- **图片元素 = 自身宽高比，不再强制拉伸铺满**（用户反馈：拉伸框跟画布不跟图片、拉伸困难）：
+  - 图片元素基础矩形 = 图片自然尺寸 (imW, imH)；导出 `drawImageLayer` 与 GUI `paintImageLayer`
+    完全同源（原生尺寸绘制；v0.5.0 之前导出拉伸/GUI 原始尺寸互相矛盾）
+  - `VisTransform` 新增**附加平移分量 posX/posY**（默认 0，频谱与旧 JSON 行为完全兼容）；
+    `buildVisAffine` 末尾平移叠加 pos
+  - 新增 `makeContainTransform()`：新图片 / 图片首次交互 / 双击复位 = 等比 contain 居中
+    （scale=min(outW/imW, outH/imH)，枢轴=图片中心，pos=画布中心−s·图片中心）
+  - 手柄框 / 命中测试 / 拖拽中心 / 单轴拉伸 half 全部改用**元素尺寸**（频谱=画布，图片=imW,imH）：
+    框永远贴图片实际边缘；paintOverlay 中心改四角平均（修复选中图片时旋转柄方向错误）
+  - Move 拖拽统一走 posX/posY（频谱初始 0 行为等价）；JSON（顶层 transform + images[]）
+    与 `--set transform.posX/posY` 三处贯通
+- **图层上下彻底可控**（用户反馈：图片永远盖住频谱）：
+  - 根因：GUI 预览无视 aboveSpectrum 全画在频谱上层（导出管线分组正确但 GUI 不同步）
+  - GUI `paintImages` 拆分组渲染：下方组(aboveSpectrum=false) → 频谱 → 上方组(true)，与导出一致
+  - ParamPanel Layers 区新增 **"Above spec"** 开关（onReadLayerAbove/onWriteLayerAbove 回调，
+    写 `aboveSpectrum`）；`refreshLayerControls` 在画布选中元素变化时同步开关与透明度
+  - `aboveSpectrum` 默认 false = 默认在频谱下方；图片间 z 序仍用 [Up]/[Down]
+  - **像素级验证**：400×600 竖图 contain 到 960×540 → bbox (300,0) 359×539 宽高比 0.666 等比精确；
+    below 模式图片区频谱透出 574px / above 模式 0px，分组正确
 
 ### v0.4.2 — 2026-09-05
 **变更（图片图层系统 + bar-line 样式 + 拖放诊断 + 峰值帽开关）**：
@@ -1103,7 +1128,7 @@ SpectrumParams.h 默认值
 
 ---
 
-*文档版本：v0.5.0  ·  最后更新：2026-09-07*
+*文档版本：v0.5.1  ·  最后更新：2026-09-07*
 *维护者：AudioVisExport 项目（GPL-3.0）*
 *协作规则：任何功能修改后，必须在 §12 变更日志追加一条，并在文档版本号处 bump。*
 *发布规则：每次小版本更新 → §12 条目 + `docs/RELEASE_NOTES.md` 更新公告 + commit/push + tag，缺一不可（见文档开头「发布规则」与 §12「发版流程」）。*

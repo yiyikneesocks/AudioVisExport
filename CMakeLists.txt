@@ -11,7 +11,7 @@
 # 协议：GPL-3.0
 # =============================================================================
 cmake_minimum_required(VERSION 3.22)
-project(AudioVisExport VERSION 0.5.0 LANGUAGES C CXX)
+project(AudioVisExport VERSION 0.5.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -140,7 +140,7 @@ endfunction()
 # =============================================================================
 juce_add_console_app(AudioVisExport
     PRODUCT_NAME "AudioVisExport"
-    VERSION "0.5.0"
+    VERSION "0.5.1"
     COMPANY_NAME "AudioVisExport"
 )
 
@@ -168,7 +168,7 @@ avx_configure_target(AudioVisExport)
 # =============================================================================
 juce_add_gui_app(AudioVisGUI
     PRODUCT_NAME "AudioVisGUI"
-    VERSION "0.5.0"
+    VERSION "0.5.1"
     COMPANY_NAME "AudioVisExport"
 )
 

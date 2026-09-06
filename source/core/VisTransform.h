@@ -19,22 +19,42 @@
 // 元素变换参数（坐标空间 = 输出分辨率像素 0..width, 0..height）
 struct VisTransform
 {
-    bool  set = false;          // false = 填满画布（旧行为）
-    float centerX = 0.0f;       // 元素中心 X（输出像素）
-    float centerY = 0.0f;       // 元素中心 Y（输出像素）
-    float scaleX  = 1.0f;       // X 轴缩放（相对输出分辨率，非等比即拉伸）
+    bool  set = false;          // false = 填满画布（旧行为，仅频谱用）
+    float centerX = 0.0f;       // 枢轴 X（元素自身坐标系：缩放/旋转的不动点）
+    float centerY = 0.0f;       // 枢轴 Y
+    float scaleX  = 1.0f;       // X 轴缩放
     float scaleY  = 1.0f;       // Y 轴缩放
-    float rotationDeg = 0.0f;   // 绕中心旋转（度，逆时针为正）
+    float rotationDeg = 0.0f;   // 绕枢轴旋转（度，逆时针为正）
+    float posX    = 0.0f;       // 附加平移 X（输出像素；v0.5.1 图片图层用，频谱保持 0）
+    float posY    = 0.0f;       // 附加平移 Y
 };
 
 // 构建"输出坐标 → 元素变换后坐标"的 AffineTransform：
-//   先平移到中心为原点 → 旋转 → 缩放 → 平移回中心
+//   先平移到枢轴为原点 → 旋转 → 缩放 → 平移回枢轴 + 附加平移
+// posX/posY == 0 时与 v0.5.0 之前行为完全一致（频谱 JSON 兼容）。
 inline juce::AffineTransform buildVisAffine (const VisTransform& t)
 {
     auto m = juce::AffineTransform::translation (-t.centerX, -t.centerY);
     m = m.rotated (juce::degreesToRadians (t.rotationDeg));
     m = m.scaled (t.scaleX, t.scaleY);
-    return m.translated (t.centerX, t.centerY);
+    return m.translated (t.centerX + t.posX, t.centerY + t.posY);
+}
+
+// 图片图层初始变换：等比 contain 适配输出画布并居中。
+// 枢轴 = 元素自身中心；平移 = 把元素中心摆到画布中心。
+inline VisTransform makeContainTransform (float elemW, float elemH,
+                                          float outW, float outH)
+{
+    VisTransform t;
+    t.set      = true;
+    t.scaleX   = t.scaleY = juce::jmin (outW / juce::jmax (1.0f, elemW),
+                                        outH / juce::jmax (1.0f, elemH));
+    t.centerX  = elemW * 0.5f;
+    t.centerY  = elemH * 0.5f;
+    t.posX     = outW * 0.5f - t.scaleX * t.centerX;
+    t.posY     = outH * 0.5f - t.scaleY * t.centerY;
+    t.rotationDeg = 0.0f;
+    return t;
 }
 
 // JUCE 8 的 AffineTransform::transformPoint 只有 (x&, y&) 两参重载，没有单 Point 重载，

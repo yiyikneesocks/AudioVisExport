@@ -75,15 +75,24 @@ void SpectrumCanvas::paint (juce::Graphics& g)
     // 合成频谱元素：输出坐标 × 元素变换 × 画布显示适配
     if (style != nullptr)
     {
+        // v0.5.1: 与导出 VisPipeline 同源分层合成：
+        //   下方图片组 → 频谱元素 → 上方图片组
+        paintImages (g, disp, /*aboveOnly=*/false);
+
         const auto total = buildVisAffine (params.transform).followedBy (disp);
         g.saveState();
         g.addTransform (total);
         g.drawImageAt (base, 0, 0);
         g.restoreState();
-    }
 
-    // 图片图层（z 序：index 0 最底，依次叠加在频谱之上）
-    paintImages (g, disp);
+        paintImages (g, disp, /*aboveOnly=*/true);
+    }
+    else
+    {
+        // 无样式（极端情况）：图片仍需可见
+        paintImages (g, disp, /*aboveOnly=*/false);
+        paintImages (g, disp, /*aboveOnly=*/true);
+    }
 
     // 变换手柄 UI（有音频时始终显示）
     if (hasAudio)
@@ -99,15 +108,50 @@ void SpectrumCanvas::paint (juce::Graphics& g)
 
     paintBannerHud (g);
 }
+
+// 图片图层绘制（与 VisPipeline::drawImageLayer 同一约定）：
+// 基础矩形 = 图片自然尺寸；identity 变换 = 等比 contain 居中。
+void SpectrumCanvas::paintImageLayer (juce::Graphics& g,
+                                      const juce::AffineTransform& disp,
+                                      const ImageLayer& layer)
+{
+    const juce::Image img = loadCached (layer.path);
+    if (! img.isValid())
+        return;
+    const float ew = (float) img.getWidth();
+    const float eh = (float) img.getHeight();
+    const VisTransform tf = layer.transform.set
+        ? layer.transform
+        : makeContainTransform (ew, eh, (float) params.width, (float) params.height);
+    const auto total = buildVisAffine (tf).followedBy (disp);
+    g.saveState();
+    g.addTransform (total);
+    g.setOpacity (juce::jlimit (0.0f, 1.0f, layer.opacity));
+    g.drawImageAt (img, 0, 0);
+    g.restoreState();
+}
+
+void SpectrumCanvas::paintImages (juce::Graphics& g, const juce::AffineTransform& disp,
+                                  bool aboveOnly)
+{
+    for (const auto& layer : params.images)
+    {
+        if (layer.aboveSpectrum != aboveOnly)
+            continue;
+        paintImageLayer (g, disp, layer);
+    }
+}
+
 void SpectrumCanvas::paintOverlay (juce::Graphics& g)
 {
-    const int ow = juce::jmax (1, params.width);
-    const int oh = juce::jmax (1, params.height);
     const auto disp = displayAffine();
 
-    auto cOut = currentCorners();                    // 输出坐标
-    const auto centerOut = visTransformPoint (buildVisAffine (params.transform),
-                                              juce::Point<float> (ow * 0.5f, oh * 0.5f));
+    auto cOut = currentCorners();                    // 输出坐标（已按选中元素的尺寸）
+    // 元素中心 = 四角平均（仿射保持中点；自动跟随选中元素，v0.5.1 修复：
+    // 原实现固定用频谱变换的画布中心，选中图片时旋转柄方向错误）
+    const auto centerOut = juce::Point<float> (
+        (cOut[0].getX() + cOut[1].getX() + cOut[2].getX() + cOut[3].getX()) * 0.25f,
+        (cOut[0].getY() + cOut[1].getY() + cOut[2].getY() + cOut[3].getY()) * 0.25f);
 
     // 映射到画布坐标
     juce::Point<float> cp[4];
@@ -197,10 +241,21 @@ juce::Point<float> SpectrumCanvas::toOutput (juce::Point<float> p) const
     return visTransformPoint (displayAffine().inverted(), p);
 }
 
+// 当前选中元素的基础尺寸（输出坐标）：频谱 = 输出画布；图片 = 图片自然尺寸
+std::pair<float, float> SpectrumCanvas::activeElementSize() const
+{
+    if (selectedImage >= 0 && selectedImage < (int) params.images.size())
+    {
+        const juce::Image img = loadCached (params.images[(size_t) selectedImage].path);
+        if (img.isValid())
+            return { (float) img.getWidth(), (float) img.getHeight() };
+    }
+    return { (float) juce::jmax (1, params.width), (float) juce::jmax (1, params.height) };
+}
+
 std::array<juce::Point<float>, 4> SpectrumCanvas::currentCorners() const
 {
-    const float w = (float) juce::jmax (1, params.width);
-    const float h = (float) juce::jmax (1, params.height);
+    const auto [w, h] = activeElementSize();
     if (selectedImage >= 0 && selectedImage < (int) params.images.size())
         return visCorners (params.images[(size_t) selectedImage].transform, w, h);
     return visCorners (params.transform, w, h);
@@ -330,22 +385,25 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
 
     const auto out = toOutput (e.position);
     auto& t = activeTransform();
-    const int ow = juce::jmax (1, params.width);
-    const int oh = juce::jmax (1, params.height);
+    const auto [ew, eh] = activeElementSize();   // 选中元素基础尺寸（输出坐标）
+    // 变换前枢轴的输出坐标（缩放/旋转的不动点，对图片含 pos 偏移）
+    const auto startCenterOut = visTransformPoint (buildVisAffine (startTransform),
+                                                   juce::Point<float> (ew * 0.5f, eh * 0.5f));
 
     switch (dragMode)
     {
     case DragMode::Move:
-        t.centerX = startTransform.centerX + (out.getX() - dragStartOut.getX());
-        t.centerY = startTransform.centerY + (out.getY() - dragStartOut.getY());
+        // v0.5.1: 移动走附加平移（图片/频谱统一；频谱 pos 初始 0，行为不变）
+        t.posX = startTransform.posX + (out.getX() - dragStartOut.getX());
+        t.posY = startTransform.posY + (out.getY() - dragStartOut.getY());
         break;
 
     case DragMode::Rotate:
     {
-        const float a0 = std::atan2 (dragStartOut.getY() - startTransform.centerY,
-                                     dragStartOut.getX() - startTransform.centerX);
-        const float a1 = std::atan2 (out.getY() - startTransform.centerY,
-                                     out.getX() - startTransform.centerX);
+        const float a0 = std::atan2 (dragStartOut.getY() - startCenterOut.getY(),
+                                     dragStartOut.getX() - startCenterOut.getX());
+        const float a1 = std::atan2 (out.getY() - startCenterOut.getY(),
+                                     out.getX() - startCenterOut.getX());
         t.rotationDeg = startTransform.rotationDeg + juce::radiansToDegrees (a1 - a0);
         break;
     }
@@ -353,11 +411,9 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
     case DragMode::ScaleTL: case DragMode::ScaleTR:
     case DragMode::ScaleBR: case DragMode::ScaleBL:
     {
-        // 等比缩放：以元素中心为不动点，按拖动距离比例伸缩
-        const float d0 = dragStartOut.getDistanceFrom (
-            juce::Point<float> (startTransform.centerX, startTransform.centerY));
-        const float d1 = out.getDistanceFrom (
-            juce::Point<float> (startTransform.centerX, startTransform.centerY));
+        // 等比缩放：以枢轴为不动点，按拖动距离比例伸缩
+        const float d0 = dragStartOut.getDistanceFrom (startCenterOut);
+        const float d1 = out.getDistanceFrom (startCenterOut);
         const float f = (d0 > 1e-3f) ? (d1 / d0) : 1.0f;
         t.scaleX = juce::jlimit (0.05f, 50.0f, startTransform.scaleX * f);
         t.scaleY = juce::jlimit (0.05f, 50.0f, startTransform.scaleY * f);
@@ -369,18 +425,18 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
     {
         // 单轴拉伸：被拖动的边跟随鼠标，沿对应旋转轴投影求新缩放
         const auto m  = buildVisAffine (startTransform);
-        const auto cc = visTransformPoint (m, juce::Point<float> (ow * 0.5f, oh * 0.5f));
+        const auto cc = startCenterOut;
 
         juce::Point<float> axis;
         const bool vertical = (dragMode == DragMode::ScaleT || dragMode == DragMode::ScaleB);
         if (vertical)
         {
-            const auto top = visTransformPoint (m, juce::Point<float> (ow * 0.5f, 0.0f));
+            const auto top = visTransformPoint (m, juce::Point<float> (ew * 0.5f, 0.0f));
             axis = top - cc;
         }
         else
         {
-            const auto right = visTransformPoint (m, juce::Point<float> (ow, oh * 0.5f));
+            const auto right = visTransformPoint (m, juce::Point<float> (ew, eh * 0.5f));
             axis = right - cc;
         }
         const float alen = std::sqrt (axis.getX() * axis.getX() + axis.getY() * axis.getY());
@@ -389,7 +445,7 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
 
         const float proj = (out.getX() - cc.getX()) * axis.getX()
                          + (out.getY() - cc.getY()) * axis.getY();
-        const float half = (vertical ? oh : ow) * 0.5f;
+        const float half = (vertical ? eh : ew) * 0.5f;
         float factor = 0.0f;
         switch (dragMode)
         {
@@ -447,8 +503,19 @@ void SpectrumCanvas::mouseDoubleClick (const juce::MouseEvent&)
 {
     if (! hasAudio)
         return;
-    // 双击元素 → 复位变换（回到铺满画布；对图片/频谱一致）
-    activeTransform() = VisTransform {};
+    // 双击元素 → 复位变换：频谱回铺满画布（旧行为），图片回等比 contain 居中
+    if (selectedImage >= 0 && selectedImage < (int) params.images.size())
+    {
+        const juce::Image img = loadCached (params.images[(size_t) selectedImage].path);
+        const float ew = img.isValid() ? (float) img.getWidth()  : (float) params.width;
+        const float eh = img.isValid() ? (float) img.getHeight() : (float) params.height;
+        params.images[(size_t) selectedImage].transform
+            = makeContainTransform (ew, eh, (float) params.width, (float) params.height);
+    }
+    else
+    {
+        activeTransform() = VisTransform {};
+    }
     dragMode = DragMode::None;
     repaint();
 }
@@ -514,12 +581,11 @@ VisTransform& SpectrumCanvas::activeTransform()
         auto& t = params.images[(size_t) selectedImage].transform;
         if (! t.set)
         {
-            t.set         = true;
-            t.centerX     = params.width  * 0.5f;
-            t.centerY     = params.height * 0.5f;
-            t.scaleX      = 1.0f;
-            t.scaleY      = 1.0f;
-            t.rotationDeg = 0.0f;
+            // 首次交互：等比 contain 居中（与导出 drawImageLayer 的 identity 语义一致）
+            const juce::Image img = loadCached (params.images[(size_t) selectedImage].path);
+            const float ew = img.isValid() ? (float) img.getWidth()  : (float) params.width;
+            const float eh = img.isValid() ? (float) img.getHeight() : (float) params.height;
+            t = makeContainTransform (ew, eh, (float) params.width, (float) params.height);
         }
         return t;
     }
@@ -528,15 +594,20 @@ VisTransform& SpectrumCanvas::activeTransform()
 
 int SpectrumCanvas::hitImage (juce::Point<float> out) const
 {
-    const float w = (float) juce::jmax (1, params.width);
-    const float h = (float) juce::jmax (1, params.height);
+    const auto [w0, h0] = activeElementSize();
+    juce::ignoreUnused (w0, h0);
     for (int i = (int) params.images.size() - 1; i >= 0; --i)   // 顶层优先
+    {
+        const juce::Image img = loadCached (params.images[(size_t) i].path);
+        const float w = img.isValid() ? (float) img.getWidth()  : (float) params.width;
+        const float h = img.isValid() ? (float) img.getHeight() : (float) params.height;
         if (visContains (visCorners (params.images[(size_t) i].transform, w, h), out))
             return i;
+    }
     return -1;
 }
 
-juce::Image SpectrumCanvas::loadCached (const juce::String& path)
+juce::Image SpectrumCanvas::loadCached (const juce::String& path) const
 {
     auto it = imageCache.find (path);
     if (it != imageCache.end())
@@ -547,23 +618,9 @@ juce::Image SpectrumCanvas::loadCached (const juce::String& path)
     return img;
 }
 
-// 图片图层合成：与 VisPipeline::renderFrame 完全同一约定
-// （identity 变换 = 铺满输出分辨率；index 0 最底、依次向上叠加在频谱之上）
-void SpectrumCanvas::paintImages (juce::Graphics& g, const juce::AffineTransform& disp)
-{
-    for (const auto& layer : params.images)
-    {
-        const juce::Image img = loadCached (layer.path);
-        if (! img.isValid())
-            continue;
-        const auto total = buildVisAffine (layer.transform).followedBy (disp);
-        g.saveState();
-        g.addTransform (total);
-        g.setOpacity (juce::jlimit (0.0f, 1.0f, layer.opacity));
-        g.drawImageAt (img, 0, 0);
-        g.restoreState();
-    }
-}
+// 图片图层绘制（与 VisPipeline::drawImageLayer 同一约定）：
+// 基础矩形 = 图片自然尺寸；identity 变换 = 等比 contain 居中。
+// （v0.5.1：旧版 paintImages 已被 paintImages(g,disp,aboveOnly) 分组渲染取代）
 
 // =============================================================================
 // 提权警告横幅 + 拖放 HUD（诊断"禁止符号"是系统 UIPI 还是程序问题）

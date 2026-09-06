@@ -12,7 +12,7 @@ juce::String CliArgs::helpText()
     // ⚠️ 必须用 CharPointer_UTF8 包装：juce::String(const char*) 按 ASCII 处理
     // （>127 的 UTF-8 多字节会被逐字节重编码成双重编码乱码，Release 下 jassert 被禁用无提示）
     return juce::String (juce::CharPointer_UTF8 (R"(
-AudioVisExport v0.5.0 — 透明背景频谱图视频生成器
+AudioVisExport v0.5.1 — 透明背景频谱图视频生成器
 
 用法:
   AudioVisExport --export <audio.wav> <out_dir|out_video> [OPTIONS]

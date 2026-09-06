@@ -223,7 +223,9 @@ juce::String SpectrumParams::toJson() const
     s << "    \"centerY\": " << transform.centerY << ",\n";
     s << "    \"scaleX\": " << transform.scaleX << ",\n";
     s << "    \"scaleY\": " << transform.scaleY << ",\n";
-    s << "    \"rotationDeg\": " << transform.rotationDeg << "\n";
+    s << "    \"rotationDeg\": " << transform.rotationDeg << ",\n";
+    s << "    \"posX\": " << transform.posX << ",\n";
+    s << "    \"posY\": " << transform.posY << "\n";
     s << "  },\n";
     // output
     s << "  \"output\": {\n";
@@ -250,6 +252,8 @@ juce::String SpectrumParams::toJson() const
               << ", \"scaleX\": " << im.transform.scaleX
               << ", \"scaleY\": " << im.transform.scaleY
               << ", \"rotationDeg\": " << im.transform.rotationDeg
+              << ", \"posX\": " << im.transform.posX
+              << ", \"posY\": " << im.transform.posY
               << ", \"opacity\": " << im.opacity
               << ", \"aboveSpectrum\": " << (im.aboveSpectrum ? "true" : "false")
               << ", \"visible\": " << (im.visible ? "true" : "false") << " }"
@@ -374,6 +378,8 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
         p.transform.scaleX      = getFloat (tf, "scaleX", p.transform.scaleX);
         p.transform.scaleY      = getFloat (tf, "scaleY", p.transform.scaleY);
         p.transform.rotationDeg = getFloat (tf, "rotationDeg", p.transform.rotationDeg);
+        p.transform.posX        = getFloat (tf, "posX", p.transform.posX);
+        p.transform.posY        = getFloat (tf, "posY", p.transform.posY);
     }
     auto out = root.getProperty ("output", juce::var());
     if (auto* o = out.getDynamicObject()) {
@@ -406,6 +412,8 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
             L.transform.scaleX     = (float) (double) item.getProperty ("scaleX", juce::var (1.0));
             L.transform.scaleY     = (float) (double) item.getProperty ("scaleY", juce::var (1.0));
             L.transform.rotationDeg= (float) (double) item.getProperty ("rotationDeg", juce::var (0.0));
+            L.transform.posX       = (float) (double) item.getProperty ("posX", juce::var (0.0));
+            L.transform.posY       = (float) (double) item.getProperty ("posY", juce::var (0.0));
             L.transform.set        = true;
             L.opacity              = (float) (double) item.getProperty ("opacity", juce::var (1.0));
             L.aboveSpectrum        = (bool) (bool) item.getProperty ("aboveSpectrum", juce::var (false));
@@ -500,6 +508,8 @@ bool SpectrumParams::applyOverride (const juce::String& dottedKey,
     if      (key == "transform.scaleX")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); transform.scaleX=v; return true; }
     if      (key == "transform.scaleY")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); transform.scaleY=v; return true; }
     if      (key == "transform.rotationDeg") { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); transform.rotationDeg=v; return true; }
+    if      (key == "transform.posX")        { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); transform.posX=v; transform.set=true; return true; }
+    if      (key == "transform.posY")        { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); transform.posY=v; transform.set=true; return true; }
     // output.*
     if      (key == "output.width")          { bool ok=true; int v=toInt(&ok);  if(!ok) return setErr("invalid int"); width=v; return true; }
     if      (key == "output.height")         { bool ok=true; int v=toInt(&ok);  if(!ok) return setErr("invalid int"); height=v; return true; }

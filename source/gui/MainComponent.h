@@ -69,6 +69,7 @@ private:
     juce::Label nowPlayingLabel;              // v0.5.0: 当前音频文件名（画布左下角）
     bool userSeeking = false;
     double pausedPos = 0.0;
+    int layerSelCache = -2;   // v0.5.1: 上次同步图层控件时的选中元素（-2=初始未同步）
 
     // ---- 导出 ----
     std::atomic<bool> exporting { false };

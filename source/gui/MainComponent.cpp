@@ -82,6 +82,21 @@ MainComponent::MainComponent() : canvas (params), panel (params)
         params.images[(size_t) sel].opacity = (float) (v / 100.0);
         canvas.repaint();
     };
+    // v0.5.1: 图层上下（aboveSpectrum）
+    panel.onReadLayerAbove = [this]() -> bool
+    {
+        const int sel = canvas.selectedImageIndex();
+        return sel >= 0 && sel < (int) params.images.size()
+               && params.images[(size_t) sel].aboveSpectrum;
+    };
+    panel.onWriteLayerAbove = [this] (bool above)
+    {
+        const int sel = canvas.selectedImageIndex();
+        if (sel < 0 || sel >= (int) params.images.size())
+            return;
+        params.images[(size_t) sel].aboveSpectrum = above;
+        canvas.repaint();
+    };
 
     addAndMakeVisible (panel);
     panelViewport.setViewedComponent (&panel, false);
@@ -255,6 +270,18 @@ void MainComponent::timerCallback()
             const double shown = transport.isPlaying() ? transport.getCurrentPosition() : pausedPos;
             timeLabel.setText (formatTime (shown) + " / " + formatTime (dur),
                                juce::dontSendNotification);
+        }
+
+        // v0.5.1: 画布选中元素变化时同步图层区控件（Above spec 开关 / 透明度）
+        const int selNow = canvas.selectedImageIndex();
+        if (selNow != layerSelCache)
+        {
+            layerSelCache = selNow;
+            const bool imgSel = (selNow >= 0 && selNow < (int) params.images.size());
+            panel.refreshLayerControls (imgSel,
+                                        imgSel && params.images[(size_t) selNow].aboveSpectrum,
+                                        imgSel ? params.images[(size_t) selNow].opacity * 100.0
+                                               : 100.0);
         }
     }
 
@@ -599,9 +626,12 @@ void MainComponent::filesDropped (const juce::StringArray& files, int x, int y)
 void MainComponent::addImageLayer (const juce::File& f)
 {
     ImageLayer layer;
-    layer.path      = f.getFullPathName();
-    layer.opacity   = 1.0f;
-    layer.transform = VisTransform {};   // identity = 铺满输出分辨率
+    layer.path    = f.getFullPathName();
+    layer.opacity = 1.0f;
+    // v0.5.1: 默认等比 contain 居中（不再是 identity 强制拉伸铺满）
+    layer.transform = makeContainTransform ((float) juce::ImageCache::getFromFile (f).getWidth(),
+                                            (float) juce::ImageCache::getFromFile (f).getHeight(),
+                                            (float) params.width, (float) params.height);
     params.images.push_back (layer);
     canvas.selectImage ((int) params.images.size() - 1);
     canvas.repaint();

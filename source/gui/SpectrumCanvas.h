@@ -66,7 +66,7 @@ private:
     bool dragHovering = false;
     juce::StringArray dragHoverFiles;
     bool processElevated = false;
-    std::map<juce::String, juce::Image> imageCache;
+    mutable std::map<juce::String, juce::Image> imageCache;
     juce::Point<float> dragStartOut;    // 拖拽开始时鼠标（输出坐标）
     VisTransform       startTransform;  // 拖拽开始时变换副本
     std::array<juce::Point<float>, 4> currentCorners() const;  // 元素外框四角（输出坐标）
@@ -82,12 +82,16 @@ private:
     void beginTransformIfNeeded();
     void updateHoverCursor (juce::Point<float> out);
     void paintOverlay (juce::Graphics& g);
-    void paintImages (juce::Graphics& g, const juce::AffineTransform& disp);   // 图片图层（z 序）
+    // 图片图层（v0.5.1 分组渲染：aboveOnly=false=频谱下方组，true=上方组）
+    void paintImages (juce::Graphics& g, const juce::AffineTransform& disp, bool aboveOnly);
+    void paintImageLayer (juce::Graphics& g, const juce::AffineTransform& disp,
+                          const ImageLayer& layer);
     void paintBannerHud (juce::Graphics& g);                                    // 提权警告 + 拖放 HUD
     VisTransform&       activeTransform();
     const VisTransform& activeTransform() const;
+    std::pair<float, float> activeElementSize() const;   // 选中元素基础尺寸（输出坐标）
     int  hitImage (juce::Point<float> out) const;                               // 点落在哪张图片上（顶层优先）
-    juce::Image loadCached (const juce::String& path);
+    juce::Image loadCached (const juce::String& path) const;
     static bool isProcessElevated();                                            // UIPI 诊断
 
     // ---- 坐标映射（输出分辨率坐标系 ↔ 画布坐标系）----
