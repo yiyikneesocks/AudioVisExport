@@ -6,7 +6,7 @@
 >
 > | 文档 / 项目版本 | 日期 | tag（可）| 里程碑 |
 > |---|---|---|---|
-> | v0.5.0 | 2026-09-06 | —（工作区待提交）| **Windows 原生 exe 交叉编译打通**（Clang 18 + xwin + lld-link-18）+ UIPI 拖放彻底修复（WM_DROPFILES 兼容层）+ Colors 4 按钮免滚动（新增 BG 色）+ 峰值帽参数上移 Style 区 + bar-line 斜面柱顶重构 |
+> | v0.5.0 | 2026-09-06 | `v0.5.0`（已 push + Release）| **Windows 原生 exe 交叉编译打通**（Clang 18 + xwin + lld-link-18）+ UIPI 拖放彻底修复（自动降权 + WM_DROPFILES 直连交付）+ Colors 4 按钮免滚动（新增 BG 色）+ 峰值帽参数上移 Style 区 + bar-line 斜面柱顶/斜面峰值帽 + 暂停峰值冻结 + Load/Eject 按钮 |
 > | v0.4.2 | 2026-09-05 | —（工作区未提交，tag 待补）| 图片图层系统 + bar-line 样式 + 峰值帽开关 + 拖放 UIPI 诊断 + Windows→WSL 迁移（文档/环境）+ CLI UTF-8 修复 + 版本号同步至 v0.4.2 |
 > | v0.4.1 | 2026-09-05 | `v0.4.1`（推荐打 tag）| 频谱元素自由变换（拖动/缩放/拉伸/旋转）+ 两段式合成渲染，导出所见即所得 |
 > | v0.4.0 | 2026-09-03 | `v0.4.0`（推荐打 tag）| GUI 新增一键 "Export Video" 按钮（默认透明 MOV QTRLE）；PngSequenceEncoder 实现编码器（MOV QTRLE alpha 实测 argb / WebM VP9 实测无 alpha）；视频模式自动补全输出路径；新增 docs/GUI_GUIDE.md 使用说明 |
@@ -814,7 +814,11 @@ SpectrumParams.h 默认值
 > 4. `git push origin main` + 打 tag `git tag vX.Y.Z && git push origin vX.Y.Z`
 > 5. 在 GitHub 用 `docs/RELEASE_NOTES.md` 内容创建 Release
 >
-> （2026-09-05 注：当前环境 git 访问 GitHub 实测 TLS 中断，push 需在网络恢复/代理就绪后补做。）
+> **（2026-09-06 v0.5.0 实测更新的 push 环境事实）**：
+> · 系统 git（gnutls 后端）连 GitHub 必 TLS 中断；须用 conda 环境 gitenv 的 openssl 版 git：
+>   `PATH=/home/azulores/miniconda3/envs/gitenv/bin:$PATH git -c http.version=HTTP/1.1 push ...`
+> · TLS 偶发抖动，失败就重试（实测 1~5 次内成功）；凭据已存 `~/.git-credentials`（0600），
+>   remote URL 保持干净形式（不含 token，防泄漏进仓库/截图）
 
 ### v0.5.0 — 2026-09-06
 **变更（Windows 原生交付 + UIPI 拖放修复 + GUI/样式增强；实施计划见 `docs/PLAN_v0.5.0.md`）**：
