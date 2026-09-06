@@ -382,13 +382,15 @@ void SpectrumCore::getBandFrame (BandFrame& out)
     }
 
     // 4) 峰值保持：新峰则更新+重置 hold；否则 hold 到期后按 dB/s 线性衰减
+    //    peaksFrozen_（GUI 暂停）：跳过 hold 计时与衰减，峰值帽原地保持；
+    //    新峰跟随分支保留（seek 快进时峰值仍能建立）
     {
         const float fallDelta = params_.peakDecayDbPerSec * (dtMs / 1000.0f);
         for (int i = 0; i < N; ++i) {
             if (smoothedDb_[i] > peakDb_[i]) {
                 peakDb_[i] = smoothedDb_[i];
                 peakHoldRemainMs_[i] = 0.0f;
-            } else {
+            } else if (! peaksFrozen_) {
                 peakHoldRemainMs_[i] += dtMs;
                 if (peakHoldRemainMs_[i] > params_.peakHoldMs)
                     peakDb_[i] -= fallDelta;

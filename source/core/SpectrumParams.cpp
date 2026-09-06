@@ -208,10 +208,22 @@ juce::String SpectrumParams::toJson() const
     s << "    \"secondaryColor\": \"" << colourHex (secondaryColor) << "\",\n";
     s << "    \"peakColor\": \"" << colourHex (peakColor) << "\",\n";
     s << "    \"bgColor\": \"" << colourHex (bgColor) << "\",\n";
+    s << "    \"barGapRatio\": " << barGapRatio << ",\n";
+    s << "    \"barWidthRatio\": " << barWidthRatio << ",\n";
+    s << "    \"barParticles\": " << (barParticles ? "true" : "false") << ",\n";
     s << "    \"lineWidth\": " << lineWidth << ",\n";
     s << "    \"opacity\": " << opacity << ",\n";
     s << "    \"drawGrid\": " << (drawGrid ? "true" : "false") << ",\n";
     s << "    \"drawAxisLabels\": " << (drawAxisLabels ? "true" : "false") << "\n";
+    s << "  },\n";
+    // 频谱元素变换
+    s << "  \"transform\": {\n";
+    s << "    \"set\": " << (transform.set ? "true" : "false") << ",\n";
+    s << "    \"centerX\": " << transform.centerX << ",\n";
+    s << "    \"centerY\": " << transform.centerY << ",\n";
+    s << "    \"scaleX\": " << transform.scaleX << ",\n";
+    s << "    \"scaleY\": " << transform.scaleY << ",\n";
+    s << "    \"rotationDeg\": " << transform.rotationDeg << "\n";
     s << "  },\n";
     // output
     s << "  \"output\": {\n";
@@ -225,6 +237,26 @@ juce::String SpectrumParams::toJson() const
     s << "    \"ffmpegPath\": \"" << escJson (ffmpegPath) << "\",\n";
     s << "    \"bgCheckerboardPreview\": " << (bgCheckerboardPreview ? "true" : "false") << "\n";
     s << "  },\n";
+    // images：图片图层（v0.4.2，序列化在 output 块后单独输出）
+    if (! images.empty())
+    {
+        s << "  \"images\": [\n";
+        for (size_t i = 0; i < images.size(); ++i)
+        {
+            const auto& im = images[i];
+            s << "    { \"path\": \"" << escJson (im.path) << "\","
+              << " \"centerX\": " << im.transform.centerX
+              << ", \"centerY\": " << im.transform.centerY
+              << ", \"scaleX\": " << im.transform.scaleX
+              << ", \"scaleY\": " << im.transform.scaleY
+              << ", \"rotationDeg\": " << im.transform.rotationDeg
+              << ", \"opacity\": " << im.opacity
+              << ", \"aboveSpectrum\": " << (im.aboveSpectrum ? "true" : "false")
+              << ", \"visible\": " << (im.visible ? "true" : "false") << " }"
+              << (i + 1 < images.size() ? "," : "") << "\n";
+        }
+        s << "  ],\n";
+    }
     // audio
     s << "  \"audio\": {\n";
     s << "    \"path\": \"" << escJson (audioPath) << "\"\n";
@@ -317,6 +349,9 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
     if (auto* o = vis.getDynamicObject()) {
         p.style         = getStr (vis, "style", p.style);
         p.colorMap      = getStr (vis, "colorMap", p.colorMap);
+        p.barGapRatio   = getFloat (vis, "barGapRatio", p.barGapRatio);
+        p.barWidthRatio = getFloat (vis, "barWidthRatio", p.barWidthRatio);
+        p.barParticles  = getBool (vis, "barParticles", p.barParticles);
         p.lineWidth     = getFloat (vis, "lineWidth", p.lineWidth);
         p.opacity       = getFloat (vis, "opacity", p.opacity);
         p.drawGrid      = getBool (vis, "drawGrid", p.drawGrid);
@@ -330,6 +365,15 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
         if (cok) p.peakColor = pk;
         auto bg = parseColour (getStr (vis, "bgColor", ""), &cok);
         if (cok) p.bgColor = bg;
+    }
+    auto tf = root.getProperty ("transform", juce::var());
+    if (auto* o = tf.getDynamicObject()) {
+        p.transform.set         = getBool  (tf, "set", p.transform.set);
+        p.transform.centerX     = getFloat (tf, "centerX", p.transform.centerX);
+        p.transform.centerY     = getFloat (tf, "centerY", p.transform.centerY);
+        p.transform.scaleX      = getFloat (tf, "scaleX", p.transform.scaleX);
+        p.transform.scaleY      = getFloat (tf, "scaleY", p.transform.scaleY);
+        p.transform.rotationDeg = getFloat (tf, "rotationDeg", p.transform.rotationDeg);
     }
     auto out = root.getProperty ("output", juce::var());
     if (auto* o = out.getDynamicObject()) {
@@ -348,6 +392,26 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
     auto aud = root.getProperty ("audio", juce::var());
     if (auto* o = aud.getDynamicObject()) {
         p.audioPath = getStr (aud, "path", p.audioPath);
+    }
+    // images：图片图层（v0.4.2）
+    if (auto* arr = root.getProperty ("images", juce::var()).getArray()) {
+        p.images.clear();
+        for (auto& item : *arr)
+        {
+            ImageLayer L;
+            L.path = item.getProperty ("path", juce::var()).toString();
+            if (L.path.isEmpty()) continue;
+            L.transform.centerX    = (float) (double) item.getProperty ("centerX", juce::var (0.0));
+            L.transform.centerY    = (float) (double) item.getProperty ("centerY", juce::var (0.0));
+            L.transform.scaleX     = (float) (double) item.getProperty ("scaleX", juce::var (1.0));
+            L.transform.scaleY     = (float) (double) item.getProperty ("scaleY", juce::var (1.0));
+            L.transform.rotationDeg= (float) (double) item.getProperty ("rotationDeg", juce::var (0.0));
+            L.transform.set        = true;
+            L.opacity              = (float) (double) item.getProperty ("opacity", juce::var (1.0));
+            L.aboveSpectrum        = (bool) (bool) item.getProperty ("aboveSpectrum", juce::var (false));
+            L.visible              = (bool) (bool) item.getProperty ("visible", juce::var (true));
+            p.images.push_back (L);
+        }
     }
     errorMessage.clear();
     return p;
@@ -420,12 +484,22 @@ bool SpectrumParams::applyOverride (const juce::String& dottedKey,
     if      (key == "visual.colorMap")       { colorMap = val; return true; }
     if      (key == "visual.lineWidth")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); lineWidth=v; return true; }
     if      (key == "visual.opacity")        { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); opacity=v; return true; }
+    if      (key == "visual.barGapRatio")    { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); barGapRatio=v; return true; }
+    if      (key == "visual.barWidthRatio")  { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); barWidthRatio=v; return true; }
+    if      (key == "visual.barParticles")   { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); barParticles=v; return true; }
     if      (key == "visual.drawGrid")       { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); drawGrid=v; return true; }
     if      (key == "visual.drawAxisLabels") { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); drawAxisLabels=v; return true; }
     if      (key == "visual.primaryColor")   { bool ok; auto c=parseColour(val, &ok); if(!ok) return setErr("invalid color (#rrggbb / #aarrggbb)"); primaryColor=c; return true; }
     if      (key == "visual.secondaryColor") { bool ok; auto c=parseColour(val, &ok); if(!ok) return setErr("invalid color"); secondaryColor=c; return true; }
     if      (key == "visual.peakColor")      { bool ok; auto c=parseColour(val, &ok); if(!ok) return setErr("invalid color"); peakColor=c; return true; }
     if      (key == "visual.bgColor")        { bool ok; auto c=parseColour(val, &ok); if(!ok) return setErr("invalid color"); bgColor=c; return true; }
+    // transform.*
+    if      (key == "transform.set")         { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); transform.set=v; return true; }
+    if      (key == "transform.centerX")     { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); transform.centerX=v; return true; }
+    if      (key == "transform.centerY")     { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); transform.centerY=v; return true; }
+    if      (key == "transform.scaleX")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); transform.scaleX=v; return true; }
+    if      (key == "transform.scaleY")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); transform.scaleY=v; return true; }
+    if      (key == "transform.rotationDeg") { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); transform.rotationDeg=v; return true; }
     // output.*
     if      (key == "output.width")          { bool ok=true; int v=toInt(&ok);  if(!ok) return setErr("invalid int"); width=v; return true; }
     if      (key == "output.height")         { bool ok=true; int v=toInt(&ok);  if(!ok) return setErr("invalid int"); height=v; return true; }

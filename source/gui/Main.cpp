@@ -6,6 +6,7 @@
 // =============================================================================
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "MainComponent.h"
+#include "WinDragCompat.h"
 
 namespace
 {
@@ -21,6 +22,10 @@ namespace
             setContentOwned (new MainComponent(), true);
             centreWithSize (1280, 800);
             setVisible (true);
+
+            // v0.5.0: UIPI 拖放兼容层（提权时切换 WM_DROPFILES 协议 + 子类兜底）。
+            // 此刻窗口 peer 已创建、仍在消息线程，满足 OLE STA 约束。
+            avx::winDragCompat::installDragCompat (getContentComponent());
         }
 
         void closeButtonPressed() override
@@ -49,6 +54,16 @@ namespace
 
         void initialise (const juce::String&) override
         {
+            // v0.5.0: 提权进程自动降权重启（经 explorer.exe 代理）。
+            // 管理员运行会触发 UIPI 拖放拦截；降权后 OLE 拖放完整可用
+            // （含拖放悬停 HUD）。WM_DROPFILES 兼容层仅作重启失败时的兜底。
+            if (avx::winDragCompat::isProcessElevated()
+                && avx::winDragCompat::relaunchDeElevated())
+            {
+                quit();   // 新实例已拉起，本实例退出
+                return;
+            }
+
             mainWindow = std::make_unique<AVXGuiWindow> (getApplicationName());
         }
 

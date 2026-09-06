@@ -9,8 +9,10 @@
 // -----------------------------------------------------------------------------
 juce::String CliArgs::helpText()
 {
-    return R"(
-AudioVisExport v0.2.0 — 透明背景频谱图视频生成器
+    // ⚠️ 必须用 CharPointer_UTF8 包装：juce::String(const char*) 按 ASCII 处理
+    // （>127 的 UTF-8 多字节会被逐字节重编码成双重编码乱码，Release 下 jassert 被禁用无提示）
+    return juce::String (juce::CharPointer_UTF8 (R"(
+AudioVisExport v0.5.0 — 透明背景频谱图视频生成器
 
 用法:
   AudioVisExport --export <audio.wav> <out_dir|out_video> [OPTIONS]
@@ -68,7 +70,7 @@ AudioVisExport v0.2.0 — 透明背景频谱图视频生成器
   AudioVisExport --preview-frame out.png --audio test_tone.wav --frame-index 100
   AudioVisExport --export test_tone.wav out_frames --style y2k-line --bg-color #00000000
   AudioVisExport --export song.wav out.webm --encoder webm-vp9 --fps 30
-)";
+)"));
 }
 
 // -----------------------------------------------------------------------------

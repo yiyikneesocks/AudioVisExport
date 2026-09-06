@@ -1,5 +1,5 @@
 // =============================================================================
-// PngSequenceEncoder.cpp — 帧序列 → PNG 文件 + 最后 ffmpeg 合成 mp4
+// PngSequenceEncoder.cpp — 帧序列 → PNG 文件 + 最后 ffmpeg 合成视频
 //
 // 数据流：
 //   startSession → 每帧 writeFrame(juce::Image) → finalizeAndMux
@@ -9,10 +9,9 @@
 //
 // ffmpeg 调用：
 //   juce::ChildProcess 调 ffmpeg.exe (hinted / env FFMPEG_PATH / PATH)
-//   ffmpeg 命令（CRF 18 视觉无损、AAC 192k、faststart 便于网页/播放器快速启动）：
-//     ffmpeg -y -framerate FPS -i frame_%06d.png -i AUDIO.wav
-//            -c:v libx264 -pix_fmt yuv420p -preset medium -crf 18
-//            -c:a aac -b:a 192k -shortest -movflags +faststart OUTPUT.mp4
+//   · MOV:  qtrle + rgba  → 无损 alpha（实测 pix_fmt=argb）
+//   · WebM: libvpx-vp9    → 无 alpha 预览片（libvpx 未开 VP9-alpha 的构建实测丢 alpha）
+//   · PNG-seq: 不调 ffmpeg
 // =============================================================================
 #include "PngSequenceEncoder.h"
 
@@ -67,6 +66,18 @@ int PngSequenceEncoder::finalizeAndMux (const juce::String& audioPath,
                                          const juce::String& outputVideoPath,
                                          const juce::String& ffmpegPath)
 {
+    // PNG-seq 模式不需要 mux；空输出路径属于调用方错误
+    if (cfg_.encoder == SpectrumParams::PngSeq)
+    {
+        printf ("[PngSequenceEncoder] finalizeAndMux skipped (PNG-seq mode)\n");
+        return 0;
+    }
+    if (outputVideoPath.isEmpty())
+    {
+        printf ("[PngSequenceEncoder] FATAL: outputVideoPath is empty\n");
+        return -3;
+    }
+
     const auto exe = findFfmpeg_ (ffmpegPath);
     if (exe.isEmpty())
     {
@@ -75,7 +86,7 @@ int PngSequenceEncoder::finalizeAndMux (const juce::String& audioPath,
         return -2;
     }
 
-    // 输出 mp4 可能不存在（正常），也可能上次遗留 → 先删（ffmpeg 自己也会 -y 覆盖，这里保险）
+    // 输出视频可能不存在（正常），也可能上次遗留 → 先删（ffmpeg 自己也会 -y 覆盖，这里保险）
     juce::File out (outputVideoPath);
     if (out.existsAsFile())
         out.deleteFile();
@@ -83,6 +94,12 @@ int PngSequenceEncoder::finalizeAndMux (const juce::String& audioPath,
     out.getParentDirectory().createDirectory();
 
     const auto args = buildFfmpegArgs_ (audioPath, outputVideoPath);
+    if (args.isEmpty())
+    {
+        printf ("[PngSequenceEncoder] FATAL: empty ffmpeg args (encoder=%s)\n",
+                SpectrumParams::encoderName (cfg_.encoder).toRawUTF8());
+        return -3;
+    }
 
     // JUCE ChildProcess::start(const StringArray&): arguments[0] = 可执行文件路径，
     // arguments[1..N] = 命令行参数。
@@ -147,7 +164,7 @@ int PngSequenceEncoder::finalizeAndMux (const juce::String& audioPath,
     const int exitCode = proc.getExitCode();
     if (exitCode == 0)
     {
-        printf ("[PngSequenceEncoder] OK: mp4 written -> %s (%s)\n",
+        printf ("[PngSequenceEncoder] OK: video written -> %s (%s)\n",
                 outputVideoPath.toRawUTF8(),
                 out.existsAsFile() ? juce::String::formatted ("size=%lld bytes",
                                                               (long long)out.getSize()).toRawUTF8()
@@ -282,31 +299,59 @@ juce::StringArray PngSequenceEncoder::buildFfmpegArgs_ (const juce::String& audi
     args.add ("-i");
     args.add (pattern);
 
-    // 音频输入
-    args.add ("-i");
-    args.add (audioPath);
+    // 音频输入（可以为空 = 纯视频无音轨）
+    const bool hasAudio = audioPath.isNotEmpty();
+    if (hasAudio)
+    {
+        args.add ("-i");
+        args.add (audioPath);
+    }
 
-    // 视频编码：libx264 + yuv420p + medium preset + CRF 18 (视觉无损)
-    args.add ("-c:v");
-    args.add ("libx264");
-    args.add ("-pix_fmt");
-    args.add ("yuv420p");
-    args.add ("-preset");
-    args.add ("medium");
-    args.add ("-crf");
-    args.add ("18");
-
-    // 音频编码：AAC LC 192k
-    args.add ("-c:a");
-    args.add ("aac");
-    args.add ("-b:a");
-    args.add ("192k");
+    switch (cfg_.encoder)
+    {
+        case SpectrumParams::WebmVp9:
+        {
+            // WebM + VP9 —— **注意：此格式不保留 alpha 通道**。
+            // 实测（gyan.dev ffmpeg 2026-01）libvpx-vp9 虽声明支持 yuva420p，
+            // 但实际编码时自动降级为 yuv420p，alpha 被丢弃。
+            // WebM 真正的带 alpha 方案需要 libvpx 编译时开 VP9 alpha / VP8 alpha，
+            // 绝大多数发行版 FFmpeg 未启用 → 这里作为"小体积无透明预览片"使用。
+            // 带 alpha 的视频导出请用 MOV QTRLE（见下表）。
+            args.add ("-c:v");      args.add ("libvpx-vp9");
+            args.add ("-crf");      args.add ("32");
+            args.add ("-b:v");      args.add ("0");
+            args.add ("-deadline"); args.add ("good");
+            args.add ("-cpu-used"); args.add ("2");
+            args.add ("-row-mt");   args.add ("1");
+            if (hasAudio)
+            {
+                args.add ("-c:a");  args.add ("libopus");
+                args.add ("-b:a");  args.add ("160k");
+            }
+            break;
+        }
+        case SpectrumParams::MovQtrle:
+        {
+            // MOV + QTRLE：rgba 无损保留 alpha（实测输出 pix_fmt=argb），
+            // Premiere/Vegas/Resolve 均可直接导入。这才是"透明视频"的标准格式。
+            // PCM 音轨为 MOV 原生无损格式。文件体积大属于正常。
+            args.add ("-c:v");      args.add ("qtrle");
+            args.add ("-pix_fmt");  args.add ("rgba");
+            if (hasAudio)
+            {
+                args.add ("-c:a");  args.add ("pcm_s16le");
+            }
+            break;
+        }
+        case SpectrumParams::PngSeq:
+        default:
+            // PNG 序列模式不调 ffmpeg；finalizeAndMux 已提前拦截
+            return {};
+    }
 
     // 当音频比视频短时提前结束
-    args.add ("-shortest");
-    // 把 moov atom 移到 mp4 文件开头，便于 web 播放快速启动
-    args.add ("-movflags");
-    args.add ("+faststart");
+    if (hasAudio)
+        args.add ("-shortest");
 
     args.add (outputVideoPath);
     return args;

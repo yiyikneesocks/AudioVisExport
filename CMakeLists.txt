@@ -11,14 +11,17 @@
 # 协议：GPL-3.0
 # =============================================================================
 cmake_minimum_required(VERSION 3.22)
-project(AudioVisExport VERSION 0.2.0 LANGUAGES C CXX)
+project(AudioVisExport VERSION 0.5.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Windows 强制静态 CRT（与 Y2Kmeter 一致，避免依赖 VC_redist）
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+# Note: toolchain file overrides this for cross-compilation
+if (NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 
 # 默认 Release（PoC 阶段不需要 Debug 调试）
 if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -85,6 +88,7 @@ set(AVX_ENGINE_SOURCES
     source/styles/Y2KLineStyle.cpp
     source/styles/BarStyle.h
     source/styles/BarStyle.cpp
+    source/styles/BarLineStyle.cpp
     source/styles/PolylineStyle.h
     source/styles/PolylineStyle.cpp
     source/styles/CrystalStyle.h
@@ -106,8 +110,12 @@ function(avx_configure_target tgt)
         JUCE_PLUGINHOST_ARA=0
         JUCE_PLUGINHOST_LV2=0
     )
-    if (MSVC)
-        target_compile_options(${tgt} PRIVATE /utf-8 /MP)
+    if (MSVC OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+        # MSVC-compatible mode (native MSVC or Clang-cl / Clang targeting MSVC ABI)
+        target_compile_options(${tgt} PRIVATE /utf-8)
+        if (MSVC)
+            target_compile_options(${tgt} PRIVATE /MP)
+        endif()
         # Debug 信息：/Z7 嵌入 obj（与 Y2Kmeter 一致，避免 mspdbsrv 竞争）
         target_compile_options(${tgt} PRIVATE
             $<$<CONFIG:Debug>:/Z7>
@@ -119,6 +127,11 @@ function(avx_configure_target tgt)
         target_link_options(${tgt} PRIVATE
             $<$<CONFIG:Release>:/OPT:REF /OPT:ICF>
         )
+        # Clang cross-compilation: disable stdlib (MSVC CRT is linked via toolchain)
+        if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CROSSCOMPILING)
+            target_compile_options(${tgt} PRIVATE -nostdinc++ -fno-exceptions -fno-rtti)
+            target_link_options(${tgt} PRIVATE -nostdlib++)
+        endif()
     endif()
 endfunction()
 
@@ -127,7 +140,7 @@ endfunction()
 # =============================================================================
 juce_add_console_app(AudioVisExport
     PRODUCT_NAME "AudioVisExport"
-    VERSION "0.3.0"
+    VERSION "0.5.0"
     COMPANY_NAME "AudioVisExport"
 )
 
@@ -155,7 +168,7 @@ avx_configure_target(AudioVisExport)
 # =============================================================================
 juce_add_gui_app(AudioVisGUI
     PRODUCT_NAME "AudioVisGUI"
-    VERSION "0.3.0"
+    VERSION "0.5.0"
     COMPANY_NAME "AudioVisExport"
 )
 
@@ -168,6 +181,8 @@ target_sources(AudioVisGUI PRIVATE
     source/gui/ParamPanel.cpp
     source/gui/SpectrumCanvas.h
     source/gui/SpectrumCanvas.cpp
+    source/gui/WinDragCompat.h
+    source/gui/WinDragCompat.cpp
 )
 
 target_link_libraries(AudioVisGUI PRIVATE

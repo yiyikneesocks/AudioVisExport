@@ -40,6 +40,11 @@ public:
         float lineWidth = 1.4f;
         float opacity   = 1.0f;
 
+        // BarStyle 专用：柱宽 / 柱间隙（相对每带 slot 宽度的比例）
+        float barGapRatio   = 0.28f;  // 柱间空隙比例（0 = 无缝）
+        float barWidthRatio = 1.0f;   // 柱宽占 (slot-gap) 的比例（>1 允许相邻柱重叠）
+        bool  barParticles  = true;   // bar / bar-line：峰值帽（缓慢下落的小横线）开关
+
         // 元素开关
         bool  drawGrid        = true;
         bool  drawAxisLabels  = true;

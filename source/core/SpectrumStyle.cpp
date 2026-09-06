@@ -4,6 +4,7 @@
 #include "SpectrumStyle.h"
 #include "../styles/Y2KLineStyle.h"
 #include "../styles/BarStyle.h"
+#include "../styles/BarLineStyle.h"
 #include "../styles/PolylineStyle.h"
 #include "../styles/CrystalStyle.h"
 
@@ -14,6 +15,8 @@ std::unique_ptr<SpectrumStyle> SpectrumStyle::create (const juce::String& name)
         return std::make_unique<Y2KLineStyle>();
     if (lower == "bar" || lower == "bars")
         return std::make_unique<BarStyle>();
+    if (lower == "bar-line" || lower == "barline")
+        return std::make_unique<BarLineStyle>();
     if (lower == "polyline" || lower == "line" || lower == "poly")
         return std::make_unique<PolylineStyle>();
     if (lower == "crystal" || lower == "glass")

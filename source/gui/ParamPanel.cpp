@@ -4,7 +4,7 @@
 // Layout model:
 //   · rows: ordered list of (label, editor, height), laid out top-to-bottom in resized()
 //   · Each row = 88px label on left + editor on the right; labels are lazy-created
-//   · Special rows: color row (3 colour buttons tiled), width-height row (2 editors)
+//   · Special rows: color row (4 colour buttons tiled), width-height row (2 editors)
 //   · Export section: hand-laid out below the scrollable rows block
 // =============================================================================
 #include "ParamPanel.h"
@@ -47,16 +47,41 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
 {
     // ---- Style ----
     addHeader ("Style");
-    addCombo ("Render style", { "y2k-line", "bar", "polyline", "crystal" }, 1,
+    addCombo ("Render style", { "y2k-line", "bar", "bar-line", "polyline", "crystal" }, 1,
               [this] (int id)
               {
-                  static const char* names[] = { "y2k-line", "bar", "polyline", "crystal" };
+                  static const char* names[] = { "y2k-line", "bar", "bar-line", "polyline", "crystal" };
                   params.style = names[id - 1];
                   notify();
               });
     addSlider ("Band count", 16, 512, 1, 1.0,
                [this] { return (double) params.bandCount; },
                [this] (double v) { params.bandCount = (int) v; notify(); });
+    addSlider ("Bar gap %", 0, 100, 1, 1.0,
+               [this] { return (double) params.barGapRatio * 100.0; },
+               [this] (double v) { params.barGapRatio = (float) (v / 100.0); notify(); });
+    addSlider ("Bar width %", 5, 200, 1, 1.0,
+               [this] { return (double) params.barWidthRatio * 100.0; },
+               [this] (double v) { params.barWidthRatio = (float) (v / 100.0); notify(); });
+    addToggle ("Peak caps", params.barParticles,
+               [this] (bool v) { params.barParticles = v; notify(); });
+    // Peak-cap behaviour controls (v0.5.0): "fall delay" + "fall speed" live next
+    // to the toggle so the three peak-cap controls stay together (was: Time section).
+    auto* peakHoldSlider = addSlider ("Peak hold ms", 0, 10000, 50, 0.5,
+               [this] { return (double) params.peakHoldMs; },
+               [this] (double v) { params.peakHoldMs = (float) v; notify(); });
+    peakHoldSlider->setTooltip ("Peak-cap fall delay: how long a peak cap stays\n"
+                                "in place before it starts falling (ms).");
+    auto* peakDecaySlider = addSlider ("Peak decay dB/s", 1, 60, 1, 1.0,
+               [this] { return (double) params.peakDecayDbPerSec; },
+               [this] (double v) { params.peakDecayDbPerSec = (float) v; notify(); });
+    peakDecaySlider->setTooltip ("Peak-cap fall speed after the hold time elapses\n"
+                                 "(dB per second). Higher = faster drop.");
+    addButton ("Reset element transform", [this]
+    {
+        params.transform = VisTransform {};
+        notify();
+    });
     addCombo ("Freq scale", { "log", "linear", "mel", "bark" }, 1,
               [this] (int id)
               {
@@ -94,12 +119,6 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     addSlider ("Release ms", 20, 2000, 1, 0.5,
                [this] { return (double) params.releaseMs; },
                [this] (double v) { params.releaseMs = (float) v; notify(); });
-    addSlider ("Peak hold ms", 0, 10000, 50, 0.5,
-               [this] { return (double) params.peakHoldMs; },
-               [this] (double v) { params.peakHoldMs = (float) v; notify(); });
-    addSlider ("Peak decay dB/s", 1, 60, 1, 1.0,
-               [this] { return (double) params.peakDecayDbPerSec; },
-               [this] (double v) { params.peakDecayDbPerSec = (float) v; notify(); });
     addSlider ("Temporal smooth 0..1", 0, 1, 0.01, 1.0,
                [this] { return (double) params.temporalSmoothing; },
                [this] (double v) { params.temporalSmoothing = (float) v; notify(); });
@@ -132,25 +151,15 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
 
     // ---- Appearance ----
     addHeader ("Appearance");
-    addSlider ("Line width", 0.5, 5.0, 0.1, 1.0,
-               [this] { return (double) params.lineWidth; },
-               [this] (double v) { params.lineWidth = (float) v; notify(); });
-    addSlider ("Opacity", 0.05, 1.0, 0.01, 1.0,
-               [this] { return (double) params.opacity; },
-               [this] (double v) { params.opacity = (float) v; notify(); });
-    addToggle ("Draw grid", params.drawGrid,
-               [this] (bool b) { params.drawGrid = b; notify(); });
-    addToggle ("Axis labels", params.drawAxisLabels,
-               [this] (bool b) { params.drawAxisLabels = b; notify(); });
-    addToggle ("Checkerboard BG", true,
-               [this] (bool) { notify(); });
 
-    // ---- Color row (3 buttons tiled) ----
+    // ---- Color row (4 buttons tiled, moved to top of Appearance in v0.5.0:
+    //      it used to sit at the bottom of the section and required scrolling) ----
     addRow ("Colors", &primaryBtn);
 
     swatchPrimary   = params.primaryColor;
     swatchSecondary = params.secondaryColor;
     swatchPeak      = params.peakColor;
+    swatchBg        = params.bgColor;
 
     auto setupColourBtn = [this] (juce::TextButton& btn, juce::Colour c)
     {
@@ -161,6 +170,11 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     setupColourBtn (primaryBtn, swatchPrimary);
     setupColourBtn (secondaryBtn, swatchSecondary);
     setupColourBtn (peakBtn, swatchPeak);
+    // BG swatch shows transparency as a checkerboard-ish grey so it's not invisible
+    bgBtn.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
+    bgBtn.setColour (juce::TextButton::buttonColourId,
+                     swatchBg.withAlpha ((juce::uint8) juce::jmax (60, (int) swatchBg.getAlpha())));
+    addAndMakeVisible (bgBtn);
 
     primaryBtn.onClick = [this]
     {
@@ -189,6 +203,50 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
             notify();
         });
     };
+    bgBtn.onClick = [this]
+    {
+        openColourPicker (bgBtn, swatchBg, [this] (juce::Colour c)
+        {
+            params.bgColor = c;
+            swatchBg = c;
+            bgBtn.setColour (juce::TextButton::buttonColourId,
+                             c.withAlpha ((juce::uint8) juce::jmax (60, (int) c.getAlpha())));
+            notify();
+        });
+    };
+    bgBtn.setTooltip ("Output background colour (default fully transparent).\n"
+                      "Set alpha > 0 for an opaque background in exports.");
+
+    addSlider ("Line width", 0.5, 5.0, 0.1, 1.0,
+               [this] { return (double) params.lineWidth; },
+               [this] (double v) { params.lineWidth = (float) v; notify(); });
+    addSlider ("Opacity", 0.05, 1.0, 0.01, 1.0,
+               [this] { return (double) params.opacity; },
+               [this] (double v) { params.opacity = (float) v; notify(); });
+    addToggle ("Draw grid", params.drawGrid,
+               [this] (bool b) { params.drawGrid = b; notify(); });
+    addToggle ("Axis labels", params.drawAxisLabels,
+               [this] (bool b) { params.drawAxisLabels = b; notify(); });
+    addToggle ("Checkerboard BG", true,
+               [this] (bool) { notify(); });
+
+    // ---- Layers ----
+    addHeader ("Layers");
+    addRow ("Add image", &addImageBtn);
+    addRow ("Move up",   &layerUpBtn);
+    addRow ("Move down", &layerDownBtn);
+    addRow ("Remove",    &layerRemoveBtn);
+    addAndMakeVisible (addImageBtn);
+    addAndMakeVisible (layerUpBtn);
+    addAndMakeVisible (layerDownBtn);
+    addAndMakeVisible (layerRemoveBtn);
+    addImageBtn.onClick    = [this] { if (onAddImageClicked) onAddImageClicked(); };
+    layerUpBtn.onClick     = [this] { if (onLayerUp)     onLayerUp(); };
+    layerDownBtn.onClick   = [this] { if (onLayerDown)   onLayerDown(); };
+    layerRemoveBtn.onClick = [this] { if (onLayerRemove) onLayerRemove(); };
+    addSlider ("Img opacity %", 0, 100, 1, 1.0,
+               [this] { return onReadLayerOpacity ? onReadLayerOpacity() : 100.0; },
+               [this] (double v) { if (onWriteLayerOpacity) onWriteLayerOpacity (v); });
 
     // ---- Export ----
     addHeader ("Export");
@@ -208,13 +266,13 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     };
     addRow ("W x H", &widthEditor);
 
-    addCombo ("Encoder", { "png-seq", "webm-vp9 (alpha)", "mov-qtrle (alpha)" }, 1,
+    addCombo ("Encoder", { "png-seq", "mov-qtrle (alpha)", "webm-vp9 (no alpha)" }, 1,
               [this] (int id)
               {
                   switch (id)
                   {
-                      case 2:  params.encoder = SpectrumParams::WebmVp9;  break;
-                      case 3:  params.encoder = SpectrumParams::MovQtrle; break;
+                      case 2:  params.encoder = SpectrumParams::MovQtrle; break;
+                      case 3:  params.encoder = SpectrumParams::WebmVp9;  break;
                       default: params.encoder = SpectrumParams::PngSeq;   break;
                   }
                   notify();
@@ -222,8 +280,18 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
 
     browseBtn.onClick = [this] { if (onBrowseOutputDir) onBrowseOutputDir(); };
     exportBtn.onClick = [this] { if (onExportClicked) onExportClicked(); };
+    exportVideoBtn.onClick = [this] { if (onExportVideoClicked) onExportVideoClicked(); };
     addAndMakeVisible (browseBtn);
     addAndMakeVisible (exportBtn);
+    addAndMakeVisible (exportVideoBtn);
+
+    // 一键视频导出按钮（醒目色 + tooltip 说明行为）
+    exportVideoBtn.setColour (juce::TextButton::buttonColourId, juce::Colour (0xffbe185d));
+    exportVideoBtn.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xffbe185d));
+    exportVideoBtn.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
+    exportVideoBtn.setTooltip ("Render current audio + settings to a transparent MOV "
+                               "(QTRLE rgba) video file.\nBest alpha format for "
+                               "Premiere/Vegas/Resolve. Requires ffmpeg.exe on PATH.");
 
     outputDirLabel.setColour (juce::Label::textColourId, juce::Colours::grey);
     outputDirLabel.setFont (juce::FontOptions (11.0f));
@@ -301,6 +369,18 @@ juce::ToggleButton* ParamPanel::addToggle (const juce::String& label, bool curre
     return t;
 }
 
+juce::TextButton* ParamPanel::addButton (const juce::String& text,
+                                         std::function<void ()> onClick)
+{
+    auto* b = new juce::TextButton (text);
+    b->onClick = std::move (onClick);
+    widgets.add (b);
+    addAndMakeVisible (b);
+    rows.push_back ({ juce::String(), b, 26 });
+    contentHeight += 26 + 4;
+    return b;
+}
+
 void ParamPanel::notify()
 {
     if (onParamsChanged)
@@ -336,6 +416,7 @@ void ParamPanel::setOutputDirText (const juce::String& s)
 void ParamPanel::setExportEnabled (bool b)
 {
     exportBtn.setEnabled (b);
+    exportVideoBtn.setEnabled (b);
 }
 
 void ParamPanel::resized()
@@ -347,13 +428,14 @@ void ParamPanel::resized()
         auto rowBounds = area.removeFromTop (r.height);
         area.removeFromTop (4);
 
-        // Special: color row — 3 tiled buttons
+        // Special: color row — 4 tiled buttons (v0.5.0: added BG)
         if (r.editor == &primaryBtn)
         {
-            auto w = rowBounds.getWidth() / 3;
-            primaryBtn.setBounds (rowBounds.removeFromLeft (w).reduced (2));
+            auto w = rowBounds.getWidth() / 4;
+            primaryBtn.setBounds   (rowBounds.removeFromLeft (w).reduced (2));
             secondaryBtn.setBounds (rowBounds.removeFromLeft (w).reduced (2));
-            peakBtn.setBounds (rowBounds.reduced (2));
+            peakBtn.setBounds      (rowBounds.removeFromLeft (w).reduced (2));
+            bgBtn.setBounds        (rowBounds.reduced (2));
             continue;
         }
         // Special: width/height — 2 editors
@@ -362,6 +444,12 @@ void ParamPanel::resized()
             auto w = rowBounds.getWidth() / 2;
             widthEditor.setBounds (rowBounds.removeFromLeft (w).reduced (2));
             heightEditor.setBounds (rowBounds.reduced (2));
+            continue;
+        }
+        // Full-width button (no side label)
+        if (r.label.isEmpty() && dynamic_cast<juce::TextButton*> (r.editor) != nullptr)
+        {
+            r.editor->setBounds (rowBounds.reduced (2, 2));
             continue;
         }
         // Header label editor (no side label)
@@ -407,6 +495,8 @@ void ParamPanel::resized()
     auto line1 = exp.removeFromTop (30);
     browseBtn.setBounds (line1.removeFromLeft (90).reduced (2));
     exportBtn.setBounds (line1.reduced (2));
+    auto videoLine = exp.removeFromTop (34);
+    exportVideoBtn.setBounds (videoLine.reduced (2));
     outputDirLabel.setBounds (exp.removeFromTop (26));
     progressLabel.setBounds (exp.removeFromTop (24));
 }

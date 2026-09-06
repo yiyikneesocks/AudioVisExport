@@ -72,11 +72,14 @@ void BarStyle::render (juce::Graphics& g,
     auto inner = canvas.reduced (2);
     if (inner.getWidth() <= 2 || inner.getHeight() <= 2) return;
 
-    // 柱体布局：等距分布，柱宽 = slot * 0.7，间距 = slot * 0.3
+    // 柱体布局：等距分布。每带占一个 slot，slot 内柱居中：
+    //   gap  = slot * barGapRatio          （柱间空隙，0 = 无缝）
+    //   barW = (slot - gap) * barWidthRatio（柱宽，>1 时侵入空隙 / 与相邻柱重叠）
+    // 默认 gap=0.28、width=1.0 时与旧版（bar=0.72*slot）视觉完全一致。
     const float slotW = (float) inner.getWidth() / (float) N;
-    const float barW  = slotW * 0.72f;
-    const float gap   = slotW * 0.28f;
-    const float x0    = (float) inner.getX() + gap * 0.5f;
+    const float gap   = slotW * juce::jlimit (0.0f, 1.0f, rp.barGapRatio);
+    const float barW  = (slotW - gap) * juce::jlimit (0.05f, 2.0f, rp.barWidthRatio);
+    const float x0    = (float) inner.getX() + (slotW - barW) * 0.5f;
     const float yBot  = (float) inner.getBottom();
     const float yTop  = (float) inner.getY();
 
@@ -118,19 +121,22 @@ void BarStyle::render (juce::Graphics& g,
         g.drawHorizontalLine ((int) std::round (y), x, x + barW);
     }
 
-    // 峰值帽：peakDb → normalized 近似 → Y 位置，画 2px 水平线
-    g.setColour (rp.peak.withAlpha (0.80f));
-    for (int i = 0; i < N; ++i)
+    // 峰值帽（可选）：peakDb → normalized 近似 → Y 位置，画 2px 水平线
+    if (rp.barParticles)
     {
-        // peakDb → normalized：(peakDb - minDb) / (maxDb - minDb)
-        float pn = (frame.peakDb[i] - rp.minDb) / (rp.maxDb - rp.minDb);
-        pn = std::clamp (pn, 0.0f, 1.0f);
-        if (pn < 0.01f) continue;
-        float x = x0 + (float) i * slotW;
-        float y = normalizedToY_ (pn, canvas);
-        // 帽宽 = barW + gap*0.5 向两侧延伸
-        float capX = x - gap * 0.25f;
-        float capW = barW + gap * 0.5f;
-        g.drawHorizontalLine ((int) std::round (y), capX, capX + capW);
+        g.setColour (rp.peak.withAlpha (0.80f));
+        for (int i = 0; i < N; ++i)
+        {
+            // peakDb → normalized：(peakDb - minDb) / (maxDb - minDb)
+            float pn = (frame.peakDb[i] - rp.minDb) / (rp.maxDb - rp.minDb);
+            pn = std::clamp (pn, 0.0f, 1.0f);
+            if (pn < 0.01f) continue;
+            float x = x0 + (float) i * slotW;
+            float y = normalizedToY_ (pn, canvas);
+            // 帽宽 = barW + gap*0.5 向两侧延伸
+            float capX = x - gap * 0.25f;
+            float capW = barW + gap * 0.5f;
+            g.drawHorizontalLine ((int) std::round (y), capX, capX + capW);
+        }
     }
 }

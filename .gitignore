@@ -4,8 +4,15 @@
 /build/
 /build-*/
 /cmake-build-*/
+/build_win/
 /out/
 /CMakeUserPresets.json
+
+# === 交叉编译工具链缓存（xwin Windows SDK，1GB+，不入库）===
+/.xwin-cache/
+
+# === opencode 会话（plans 之外的 node_modules 等）===
+/.opencode/
 
 # === IDE / 编辑器 ===
 /.vs/

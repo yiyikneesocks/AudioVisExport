@@ -1,41 +1,106 @@
 // =============================================================================
-// SpectrumCanvas.h — 实时频谱渲染画布
+// SpectrumCanvas.h — 实时频谱渲染画布 + 频谱元素自由变换
 //
 // 职责：
-//   · 每帧把 BandFrame 用 SpectrumStyle 画到一张 ARGB Image 上（与导出管线
-//     VisPipeline::renderFrame 完全同源，保证"预览即所得"）
-//   · 默认叠加棋盘格背景，肉眼可见透明区域
+//   · 每帧把 BandFrame 用 SpectrumStyle 渲染到**输出分辨率**的 ARGB 基础层，
+//     再按 VisTransform（拖拽移动 / 等比缩放 / 非等比拉伸 / 旋转）合成到画布，
+//     —— 与导出管线 VisPipeline::renderFrame 完全同源，保证"预览即所得"
+//   · 画布显示尺寸 ≠ 输出分辨率时按比例 contain（letterbox）居中显示
+//   · 画布内直接拖拽操作：拖动移动 / 8 角手柄缩放拉伸 / 顶部圆柄旋转 /
+//     双击复位变换
 //   · 接受文件拖放 / 点击空白选择音频文件（回调给 MainComponent）
+//
+// 后续图片图层：可复用 VisTransform.h 的 affine / 命中测试，加一个 List 即可。
 // =============================================================================
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include "../core/SpectrumParams.h"
+#include "../core/VisTransform.h"
 #include "../core/SpectrumStyle.h"
 #include "../core/BandFrame.h"
+#include <array>
+#include <map>
 
 class SpectrumCanvas : public juce::Component,
                        private juce::FileDragAndDropTarget
 {
 public:
-    SpectrumCanvas() = default;
+    explicit SpectrumCanvas (SpectrumParams& paramsRef);
 
-    // 每帧由 MainComponent 更新
+    // ---- 每帧由 MainComponent 更新 ----
     BandFrame frame;
     SpectrumStyle::RenderParams rp;
     SpectrumStyle* style = nullptr;
     bool hasAudio = false;
     bool showCheckerboard = true;
 
-    // 回调
+    // ---- 回调 ----
     std::function<void (const juce::File&)> onFileDropped;
+    std::function<void (const juce::File&)> onNonAudioDropped;
+    std::function<void (const juce::File&)> onImageDropped;   // 拖入图片 → 创建/选中图片图层
     std::function<void ()> onEmptyClicked;
+
+    // ---- 图层选择 API（ParamPanel / MainComponent 访问）----
+    int  selectedImageIndex() const noexcept { return selectedImage; }  // -1 = 频谱元素
+    void selectSpectrum()    { selectedImage = -1; repaint(); }
+    void selectImage (int idx){ selectedImage = idx; repaint(); }
+    int  imageCount() const noexcept { return (int) params.images.size(); }
 
     void paint (juce::Graphics& g) override;
 
 private:
+    SpectrumParams& params;
+
+    // ---- 交互状态 ----
+    enum class DragMode
+    {
+        None, Move, Rotate,
+        ScaleTL, ScaleTR, ScaleBR, ScaleBL,   // 四角（等比缩放）
+        ScaleT,  ScaleB,  ScaleL,  ScaleR     // 四边（单轴拉伸）
+    };
+    DragMode dragMode = DragMode::None;
+    int selectedImage = -1;             // 当前选中元素：-1 = 频谱，>=0 = params.images 下标
+
+    // ---- 拖放 HUD / 提权诊断（UIPI）----
+    bool dragHovering = false;
+    juce::StringArray dragHoverFiles;
+    bool processElevated = false;
+    std::map<juce::String, juce::Image> imageCache;
+    juce::Point<float> dragStartOut;    // 拖拽开始时鼠标（输出坐标）
+    VisTransform       startTransform;  // 拖拽开始时变换副本
+    std::array<juce::Point<float>, 4> currentCorners() const;  // 元素外框四角（输出坐标）
+
+    // ---- 交互 ----
+    void mouseDown  (const juce::MouseEvent&) override;
+    void mouseDrag  (const juce::MouseEvent&) override;
+    void mouseUp    (const juce::MouseEvent&) override;
+    void mouseMove  (const juce::MouseEvent&) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override;
+
+    DragMode hitHandle (juce::Point<float> out) const;
+    void beginTransformIfNeeded();
+    void updateHoverCursor (juce::Point<float> out);
+    void paintOverlay (juce::Graphics& g);
+    void paintImages (juce::Graphics& g, const juce::AffineTransform& disp);   // 图片图层（z 序）
+    void paintBannerHud (juce::Graphics& g);                                    // 提权警告 + 拖放 HUD
+    VisTransform&       activeTransform();
+    const VisTransform& activeTransform() const;
+    int  hitImage (juce::Point<float> out) const;                               // 点落在哪张图片上（顶层优先）
+    juce::Image loadCached (const juce::String& path);
+    static bool isProcessElevated();                                            // UIPI 诊断
+
+    // ---- 坐标映射（输出分辨率坐标系 ↔ 画布坐标系）----
+    juce::AffineTransform displayAffine() const;   // 输出坐标 → 画布坐标（contain 适配）
+    juce::Point<float> toOutput (juce::Point<float> canvasPos) const;  // 反变换
+    float displayScale() const;
+
+    // ---- 拖放 ----
     bool isInterestedInFileDrag (const juce::StringArray& files) override;
     void filesDropped (const juce::StringArray& files, int, int) override;
-    void mouseDown (const juce::MouseEvent&) override;
+    void fileDragEnter (const juce::StringArray& files, int, int) override;    // HUD 反馈
+    void fileDragMove  (const juce::StringArray& files, int, int) override;
+    void fileDragExit  (const juce::StringArray& files) override;
 
     static bool isAudioFile (const juce::String& path);
     static void drawCheckerboard (juce::Graphics& g, int w, int h, int cell = 10);

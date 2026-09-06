@@ -56,6 +56,13 @@ public:
     // 离线导出时 deltaSec = 1.0/fps；实时预览时用 wall-clock delta。
     void advanceTime (double deltaSec);
 
+    // === 峰值冻结（v0.5.0）===
+    // GUI 暂停时置 true：getBandFrame 不再推进峰值 hold 倒计时和衰减（防止
+    // 暂停期间峰值帽继续下落）；新峰跟随（smoothedDb > peak → 更新）仍生效，
+    // 不影响 seek 快进时峰值建立。离线导出不受影响（默认 false）。
+    void setPeaksFrozen (bool frozen) noexcept { peaksFrozen_ = frozen; }
+    bool arePeaksFrozen() const noexcept { return peaksFrozen_; }
+
     // === 取帧 ===
     // 输出 bandCount 个带的：dB（平滑后）、peakDb（峰值保持）、normalized（动态曲线后 [0,1]）
     // 非常量：内部更新 smoothedDb_ / peakDb_ / peakHoldRemainMs_。
@@ -106,6 +113,7 @@ private:
     FreqMap freqMap_;
     double sampleRate_ = 44100.0;
     double deltaSec_ = 1.0 / 30.0;   // 最近一次 advanceTime 的时间步长
+    bool peaksFrozen_ = false;       // 暂停冻结峰值衰减（GUI 暂停时置 true）
 
     // ---- 平滑/峰值状态（每带一份）----
     std::vector<float> smoothedDb_;       // attack/release 后的 dB

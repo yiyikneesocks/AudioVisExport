@@ -27,7 +27,8 @@
 #include <vector>
 
 class MainComponent : public juce::Component,
-                      private juce::Timer
+                      private juce::Timer,
+                      private juce::FileDragAndDropTarget
 {
 public:
     MainComponent();
@@ -61,8 +62,11 @@ private:
     ParamPanel panel;
     juce::Viewport panelViewport;
     juce::TextButton playBtn { "播放" };
+    juce::TextButton loadBtn { "Load..." };   // v0.5.0: 随时换曲
+    juce::TextButton ejectBtn { "Eject" };    // v0.5.0: 移除当前音频
     juce::Slider seekBar;
     juce::Label timeLabel;
+    juce::Label nowPlayingLabel;              // v0.5.0: 当前音频文件名（画布左下角）
     bool userSeeking = false;
     double pausedPos = 0.0;
 
@@ -73,20 +77,29 @@ private:
     std::mutex exportMsgMtx;
     juce::String exportMsg;
     juce::File exportDir;
+    bool exportKindPending = false;  // chooseExportDir(true) 回调后执行视频导出
     std::thread exportThread;
     std::unique_ptr<juce::FileChooser> fileChooser;
     juce::File lastDir = juce::File::getSpecialLocation (juce::File::userMusicDirectory);
 
     // ---- 流程 ----
     void timerCallback() override;
+    bool isInterestedInFileDrag (const juce::StringArray& files) override;   // 窗口级拖放兜底
+    void filesDropped (const juce::StringArray& files, int x, int y) override;
     void loadFile (const juce::File& f);
+    void ejectAudio();                     // v0.5.0: 移除当前音频（停止/清空/回空态）
     void rebuildCoreLight();               // 重建 core（8 帧静音 warmup，不回放历史）
     void advanceCoreTo (int64_t target);   // 从 coreFramePos 推进到 target
     int64_t currentTargetFrame() const;
     static SpectrumStyle::RenderParams buildRp (const SpectrumParams& p);
     void chooseAudioFile();
+    void chooseImageFile();
+    void addImageLayer (const juce::File& f);   // 拖入/选择图片 → 新建图片图层并选中
+    void moveSelectedLayer (int delta);         // +1 = 上移一层，-1 = 下移一层
+    void removeSelectedLayer();
     void chooseExportDir (bool runAfter);
     void startExport();
+    void startExportVideo();        // 一键视频导出（默认透明 WebM，自动生成输出路径）
     void startExportJob();
     static juce::String formatTime (double sec);
 

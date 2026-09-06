@@ -17,9 +17,11 @@
 #include "SpectrumStyle.h"
 #include "PngSequenceEncoder.h"
 #include "FreqMap.h"
+#include "VisTransform.h"
 
 #include <chrono>
 #include <vector>
+#include <map>
 #include <iostream>
 
 namespace
@@ -55,15 +57,18 @@ namespace
         rp.secondary = p.secondaryColor;
         rp.peak      = p.peakColor;
         rp.bg        = p.bgColor;
-        rp.lineWidth = p.lineWidth;
-        rp.opacity   = p.opacity;
+        rp.lineWidth      = p.lineWidth;
+        rp.opacity        = p.opacity;
+        rp.barGapRatio    = p.barGapRatio;
+        rp.barWidthRatio  = p.barWidthRatio;
         rp.drawGrid       = p.drawGrid;
         rp.drawAxisLabels = p.drawAxisLabels;
-        rp.minHz = p.minHz;
-        rp.maxHz = p.maxHz;
-        rp.minDb = p.minDb;
-        rp.maxDb = p.maxDb;
-        rp.colorMap = p.colorMap;
+        rp.minHz          = p.minHz;
+        rp.maxHz          = p.maxHz;
+        rp.minDb          = p.minDb;
+        rp.maxDb          = p.maxDb;
+        rp.colorMap       = p.colorMap;
+        rp.barParticles   = p.barParticles;
         return rp;
     }
 
@@ -79,35 +84,104 @@ namespace
         }
     }
 
-    // 渲染单帧到 ARGB Image
-    // 若 checkerboard=true，先画棋盘格（不透明背景）再画谱（透明区会显示棋盘）
+    // 渲染单帧到 ARGB Image（两段式合成，保证"频谱元素自由变换"所见即所得）：
+    //   1) 基础层：频谱按输出分辨率渲染到透明 ARGB 层（不带变换）
+    //   2) 合成层：背景（棋盘格 / 半透明 bg）+ 用 buildVisAffine() 叠加频谱元素
+    // —— 图片图层加载（按路径缓存；本管线为单线程调用，进程内共享缓存安全）——
+    static juce::Image loadImageForLayer (const juce::String& path)
+    {
+        static std::map<juce::String, juce::Image> cache;
+        auto it = cache.find (path);
+        if (it != cache.end()) return it->second;
+
+        juce::Image im;
+        juce::File f (path);
+        if (f.existsAsFile())
+        {
+            juce::FileInputStream stream (f);
+            if (stream.openedOk())
+                im = juce::ImageFileFormat::loadFrom (stream);   // PNG/JPEG/GIF/BMP 自动识别
+        }
+        cache[path] = im;
+        return im;
+    }
+
+    // 画一张图片图层：默认铺满输出画布（与频谱同基准），再套用 VisTransform
+    static void drawImageLayer (juce::Graphics& g, const ImageLayer& layer, int w, int h)
+    {
+        if (! layer.visible || layer.path.isEmpty()) return;
+        const juce::Image im = loadImageForLayer (layer.path);
+        if (im.isNull()) return;
+
+        g.saveState();
+        if (layer.opacity < 1.0f)
+            g.setOpacity (juce::jlimit (0.0f, 1.0f, layer.opacity));
+        if (layer.transform.set)
+            g.addTransform (buildVisAffine (layer.transform));
+        g.drawImage (im, 0, 0, w, h,
+                     0, 0, im.getWidth(), im.getHeight(), false);
+        g.restoreState();
+    }
+
     static juce::Image renderFrame (SpectrumCore& core, SpectrumStyle& style,
                                     const SpectrumParams& p,
                                     const SpectrumStyle::RenderParams& rp,
                                     bool checkerboard)
     {
-        juce::Image img (juce::Image::ARGB, p.width, p.height, true);  // true = 清空（全 0 = 全透明）
-        juce::Graphics g (img);
-        g.setOpacity (rp.opacity);
+        // —— 基础层 ——
+        juce::Image base (juce::Image::ARGB, p.width, p.height, true);   // true = 清空（全透明）
+        {
+            juce::Graphics gb (base);
+            gb.setOpacity (rp.opacity);
+            auto canvas = juce::Rectangle<int> (
+                (int) rp.paddingLeft,
+                (int) rp.paddingTop,
+                p.width  - (int)(rp.paddingLeft + rp.paddingRight),
+                p.height - (int)(rp.paddingTop  + rp.paddingBottom));
 
-        // 棋盘格预览（在透明背景下画棋盘，肉眼判断 alpha）
-        if (checkerboard) {
-            drawCheckerboard (g, p.width, p.height);
-        } else if (rp.bg.getAlpha() > 0) {
-            // 半透明背景（非全透明时才画）
-            g.fillAll (rp.bg);
+            BandFrame bandFrame;
+            core.getBandFrame (bandFrame);
+            style.render (gb, canvas, bandFrame, rp);
         }
 
-        // 画布矩形（去掉边距）
-        auto canvas = juce::Rectangle<int>(
-            (int) rp.paddingLeft,
-            (int) rp.paddingTop,
-            p.width  - (int)(rp.paddingLeft + rp.paddingRight),
-            p.height - (int)(rp.paddingTop  + rp.paddingBottom));
+        // —— 合成层 ——
+        juce::Image img (juce::Image::ARGB, p.width, p.height, true);
+        {
+            juce::Graphics g (img);
 
-        BandFrame bandFrame;
-        core.getBandFrame (bandFrame);
-        style.render (g, canvas, bandFrame, rp);
+            // 棋盘格预览（在透明背景下画棋盘，肉眼判断 alpha）
+            if (checkerboard)
+            {
+                drawCheckerboard (g, p.width, p.height);
+            }
+            else if (rp.bg.getAlpha() > 0)
+            {
+                // 半透明背景（非全透明时才画）
+                g.fillAll (rp.bg);
+            }
+
+            // 图片图层：频谱下方组（列表顺序）→ 频谱元素 → 频谱上方组
+            for (const auto& layer : p.images)
+                if (! layer.aboveSpectrum)
+                    drawImageLayer (g, layer, p.width, p.height);
+
+            // 频谱元素：未变换（set=false）直接铺满；已变换则按仿射合成
+            if (p.transform.set)
+            {
+                g.saveState();
+                g.addTransform (buildVisAffine (p.transform));
+                g.drawImageAt (base, 0, 0);
+                g.restoreState();
+            }
+            else
+            {
+                g.drawImageAt (base, 0, 0);
+            }
+
+            for (const auto& layer : p.images)
+                if (layer.aboveSpectrum)
+                    drawImageLayer (g, layer, p.width, p.height);
+        }
         return img;
     }
 
@@ -200,6 +274,7 @@ juce::StringPairArray VisPipeline::run (const Config& cfg, ProgressCallback cb)
     ecfg.height = p.height;
     ecfg.fps = (int) p.fps;
     ecfg.digits = p.digits;
+    ecfg.encoder = p.encoder;
     if (! enc.startSession (ecfg)) {
         result.set ("ok", "false");
         result.set ("error", "PngSequenceEncoder::startSession failed: " + p.outputDir);
@@ -227,10 +302,20 @@ juce::StringPairArray VisPipeline::run (const Config& cfg, ProgressCallback cb)
 
     // 7) finalize（PNG-seq 模式不调 ffmpeg；WebM/MOV 才调）
     int muxExit = 0;
-    if (p.encoder != SpectrumParams::PngSeq) {
-        // Step 4+ 实现 WebM/MOV 编码
+    juce::String videoPath = p.outputVideoPath;
+    if (p.encoder != SpectrumParams::PngSeq)
+    {
+        // 自动补全视频输出路径（GUI / CLI 都不强制用户手填：
+        //   <outputDir>/<音频名>_vis.<webm|mov>）
+        if (videoPath.isEmpty())
+        {
+            juce::String base = audioFile.getFileNameWithoutExtension();
+            if (base.isEmpty()) base = "visual";
+            const juce::String ext = (p.encoder == SpectrumParams::MovQtrle) ? ".mov" : ".webm";
+            videoPath = juce::File (p.outputDir).getChildFile (base + "_vis" + ext).getFullPathName();
+        }
         juce::String audioPathForMux = hasAudio ? audioFile.getFullPathName() : juce::String();
-        muxExit = enc.finalizeAndMux (audioPathForMux, p.outputVideoPath, p.ffmpegPath);
+        muxExit = enc.finalizeAndMux (audioPathForMux, videoPath, p.ffmpegPath);
     }
 
     // 8) 结果
@@ -239,10 +324,10 @@ juce::StringPairArray VisPipeline::run (const Config& cfg, ProgressCallback cb)
     result.set ("png_dir", enc.getOutputDir());
     result.set ("elapsed_sec", juce::String (elapsed(), 2));
     if (p.encoder != SpectrumParams::PngSeq) {
-        result.set ("mp4_path", p.outputVideoPath);
-        result.set ("mp4_status", muxExit == 0 ? "ok" : ("ffmpeg exit " + juce::String (muxExit)));
+        result.set ("video_path", videoPath);
+        result.set ("video_status", muxExit == 0 ? "ok" : ("ffmpeg exit " + juce::String (muxExit)));
     } else {
-        result.set ("mp4_status", "skipped (png-seq mode)");
+        result.set ("video_status", "skipped (png-seq mode)");
     }
     return result;
 }

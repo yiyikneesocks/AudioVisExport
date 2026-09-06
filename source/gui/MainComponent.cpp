@@ -2,12 +2,13 @@
 // MainComponent.cpp — GUI 主组件实现
 // =============================================================================
 #include "MainComponent.h"
+#include "WinDragCompat.h"
 #include <cmath>
 
 // ---------------------------------------------------------------------------
 // 构建 / 销毁
 // ---------------------------------------------------------------------------
-MainComponent::MainComponent() : panel (params)
+MainComponent::MainComponent() : canvas (params), panel (params)
 {
     formatManager.registerBasicFormats();
 
@@ -18,6 +19,14 @@ MainComponent::MainComponent() : panel (params)
 
     // 画布
     canvas.onFileDropped = [this] (const juce::File& f) { loadFile (f); };
+    canvas.onNonAudioDropped = [this] (const juce::File& f)
+    {
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                                                "Unsupported file",
+                                                "Only WAV / AIFF audio can be used:\n"
+                                                    + f.getFullPathName());
+    };
+    canvas.onImageDropped = [this] (const juce::File& f) { addImageLayer (f); };
     canvas.onEmptyClicked = [this] { chooseAudioFile(); };
     addAndMakeVisible (canvas);
 
@@ -25,6 +34,55 @@ MainComponent::MainComponent() : panel (params)
     panel.onParamsChanged = [this] { paramsDirty = true; };
     panel.onBrowseOutputDir = [this] { chooseExportDir (false); };
     panel.onExportClicked = [this] { startExport(); };
+    panel.onExportVideoClicked = [this] { startExportVideo(); };
+
+    // v0.5.0: 拖放兼容层诊断状态 → 面板进度文本（远程排障可见）
+    avx::winDragCompat::onStatus = [this] (const juce::String& s)
+    {
+        panel.setProgressText (s);
+    };
+
+    // v0.5.0: WM_DROPFILES 直连交付（T4 实测 JUCE 分发链跨协议 relay 不可靠）。
+    // 分发逻辑与画布 filesDropped 一致：图片 → 图层；音频 → 加载；其他 → 提示。
+    avx::winDragCompat::onNativeFilesDropped = [this] (const juce::StringArray& files)
+    {
+        if (files.isEmpty())
+            return;
+        const juce::File f (files[0]);
+        const auto ext = f.getFileExtension().toLowerCase();
+        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp"
+            || ext == ".gif" || ext == ".webp")
+            addImageLayer (f);
+        else if (ext == ".wav" || ext == ".aif" || ext == ".aiff")
+            loadFile (f);
+        else
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                                                    "Unsupported file",
+                                                    "Only WAV / AIFF audio or image files can be used:\n"
+                                                        + f.getFullPathName());
+    };
+
+    // 图层（Layers）区：面板按钮 → 主组件操作 params.images + 画布选中态
+    panel.onAddImageClicked = [this] { chooseImageFile(); };
+    panel.onLayerUp         = [this] { moveSelectedLayer (1);  };   // 上移一层（z 序靠顶）
+    panel.onLayerDown       = [this] { moveSelectedLayer (-1); };   // 下移一层
+    panel.onLayerRemove     = [this] { removeSelectedLayer(); };
+    panel.onReadLayerOpacity = [this]() -> double
+    {
+        const int sel = canvas.selectedImageIndex();
+        if (sel < 0 || sel >= (int) params.images.size())
+            return 100.0;
+        return (double) params.images[(size_t) sel].opacity * 100.0;
+    };
+    panel.onWriteLayerOpacity = [this] (double v)
+    {
+        const int sel = canvas.selectedImageIndex();
+        if (sel < 0 || sel >= (int) params.images.size())
+            return;
+        params.images[(size_t) sel].opacity = (float) (v / 100.0);
+        canvas.repaint();
+    };
+
     addAndMakeVisible (panel);
     panelViewport.setViewedComponent (&panel, false);
     panelViewport.setScrollBarsShown (true, false);
@@ -77,6 +135,18 @@ MainComponent::MainComponent() : panel (params)
     timeLabel.setText ("0:00 / 0:00", juce::dontSendNotification);
     addAndMakeVisible (timeLabel);
 
+    // v0.5.0: Load / Eject 按钮（换曲 / 移除音频）+ 当前文件名指示
+    loadBtn.onClick = [this] { chooseAudioFile(); };
+    addAndMakeVisible (loadBtn);
+    ejectBtn.onClick = [this] { ejectAudio(); };
+    ejectBtn.setEnabled (false);
+    addAndMakeVisible (ejectBtn);
+    nowPlayingLabel.setColour (juce::Label::textColourId, juce::Colour (0xff9ca3af));
+    nowPlayingLabel.setFont (juce::FontOptions (12.0f));
+    nowPlayingLabel.setJustificationType (juce::Justification::centredLeft);
+    nowPlayingLabel.setText ("No audio loaded", juce::dontSendNotification);
+    addAndMakeVisible (nowPlayingLabel);
+
     // 初始引擎
     currentStyleName = params.style;
     style = SpectrumStyle::create (params.style);
@@ -109,8 +179,11 @@ void MainComponent::resized()
     canvas.setBounds (b.reduced (4));
 
     auto t = transportBar.reduced (8, 4);
-    playBtn.setBounds (t.removeFromLeft (80));
+    playBtn.setBounds (t.removeFromLeft (70));
+    loadBtn.setBounds (t.removeFromLeft (70).reduced (0, 2));
+    ejectBtn.setBounds (t.removeFromLeft (60).reduced (0, 2));
     timeLabel.setBounds (t.removeFromRight (110));
+    nowPlayingLabel.setBounds (t.removeFromLeft (t.getWidth() / 2));
     seekBar.setBounds (t.reduced (4, 0));
 
     panel.setSize (panelViewport.getWidth() - panelViewport.getScrollBarThickness(),
@@ -160,7 +233,12 @@ void MainComponent::timerCallback()
 
     // 取帧 + 渲染
     if (core != nullptr)
+    {
+        // v0.5.0: 暂停时冻结峰值（hold 倒计时/衰减停止），防止暂停期间
+        // getBandFrame 的有状态峰值推进导致峰值帽"抖动下落"
+        core->setPeaksFrozen (! transport.isPlaying());
         core->getBandFrame (canvas.frame);
+    }
     canvas.rp = buildRp (params);
     canvas.style = style.get();
     canvas.showCheckerboard = panel.getCheckerPreview();
@@ -201,6 +279,32 @@ void MainComponent::timerCallback()
 // ---------------------------------------------------------------------------
 // 音频加载与引擎同步
 // ---------------------------------------------------------------------------
+// v0.5.0: 移除当前音频——停止播放、清空状态、画布回空拖放提示
+void MainComponent::ejectAudio()
+{
+    transport.stop();
+    playBtn.setButtonText ("Play");
+    transport.setSource (nullptr);
+    readerSource.reset();
+    pcm.close();
+
+    audioFile = juce::File();
+    hasAudio = false;
+    canvas.hasAudio = false;
+    coreFramePos = 0;
+    pausedPos = 0.0;
+    pendingSeekFrame = -1;
+    seekBar.setValue (0.0, juce::dontSendNotification);
+    timeLabel.setText ("0:00 / 0:00", juce::dontSendNotification);
+    nowPlayingLabel.setText ("No audio loaded", juce::dontSendNotification);
+    nowPlayingLabel.setHelpText ("");
+
+    // 清掉的音频图层数据保留（params 不动），core 重建为静音态
+    rebuildCoreLight();
+    ejectBtn.setEnabled (false);
+    canvas.repaint();
+}
+
 void MainComponent::loadFile (const juce::File& f)
 {
     transport.stop();
@@ -216,6 +320,8 @@ void MainComponent::loadFile (const juce::File& f)
                                                 "Supported formats: WAV, AIFF.");
         hasAudio = false;
         canvas.hasAudio = false;
+        nowPlayingLabel.setText ("No audio loaded", juce::dontSendNotification);
+        ejectBtn.setEnabled (false);
         canvas.repaint();
         return;
     }
@@ -224,6 +330,9 @@ void MainComponent::loadFile (const juce::File& f)
     hasAudio = true;
     canvas.hasAudio = true;
     srcRate = pcm.getSampleRate();
+    nowPlayingLabel.setText ("♪ " + f.getFileName(), juce::dontSendNotification);
+    nowPlayingLabel.setHelpText (f.getFullPathName());
+    ejectBtn.setEnabled (true);
 
     if (auto* r = formatManager.createReaderFor (f))
     {
@@ -309,12 +418,18 @@ SpectrumStyle::RenderParams MainComponent::buildRp (const SpectrumParams& p)
     rp.bg             = p.bgColor;
     rp.lineWidth      = p.lineWidth;
     rp.opacity        = p.opacity;
+    rp.barGapRatio    = p.barGapRatio;
+    rp.barWidthRatio  = p.barWidthRatio;
     rp.drawGrid       = p.drawGrid;
     rp.drawAxisLabels = p.drawAxisLabels;
     rp.minHz          = p.minHz;
     rp.maxHz          = p.maxHz;
     rp.minDb          = p.minDb;
     rp.maxDb          = p.maxDb;
+    rp.barGapRatio    = p.barGapRatio;
+    rp.barWidthRatio  = p.barWidthRatio;
+    rp.barParticles   = p.barParticles;
+    rp.colorMap       = p.colorMap;
     return rp;
 }
 
@@ -335,7 +450,18 @@ void MainComponent::chooseExportDir (bool runAfter)
                                   exportDir = dir;
                                   panel.setOutputDirText (dir.getFullPathName());
                                   if (runAfter)
-                                      startExport();
+                                  {
+                                      // 用户点的是 Export Video → 目录选好后继续视频导出
+                                      if (exportKindPending)
+                                      {
+                                          exportKindPending = false;
+                                          startExportVideo();
+                                      }
+                                      else
+                                      {
+                                          startExport();
+                                      }
+                                  }
                               });
 }
 
@@ -350,6 +476,31 @@ void MainComponent::startExport()
                                                 "Drop an audio file first, then try again.");
         return;
     }
+    exportKindPending = false;
+    if (! exportDir.getFullPathName().isEmpty() && exportDir.exists())
+        startExportJob();
+    else
+        chooseExportDir (true);
+}
+
+// 一键视频导出：默认输出带 alpha 透明通道的 MOV（QTRLE rgba，剪辑软件标准格式），
+// 输出文件名自动生成在导出目录：<音频名>_vis.mov
+void MainComponent::startExportVideo()
+{
+    if (exporting.load())
+        return;
+    if (! hasAudio)
+    {
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                                                "Cannot export video",
+                                                "Drop an audio file first, then try again.");
+        return;
+    }
+    // 若用户还没在 Encoder 下拉里选视频格式，则默认走 MOV QTRLE alpha（最可靠的透明格式）
+    if (params.encoder == SpectrumParams::PngSeq)
+        params.encoder = SpectrumParams::MovQtrle;
+
+    exportKindPending = true;
     if (! exportDir.getFullPathName().isEmpty() && exportDir.exists())
         startExportJob();
     else
@@ -365,6 +516,17 @@ void MainComponent::startExportJob()
     SpectrumParams p = params;
     p.audioPath = audioFile.getFullPathName();
     p.outputDir = exportDir.getFullPathName();
+
+    // 视频模式：GUI 不要求用户手填文件名，自动生成
+    //   <输出目录>/<音频名>_vis.<webm|mov>
+    if (p.encoder != SpectrumParams::PngSeq && p.outputVideoPath.isEmpty())
+    {
+        juce::File dir (p.outputDir);
+        juce::String base = audioFile.getFileNameWithoutExtension();
+        if (base.isEmpty()) base = "visual";
+        const juce::String ext = (p.encoder == SpectrumParams::MovQtrle) ? ".mov" : ".webm";
+        p.outputVideoPath = dir.getChildFile (base + "_vis" + ext).getFullPathName();
+    }
 
     if (exportThread.joinable())
         exportThread.join();
@@ -382,13 +544,105 @@ void MainComponent::startExportJob()
 
         juce::String msg;
         if (res.getValue ("ok", "false") == "true")
-            msg = "Done: " + res.getValue ("frames_written", "0") + " frames -> " + res.getValue ("png_dir", "");
+        {
+            if (p.encoder != SpectrumParams::PngSeq)
+                msg = "Done: video -> " + res.getValue ("video_path", p.outputVideoPath);
+            else
+                msg = "Done: " + res.getValue ("frames_written", "0") + " frames -> "
+                    + res.getValue ("png_dir", "");
+        }
         else
+        {
             msg = "Failed: " + res.getValue ("error", "unknown");
+        }
 
         { std::lock_guard<std::mutex> lk (exportMsgMtx); exportMsg = msg; }
         exportDone = true;
     });
+}
+
+// ---------------------------------------------------------------------------
+// 窗口级拖放兜底：画布以外的区域（按钮 / 参数面板上方）拖文件也能接住
+// ---------------------------------------------------------------------------
+bool MainComponent::isInterestedInFileDrag (const juce::StringArray&)
+{
+    return true;   // 接受任意文件；非音频在 filesDropped 中提示
+}
+
+void MainComponent::filesDropped (const juce::StringArray& files, int x, int y)
+{
+    juce::ignoreUnused (x, y);
+
+    auto isAudio = [] (const juce::String& p)
+    {
+        auto ext = juce::File (p).getFileExtension().toLowerCase();
+        return ext == ".wav" || ext == ".aif" || ext == ".aiff";
+    };
+
+    for (auto& f : files)
+        if (isAudio (f))
+        {
+            loadFile (juce::File (f));
+            return;
+        }
+
+    if (! files.isEmpty())
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                                                "Unsupported file",
+                                                "Only WAV / AIFF audio can be used:\n"
+                                                    + juce::File (files[0]).getFullPathName());
+}
+
+// ---------------------------------------------------------------------------
+// 图片图层（拖入图片 / 面板按钮操作；z 序 = params.images 顺序，频谱固定最底）
+// ---------------------------------------------------------------------------
+void MainComponent::addImageLayer (const juce::File& f)
+{
+    ImageLayer layer;
+    layer.path      = f.getFullPathName();
+    layer.opacity   = 1.0f;
+    layer.transform = VisTransform {};   // identity = 铺满输出分辨率
+    params.images.push_back (layer);
+    canvas.selectImage ((int) params.images.size() - 1);
+    canvas.repaint();
+}
+
+void MainComponent::moveSelectedLayer (int delta)
+{
+    const int sel = canvas.selectedImageIndex();
+    if (sel < 0)
+        return;                          // 频谱固定最底层
+    const int target = sel + delta;
+    if (target < 0 || target >= (int) params.images.size())
+        return;
+    std::swap (params.images[(size_t) sel], params.images[(size_t) target]);
+    canvas.selectImage (target);
+    canvas.repaint();
+}
+
+void MainComponent::removeSelectedLayer()
+{
+    const int sel = canvas.selectedImageIndex();
+    if (sel < 0)
+        return;
+    params.images.erase (params.images.begin() + sel);
+    canvas.selectImage (params.images.empty() ? -1 : (int) params.images.size() - 1);
+    canvas.repaint();
+}
+
+void MainComponent::chooseImageFile()
+{
+    fileChooser = std::make_unique<juce::FileChooser> ("选择图片",
+                                                       lastDir,
+                                                       "*.png;*.jpg;*.jpeg");
+    fileChooser->launchAsync (juce::FileBrowserComponent::openMode
+                                | juce::FileBrowserComponent::canSelectFiles,
+                              [this] (const juce::FileChooser& fc)
+                              {
+                                  const auto f = fc.getResult();
+                                  if (f != juce::File())
+                                      addImageLayer (f);
+                              });
 }
 
 // ---------------------------------------------------------------------------

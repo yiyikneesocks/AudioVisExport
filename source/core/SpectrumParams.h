@@ -13,6 +13,18 @@
 
 #include <juce_core/juce_core.h>
 #include <juce_graphics/juce_graphics.h>  // Colour
+#include <vector>
+#include "VisTransform.h"                 // 频谱元素自由变换
+
+// 图片图层（v0.4.2）：一张静态图片作为画布元素，与频谱共用同一套变换/交互
+struct ImageLayer
+{
+    juce::String path;             // 图片文件绝对路径
+    VisTransform transform;        // 与频谱同一套变换（输出分辨率坐标系）
+    float opacity = 1.0f;          // 0..1
+    bool  aboveSpectrum = false;   // false = 频谱下方（背景），true = 频谱上方（前景）
+    bool  visible = true;
+};
 
 struct SpectrumParams
 {
@@ -57,8 +69,17 @@ struct SpectrumParams
     juce::Colour bgColor       { 0x00000000 };   // 默认全透明
     float lineWidth = 1.4f;
     float opacity   = 1.0f;
+    float barGapRatio   = 0.28f;   // bar 样式：柱间空隙占每带 slot 宽度的比例（0 = 无缝）
+    float barWidthRatio = 1.0f;    // bar 样式：柱宽占 (slot - gap) 的比例（>1 时相邻柱可重叠）
+    bool  barParticles  = true;    // bar / bar-line 样式：峰值帽（下落小横线）开关，false = 只留柱体
     bool  drawGrid        = false;     // 可视化视频默认不画坐标轴（需要时 CLI 开 --draw-grid on）
     bool  drawAxisLabels  = false;     // 同上（--draw-axis-labels on）
+
+    // ---- 频谱元素变换（GUI 画布自由拖动/缩放/旋转；导出所见即所得）----
+    VisTransform transform;            // set=false = 填满画布（旧行为）
+
+    // ---- 图片图层（列表顺序 = 叠放顺序；频谱夹在 below/above 两组之间）----
+    std::vector<ImageLayer> images;
 
     // ---- 输出 ----
     int width  = 1280;

@@ -4,7 +4,7 @@
 // 覆盖主要可调参数（滑块 = 可拖动 + 数字输入框，双方式）：
 //   样式 / 频带数 / 频率标度 / 频率范围 / 动态曲线 / 增益 / gamma /
 //   attack / release / 峰值保持 / 时间平滑 / 斜率 / 线宽 / 不透明度 /
-//   三色选择 / 网格开关 / 棋盘格预览 / 导出宽高 / 编码器 / 导出按钮
+//   四色选择（Primary/Secondary/Peak/BG）/ 网格开关 / 棋盘格预览 / 导出宽高 / 编码器 / 导出按钮
 // 任何改动 → onParamsChanged（MainComponent 下一帧生效）
 // =============================================================================
 #pragma once
@@ -26,7 +26,16 @@ public:
     // 回调（MainComponent 设置）
     std::function<void ()> onParamsChanged;
     std::function<void ()> onExportClicked;
+    std::function<void ()> onExportVideoClicked;
     std::function<void ()> onBrowseOutputDir;
+
+    // ---- 图层（Layers）区回调：MainComponent 接线，操作画布当前选中元素 ----
+    std::function<void ()>     onAddImageClicked;    // 弹文件框添加图片图层
+    std::function<void ()>     onLayerUp;            // 选中图层上移一层
+    std::function<void ()>     onLayerDown;          // 选中图层下移一层
+    std::function<void ()>     onLayerRemove;        // 移除选中图片图层
+    std::function<double ()>   onReadLayerOpacity;   // 读选中图片透明度（0..100；未选中返回 100）
+    std::function<void (double)> onWriteLayerOpacity;
 
     void setProgressText (const juce::String& s);
     void setOutputDirText (const juce::String& s);
@@ -43,7 +52,7 @@ private:
     juce::OwnedArray<juce::Component> widgets;                 // 统一持有所有动态控件
     std::map<juce::Component*, std::unique_ptr<juce::Label>> rowLabels;
     int contentHeight = 0;
-    int exportAreaHeight = 118;
+    int exportAreaHeight = 152;
 
     // 控件（固定成员）
     juce::ComboBox styleBox, freqScaleBox, dynCurveBox, fpsBox, encoderBox;
@@ -51,11 +60,14 @@ private:
     juce::ToggleButton gridToggle     { "Draw grid" };
     juce::ToggleButton axisLabelToggle{ "Axis labels" };
     juce::ToggleButton checkerToggle  { "Checkerboard BG" };
-    juce::TextButton primaryBtn{ "Primary" }, secondaryBtn{ "Secondary" }, peakBtn{ "Peak" };
-    juce::TextButton browseBtn{ "Browse" }, exportBtn{ "Export" };
+    juce::TextButton primaryBtn{ "Primary" }, secondaryBtn{ "Secondary" }, peakBtn{ "Peak" }, bgBtn{ "BG" };
+    juce::TextButton browseBtn{ "Browse" }, exportBtn{ "Export" }, exportVideoBtn{ "Export Video" };
+    juce::TextButton addImageBtn{ "Add image..." }, layerUpBtn{ "Up" },
+                     layerDownBtn{ "Down" }, layerRemoveBtn{ "Remove" };
     juce::TextEditor widthEditor, heightEditor;
     juce::Label outputDirLabel, progressLabel;
-    juce::Colour swatchPrimary, swatchSecondary, swatchPeak;
+    juce::Colour swatchPrimary, swatchSecondary, swatchPeak, swatchBg;
+    juce::TooltipWindow tooltipWindow;   // 让本面板内 setTooltip 生效
 
     // 布局辅助
     void addHeader (const juce::String& text);
@@ -71,6 +83,8 @@ private:
                               std::function<void (int)> apply);
     juce::ToggleButton* addToggle (const juce::String& label, bool current,
                                    std::function<void (bool)> apply);
+    juce::TextButton* addButton (const juce::String& text,
+                                 std::function<void ()> onClick);
     void notify();
     void openColourPicker (juce::TextButton& btn, juce::Colour current,
                            std::function<void (juce::Colour)> apply);

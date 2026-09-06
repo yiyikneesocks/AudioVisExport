@@ -1,16 +1,24 @@
 # AudioVisExport — 工程架构文档
 
-> **面向后续 AI 协作者**：本文档是工程交接文档，帮助你快速理解项目全貌、设计决策、代码结构和后续目标。读完本文档即可开始协作开发。
+> **面向后续 AI 协作者**：本文档是工程交接文档，帮助你快速理解项目全貌、设计决策、代码结构和后续目标。读完本文档即可开始协作开发。注意：你后续推进任何操作以后都要写入并更新此文档。先读当前 ARCHITECTURE.md，和 GUI 源码实际内容交叉比对，避免“把推断当事实写入文档”。
 >
 > **文档版本 ↔ 项目版本映射（严格对齐）**：每次代码发布都要在此处更新版本行号，确保任意 AI 拿到文档后能准确定位到对应 tag / commit。
 >
 > | 文档 / 项目版本 | 日期 | tag（可）| 里程碑 |
 > |---|---|---|---|
+> | v0.5.0 | 2026-09-06 | —（工作区待提交）| **Windows 原生 exe 交叉编译打通**（Clang 18 + xwin + lld-link-18）+ UIPI 拖放彻底修复（WM_DROPFILES 兼容层）+ Colors 4 按钮免滚动（新增 BG 色）+ 峰值帽参数上移 Style 区 + bar-line 斜面柱顶重构 |
+> | v0.4.2 | 2026-09-05 | —（工作区未提交，tag 待补）| 图片图层系统 + bar-line 样式 + 峰值帽开关 + 拖放 UIPI 诊断 + Windows→WSL 迁移（文档/环境）+ CLI UTF-8 修复 + 版本号同步至 v0.4.2 |
+> | v0.4.1 | 2026-09-05 | `v0.4.1`（推荐打 tag）| 频谱元素自由变换（拖动/缩放/拉伸/旋转）+ 两段式合成渲染，导出所见即所得 |
+> | v0.4.0 | 2026-09-03 | `v0.4.0`（推荐打 tag）| GUI 新增一键 "Export Video" 按钮（默认透明 MOV QTRLE）；PngSequenceEncoder 实现编码器（MOV QTRLE alpha 实测 argb / WebM VP9 实测无 alpha）；视频模式自动补全输出路径；新增 docs/GUI_GUIDE.md 使用说明 |
 > | v0.3.2 | 2026-09-02 | `v0.3.2`（推荐打 tag）| ARCHITECTURE.md GUI 章节重写：精确成员字段、类成员同步流程、导出线程原子轮询、面板回调、已知限制 |
 > | v0.3.1 | 2026-09-02 | `v0.3.1`（已 push）| GUI 上线 + 全英文 UI + 4 种 style + 双 target |
 > | v0.3.0 | 2026-09-02 | `v0.3.0`（已 push）| Engine + 4 styles + CLI + GUI skeleton |
 >
 > 协作时：若要修改功能，请先新建分支；文档末尾版本号 / 变更日志必须与代码 commit 同步更新。
+>
+> **发布规则（强制，2026-09-05 起）**：每次小版本更新（版本号任一位变化）必须完成——
+> ① §12 变更日志写好对应条目；② 单独撰写**更新公告**（Release Notes，写入 `docs/RELEASE_NOTES.md`
+> 并作为 GitHub Release 正文）；③ commit + push 到 `origin`（GitHub）；④ 打对应版本 tag 并 push。
 
 ---
 
@@ -27,8 +35,8 @@ AudioVisExport 是一个**音频可视化视频生成器**：导入音频文件�
 | **参数系统** (SpectrumParams) | 6 组共 ~50 个参数；JSON I/O；CLI 糖命令 + `--set dotted.key=val` 覆盖；GUI 即改即见 | 参见下方 "完整可调参数表" |
 | **离线管线** (VisPipeline) | 完整导出（run）/ 单帧预览（previewFrame，可选棋盘格）/ 数值调试（probeSpectrum）| 引擎 + 样式与 GUI 预览完全同源，预览即所得 |
 | **CLI** (AudioVisExport) | `--export` / `--preview-frame` / `--probe-spectrum` / `--probe-pcm` / `--gen-tone` / `--config` | 脚本友好 |
-| **GUI** (AudioVisGUI) | 拖放加载（WAV/AIFF）/ 点击选择；实时预览（30fps，与播放位置同步）；播放/暂停/seek；参数面板（滑块+数字输入双方式、下拉、开关、颜色选择、编码选择）；后台导出线程 + 进度条 | 全英文 UI；默认字体 Segoe UI；无代码页依赖 |
-| **编码器** (PngSequenceEncoder) | PNG 序列（默认，单图 ARGB 100% 保真）；WebM VP9 yuva420p 透明通道；MOV QTRLE 透明通道 | WebM/MOV 调用系统 ffmpeg，需 `ffmpeg` 可见于 PATH |
+| **GUI** (AudioVisGUI) | 拖放加载（WAV/AIFF）/ 点击选择；实时预览（30fps，与播放位置同步）；播放/暂停/seek；参数面板（滑块+数字输入双方式、下拉、开关、颜色选择、编码选择）；后台导出线程 + 进度条；**一键 "Export Video"（默认透明 MOV QTRLE，自动生成文件名）** | 全英文 UI；默认字体 Segoe UI；无代码页依赖 |
+| **编码器** (PngSequenceEncoder) | PNG 序列（默认，单图 ARGB 100% 保真）；**MOV QTRLE rgba 透明通道（实测 pix_fmt=argb，推荐给剪辑软件）**；WebM VP9（**实测无 alpha**，仅供小体积预览） | MOV/WebM 调用系统 ffmpeg（自动搜索 hint / `FFMPEG_PATH` / PATH），需 `ffmpeg` 可见于 PATH |
 
 ### 支持的文件格式
 
@@ -47,21 +55,21 @@ AudioVisExport 是一个**音频可视化视频生成器**：导入音频文件�
 ### 许可证
 GPL-3.0（因参考了 Y2Kmeter 代码）
 
-### 核心设计原则
-- **纯函数式离线管线**：不依赖 UI / 系统时钟 / OpenGL / 实时音频设备，所有渲染离线完成
-- **引擎与 UI 解耦**：`source/core/` 是可独立复用的引擎，后续剪辑软件可作为子目录或静态库引入
-- **参数全可配**：一份 `SpectrumParams` 结构承载所有参数（FFT / 频率映射 / 时间 / 动态 / 视觉 / 输出），支持 JSON 预设 + CLI 覆盖
-- **样式可插拔**：`SpectrumStyle` 抽象基类 + 工厂模式，新增样式只需实现 `render()` 并注册
-
-### 许可证
-GPL-3.0（因参考了 Y2Kmeter 代码）
+### 目标平台与交付（2026-09-06 v0.5.0 起更新）
+- **设计目标平台：Windows**。WSL2 (Ubuntu 22.04) 是开发/构建环境，不是目标平台。
+- **交付形态（v0.5.0 起）**：**WSL 内交叉编译原生 Windows .exe**（Clang 18 MSVC ABI + xwin Windows SDK），
+  产物为免安装静态 CRT PE32+ 可执行文件，部署到 `C:\Users\yiyikneesocks\Desktop\AudioVisExport_test\`。
+  工具链与日常命令见 §5「构建」中「Windows 交叉编译」小节；完整实施计划见 `docs/PLAN_v0.5.0.md`。
+- **WSLg 兜底**：Linux 构建产物仍可用（`wsl -e` 拉起，WSLg 显示窗口），作为交叉编译不可用时的后备。
+- **原生构建后备**：亦可在 Windows 侧用 Visual Studio 按 §5 同一份 CMake 配置构建
+  （`cmake -S . -B build && cmake --build build --config Release`）。
 
 ---
 
 ## 2. 参考来源
 
 ### 2.1 Y2Kmeter（主要参考）
-- **路径**：`d:\Study 'n' Work\Program\Y2Kmeter\`
+- **路径**：`~/CodingProgram/AudioVisualizer/Y2Kmeter/`（2026-09-05 起工程已迁移到 WSL；Windows 时期为 `d:\Study 'n' Work\Program\Y2Kmeter\`）
 - **参考内容**：
   - `source/analysis/AnalyserHub.cpp` — 双路 FFT 处理 + 归一化 + 融合逻辑
   - `source/ui/modules/SpectrumModule.cpp` — Catmull-Rom 平滑曲线绘制 + 网格 + 坐标轴
@@ -118,8 +126,8 @@ AudioVisExport/
 │   └── ParamPanel.h/.cpp           # 右侧参数面板（滑块/下拉/颜色/导出）
 │
 └── build/                     # CMake 构建目录（gitignore）
-    ├── AudioVisExport_artefacts/Release/AudioVisExport.exe   # CLI
-    └── AudioVisGUI_artefacts/Release/AudioVisGUI.exe          # GUI
+    ├── AudioVisExport_artefacts/Release/AudioVisExport   # CLI（Linux 无 .exe 后缀）
+    └── AudioVisGUI_artefacts/Release/AudioVisGUI          # GUI
 ```
 
 ---
@@ -360,25 +368,32 @@ canvas.repaint();
 #### 4.5.6 SpectrumCanvas 渲染管线（与导出同源，预览即所得）
 
 ```cpp
-juce::Image img(ARGB, w, h, true);   // true = 初始全透明（与导出一致）
-{
-  juce::Graphics ig(img);
-  if (showCheckerboard) drawCheckerboard(ig, w, h);   // GUI 仅预览时的棋盘（不进导出 Image）
-  style->render(ig, canvas_rect, frame, rp);          // 与 VisPipeline::renderFrame 完全相同的调用签名 & 逻辑
-}
-g.drawImageAt(img, 0, 0);
+// (1) 基础层：输出分辨率 ARGB，与 VisPipeline::renderFrame 完全同源（不含变换）
+juce::Image base(ARGB, params.width, params.height, true);
+{ juce::Graphics gb(base); gb.setOpacity(rp.opacity);
+  style->render(gb, canvas_rect, frame, rp); }
+
+// (2) 合成：显示适配(letterbox) ∘ 频谱元素自由变换，一次性画到画布
+total = buildVisAffine(params.transform).followedBy(displayAffine)
+g.addTransform(total); g.drawImageAt(base, 0, 0)
+// 棋盘格只在画布上直接绘制（不进 base / 不进导出 Image）
+
+// (3) 手柄 UI（hasAudio 时）：外框 + 8 角柄 + 顶部旋转圆柄
+//     命中测试：画布坐标 → displayAffine 逆变换 → 输出坐标 → hitHandle/visContains
 
 if (!hasAudio) 画中文案 "Drag & drop a WAV or AIFF file to begin\n(or click here to browse)"
 ```
 
-拖放判定：`FileDragAndDropTarget::isAudioFile(path)` 仅接收 `.wav/.aif/.aiff` 扩展名（小写比较，大小写都接受）；点击空白区调 `onEmptyClicked` → MC 调 `chooseAudioFile()`。
+拖放判定（v0.4.0 起）：画布接受**任意文件**（`isInterestedInFileDrag` 恒 true，避免非音频拖放时全程禁止符）；音频（`.wav/.aif/.aiff`，小写比较）→ `onFileDropped` → MC `loadFile`；非音频 → `onNonAudioDropped` → MC 弹警告框。画布外区域由 `MainComponent` 自身实现的 `FileDragAndDropTarget` 兜底（逻辑相同）。点击空白区调 `onEmptyClicked` → MC 调 `chooseAudioFile()`。
+
+元素变换交互（v0.4.1 起）：拖动主体 = 移动；四角手柄 = 等比缩放；四边手柄 = 单轴拉伸；顶部圆柄 = 绕中心旋转；双击元素 / 右侧 **Reset element transform** 按钮 = 复位铺满画布。变换写入 `params.transform`（JSON 键 `transform.*`），CLI `--preview-frame` / `--export` 同样生效 → 预览即所得。
 
 ---
 
 #### 4.5.7 快速上手指南（基于当前 GUI 状态）
 
 ```
-启动：双击 build/AudioVisGUI_artefacts/Release/AudioVisGUI.exe
+启动：./build/AudioVisGUI_artefacts/Release/AudioVisGUI（WSLg 下直接弹出原生窗口）
   初始窗口 1280×800：
     左 = 画布（棋盘格灰 + "Drag & drop..." 提示）
     右 = ParamPanel（Scrollable，Viewport 自动竖滚）
@@ -405,7 +420,7 @@ if (!hasAudio) 画中文案 "Drag & drop a WAV or AIFF file to begin\n(or click 
    - 点 [Export] → 后台线程跑 VisPipeline::run
      · progress 显示 "Exporting xx% ..."
      · 期间 Export 按钮 disabled 防止重入
-     · 完成后显示 "Done: N frames -> D:\\..." 或 "Failed: reason"，Export 按钮恢复可用
+     · 完成后显示 "Done: N frames -> <dir>" 或 "Failed: reason"，Export 按钮恢复可用
 
 第 5 步：查看结果
    - PNG 序列 → 输出目录 frame_XXXXXX.png（ARGB 透明）
@@ -464,20 +479,61 @@ AudioVisExport --config                                 # 打印当前参数 JSO
 
 ## 5. 构建与运行
 
-### 构建
-```powershell
-cmake -S . -B build
-# 编译（两个 target：CLI + GUI）
-cmake --build build --config Release
-# 产物
-build/AudioVisExport_artefacts/Release/AudioVisExport.exe   # CLI
-build/AudioVisGUI_artefacts/Release/AudioVisGUI.exe         # GUI 实时预览
+### Windows 交叉编译（v0.5.0 主交付路径，日常用这个）
+
+```bash
+bash scripts/build_win_cross.sh --deploy
+# 产物（静态 CRT PE32+，免 VC_redist）：
+#   build_win/AudioVisExport_artefacts/Release/AudioVisExport.exe  (CLI)
+#   build_win/AudioVisGUI_artefacts/Release/AudioVisGUI.exe        (GUI)
+# --deploy 同步到 C:\Users\yiyikneesocks\Desktop\AudioVisExport_test\
+# 附加选项: --clean 全量重建；--no-build 仅部署
 ```
-> JUCE 8.0.12 通过 FetchContent 自动从 GitHub 拉取（首次配置需联网）。
+
+工具链构成（一次性安装，此后离线构建）：
+| 组件 | 用途 | 安装 |
+|---|---|---|
+| clang-18 + lld-18 | 交叉编译器（MSVC ABI，经 `scripts/clang-cl-wrapper.sh` 加 `--target=x86_64-w64-windows-msvc`）+ lld-link-18 链接器 | `sudo apt-get install clang-18 lld-18`（apt.llvm.org jammy，无国内镜像）|
+| xwin (Rust) | 从微软官方拉取 Windows SDK 10.0.22621 + MSVC CRT 14.44 → `~/.xwin-sysroot/` | `cargo install xwin; xwin --accept-license --arch x86_64 --sdk-version 10.0.22621 splat --output ~/.xwin-sysroot` |
+| cmake ≥ 3.28 | CMake 3.22 的 Windows-Clang 平台模块不支持跨平台 MSVC 前端，需 4.x | `pip install cmake`（清华镜像快）|
+| toolchain 文件 | `cmake/toolchains/clang-cl-msvc.cmake` | 已入库 |
+
+三个已知坑（toolchain 内已固化修复，排查时参考）：
+1. **MSVC STL 版本检查**：最新 STL (v143) 要求 Clang 19+，定义 `_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH` 绕过（Clang 18 实测全功能通过）
+2. **Linux 大小写敏感**：Windows SDK 头/库文件名大小写与 JUCE `#include` 不完全一致（`Dbghelp.h` vs `dbghelp.h`）；toolchain 把版本化 SDK 目录（原始大小写）排前面 + 脚本补符号链接
+3. **SSE intrinsics 必须内联**：MSVC CRT 的 `emmintrin.h` 只声明 extern 函数（依赖 MSVC 编译器硬编码识别），clang 会生成未定义符号；须把 clang resource dir（自带真正内联的 intrinsic 头）用 `-isystem` 排在搜索链首位
+
+### 构建（WSL / Linux 本机，WSLg 预览用）
+
+一次性安装工具链与 JUCE Linux 依赖（Ubuntu 22.04 实测，2026-09-05 WSL 迁移时记录）：
+```bash
+sudo apt-get update && sudo apt-get install -y \
+    cmake ninja-build ffmpeg pkg-config \
+    libasound2-dev libx11-dev libxext-dev libxrandr-dev libxinerama-dev \
+    libxcursor-dev libxcomposite-dev libxrender-dev \
+    libfreetype6-dev libfontconfig1-dev libgl1-mesa-dev
+```
+
+```bash
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DAVX_USE_LOCAL_JUCE=ON
+cmake --build build -j2   # ⚠️ 本机 12 核 / 7.7GB：默认 -j$(nproc) 会在 JUCE 大 TU 上 OOM（cc1plus 被 Kill），实测 -j2 安全
+# 产物（Linux 无 .exe 后缀）
+build/AudioVisExport_artefacts/Release/AudioVisExport   # CLI
+build/AudioVisGUI_artefacts/Release/AudioVisGUI         # GUI（WSLg 下直接弹窗）
+```
+> - **JUCE 来源**：`third_party/JUCE` 是指向 `../../Y2Kmeter/third_party/JUCE` 的符号链接
+>   （复用 Y2Kmeter 的 JUCE 8.0.12 本地 checkout，避免 FetchContent 大克隆），需配 `-DAVX_USE_LOCAL_JUCE=ON`；
+>   不带该选项则 FetchContent 从 GitHub 克隆（首次配置需联网）。
+>   **注意：2026-09-05 实测本机 git 访问 GitHub 出 TLS 中断（`gnutls_handshake() failed`），
+>   在线克隆很可能失败——WSL 环境下请始终带 `-DAVX_USE_LOCAL_JUCE=ON`。**
+> - Ninja / Makefile 是单配置生成器，没有 `--config` 的多配置概念，构建类型由 configure 时的
+>   `-DCMAKE_BUILD_TYPE=Release` 决定（顶层的 powershell/Visual Studio 时期流程已废弃）。
+> - GUI 显示走 WSLg（`DISPLAY=:0` / `WAYLAND_DISPLAY=wayland-0`），无需额外 X server；
+>   音频播放走 WSLg 的 PulseAudio。
 
 ### GUI 使用
 ```
-AudioVisGUI.exe   # 双击启动
+./build/AudioVisGUI_artefacts/Release/AudioVisGUI   # 终端启动（WSLg 直接弹原生窗口，Ctrl+C 退出）
 Step 1. Drag a WAV/AIFF onto the canvas (or click canvas to browse)
 Step 2. Click Play. Spectrum follows the music in real time.
 Step 3. Drag sliders / type numbers / pick colors in the right panel — changes take effect within one 30 Hz tick.
@@ -488,19 +544,40 @@ Step 4. Browse → choose output dir; set W × H and Encoder; click Export.
 > Tip: Toggle **"Checkerboard BG"** off in the Appearance section before taking screenshots to judge real transparent (ARGB) pixels without the preview checkers — note this toggle is GUI-only and never affects exported PNG pixels.
 
 ### 运行示例
-```powershell
+```bash
+AVX=./build/AudioVisExport_artefacts/Release/AudioVisExport
+
 # 生成 10s 透明背景柱状图视频
-AudioVisExport --export PUPA_10s.wav out_bar --style bar --width 960 --height 540 --fps 30
+$AVX --export PUPA_10s.wav out_bar --style bar --width 960 --height 540 --fps 30
 
 # 生成水晶效果单帧预览（棋盘格背景验证透明度）
-AudioVisExport --preview-frame preview_crystal.png --audio PUPA_10s.wav --frame-index 300 --style crystal --width 960 --height 540 --set output.bgCheckerboardPreview=true
+$AVX --preview-frame preview_crystal.png --audio PUPA_10s.wav --frame-index 300 --style crystal --width 960 --height 540 --set output.bgCheckerboardPreview=true
 
 # 数值调试
-AudioVisExport --probe-spectrum PUPA_10s.wav 300 --band-count 64
+$AVX --probe-spectrum PUPA_10s.wav 300 --band-count 64
 ```
 
+### 交付到 Windows 测试（`build_win_cross.sh --deploy` 已自动化；此节为手动流程备查）
+```bash
+DEST=/mnt/c/Users/yiyikneesocks/Desktop/AudioVisExport_test
+mkdir -p "$DEST"
+cp build/AudioVisExport_artefacts/Release/AudioVisExport  "$DEST/"
+cp build/AudioVisGUI_artefacts/Release/AudioVisGUI        "$DEST/"
+# 启动器（Windows 桌面双击 → wsl 拉起 GUI，WSLg 显示窗口）
+cat > "$DEST/Run_AudioVisGUI.bat" <<'EOF'
+@echo off
+wsl -e /mnt/c/Users/yiyikneesocks/Desktop/AudioVisExport_test/AudioVisGUI
+if errorlevel 1 pause
+EOF
+# 测试音频（CLI 现场生成：44.1kHz 立体声 5s 1kHz -6dBFS）
+"$DEST/AudioVisExport" --gen-tone "$DEST/test_tone.wav"
+```
+> 交付后用户在 Windows 桌面双击 `Run_AudioVisGUI.bat` 即测试；CLI 可在 `cmd` 里
+> `wsl -e <交付目录内的二进制绝对路径>` 调用。若 WSL 发行版名不是默认值，
+> 把 bat 里的 `wsl -e` 换成 `wsl -d <发行版名> -e`。
+
 ### 透明背景视频合成
-```powershell
+```bash
 # PNG 序列 + 音频 → MP4（不透明预览用）
 ffmpeg -framerate 30 -i out_bar/frame_%06d.png -i PUPA_10s.wav -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest output.mp4
 
@@ -536,8 +613,8 @@ ffmpeg -framerate 30 -i out_bar/frame_%06d.png -i PUPA_10s.wav -c:v libvpx-vp9 -
 - [ ] 样式组合：支持同一帧叠加多个样式（如 crystal + bar 底层）
 
 ### 7.2 中期（编码 + 工作流）
-- [ ] WebM VP9 alpha 编码器内置（PngSequenceEncoder::finalizeAndMux 已预留）
-- [ ] MOV QTRLE alpha 编码器内置
+- [x] MOV QTRLE alpha 编码器内置（PngSequenceEncoder::finalizeAndMux，v0.4.0；实测 argb 无损保留）
+- [x] 编码器实测校准：WebM VP9 的 yuva420p 在主流 ffmpeg 构建中**实际丢 alpha**（v0.4.0 实测降级为 yuv420p），故 WebM 定位为"无 alpha 小体积预览片"；若未来获得开启 VP9-alpha / VP8-alpha 的 ffmpeg 构建可复刻 alpha
 - [ ] 时间轴编辑界面（JUCE GUI）：timeline-based 多段频谱图编辑
 - [ ] 实时预览窗口（JUCE GUI + OpenGL 或 软件渲染）
 
@@ -576,7 +653,8 @@ CrystalStyle 已验证 `getNumPasses() / renderPass()` 机制可用。后续扩�
 A: 不是 bug。FFT 归一化与 Y2Kmeter 逐字节一致（`2.0f / fftSize`）。偏低是 bin 间泄漏 + band 取值所致。用户明确"可视化工具不需严格纵轴精度"。
 
 **Q: 导出的 PNG 导入 PR 后透明区显示黑色？**
-A: PR 需要 WebM (VP9 + yuva420p) 或 MOV (QTRLE) 格式才支持 alpha。PNG 序列需先 ffmpeg 合成为带 alpha 的视频。`-auto-alt-ref 0` 是 VP9 alpha 的关键参数。
+A: PR 需要带 alpha 的视频格式。实测最可靠：**MOV QTRLE（rgba / argb）** 无损保留 alpha；
+   WebM VP9 的 `yuva420p` 在主流 ffmpeg（含 gyan.dev 2026 发布版）中实际不编码 alpha，会静默降级为 `yuv420p`。建议透明素材用 MOV QTRLE 或 PNG 序列。
 
 **Q: 构建报错找不到 JUCE？**
 A: 需指定 `-DAVX_USE_LOCAL_JUCE=ON`，或确保 `third_party/JUCE/` 存在。沙箱环境无法从 GitHub clone。
@@ -653,6 +731,14 @@ SpectrumParams.h 默认值
 | bgColor | `visual.bgColor` | `#00000000` 全透明 | （无 GUI，预留）| 背景色 |
 | lineWidth | `visual.lineWidth` | 1.4 | "Line width" 滑块（0.5..5.0） | 主描边粗细 |
 | opacity | `visual.opacity` | 1.0 | "Opacity" 滑块（0.05..1.0） | 全局不透明度 |
+| transform.set | `transform.set` | false | （画布内首次拖拽自动置 true） | 元素自由变换开关；false=铺满画布（旧行为） |
+| transform.centerX | `transform.centerX` | 0 | （画布拖拽） | 元素中心 X（输出分辨率像素） |
+| transform.centerY | `transform.centerY` | 0 | （画布拖拽） | 元素中心 Y |
+| transform.scaleX | `transform.scaleX` | 1.0 | （画布角/边柄拖拽） | X 轴缩放（非等比即拉伸） |
+| transform.scaleY | `transform.scaleY` | 1.0 | （画布角/边柄拖拽） | Y 轴缩放 |
+| transform.rotationDeg | `transform.rotationDeg` | 0.0 | （画布顶部圆柄拖拽） | 绕中心旋转角度（度） |
+| barGapRatio | `visual.barGapRatio` | 0.28 | "Bar gap %" 滑块（0..100%） | bar 样式：柱间空隙占 slot 比例 |
+| barWidthRatio | `visual.barWidthRatio` | 1.0 | "Bar width %" 滑块（5..200%） | bar 样式：柱宽占 (slot-gap) 比例，>1 相邻柱重叠 |
 | drawGrid | `visual.drawGrid` | false | "Draw grid" toggle | 开关网格 |
 | drawAxisLabels | `visual.drawAxisLabels` | false | "Axis labels" toggle | 开关坐标轴标签 |
 | （非 param，仅 GUI 状态）| — | — | "Checkerboard BG" toggle | 预览画布是否画棋盘格（方便肉眼判断透明区，**不影响导出**）|
@@ -687,6 +773,9 @@ SpectrumParams.h 默认值
 |---|---|---|---|---|
 | Style | Render style | Combo | params.style | 4 选项 |
 | Style | Band count | Slider (int) | params.bandCount | 16..512 |
+| Style | Bar gap % | Slider (int, %) | params.barGapRatio | 0..100 → 0..1；仅 bar 样式生效 |
+| Style | Bar width % | Slider (int, %) | params.barWidthRatio | 5..200 → 0.05..2；仅 bar 样式生效 |
+| Style | Reset element transform | Button | params.transform = VisTransform{} | 复位元素变换；画布内双击元素同效 |
 | Style | Freq scale | Combo | params.freqScale | 枚举 |
 | Style | Min Hz / Max Hz | Slider (float) | params.minHz / maxHz | 最小会钳制最大 |
 | Time | FPS | Combo | params.fps | 24/30/60 |
@@ -709,13 +798,236 @@ SpectrumParams.h 默认值
 | Appearance | Secondary | Color picker | params.secondaryColor | |
 | Appearance | Peak | Color picker | params.peakColor | |
 | Export | W / H | Int-only editors | params.width / height | ≥64 |
-| Export | Encoder | Combo | params.encoder | PngSeq/WebmVp9/MovQtrle |
+| Export | Encoder | Combo | params.encoder | PngSeq/MovQtrle(alpha)/WebmVp9(no alpha) |
 | Export | Browse | Button | exportDir (GUI state, not param) | 设置输出目录 |
-| Export | Export | Button | (后台 VisPipeline::run) | 进度 % 显示在 progressLabel |
+| Export | Export | Button | (后台 VisPipeline::run) | 按 Encoder 下拉选择导出；进度 % 显示在 progressLabel |
+| Export | Export Video | Button | params.encoder→MovQtrle（若为 PngSeq）+ 自动填 outputVideoPath | 一键透明 MOV 导出；目录未设置会先弹 Browse |
 
 ---
 
 ## 12. 变更日志（每发版必更，同步文档末尾版本号）
+
+> **发版流程（每次小版本都要走完）**：
+> 1. 本 §12 顶部新增版本条目（变更内容 + 验证记录）
+> 2. 撰写**更新公告** → `docs/RELEASE_NOTES.md`（用户视角：新功能 / 修复 / 升级注意事项）
+> 3. `git add -A && git commit`，commit message 以版本号开头
+> 4. `git push origin main` + 打 tag `git tag vX.Y.Z && git push origin vX.Y.Z`
+> 5. 在 GitHub 用 `docs/RELEASE_NOTES.md` 内容创建 Release
+>
+> （2026-09-05 注：当前环境 git 访问 GitHub 实测 TLS 中断，push 需在网络恢复/代理就绪后补做。）
+
+### v0.5.0 — 2026-09-06
+**变更（Windows 原生交付 + UIPI 拖放修复 + GUI/样式增强；实施计划见 `docs/PLAN_v0.5.0.md`）**：
+
+- **Windows 原生 exe 交叉编译打通（§5 新章节）**：
+  - 工具链：Clang 18（MSVC ABI，`scripts/clang-cl-wrapper.sh` 包 `--target=x86_64-w64-windows-msvc`）
+    + lld-link-18 + xwin 拉取的 Windows SDK 10.0.22621 / MSVC CRT 14.44（`~/.xwin-sysroot/`）
+  - 新增 `cmake/toolchains/clang-cl-msvc.cmake`（旧 MinGW 版失效原因：缺 d2d1_2/3.h，JUCE 8 Direct2D 无法编译）
+  - 新增 `scripts/build_win_cross.sh`（环境检查 / configure / build / 验证 / `--deploy` 到 Windows 测试目录 / `--clean`）
+  - CMakeLists.txt：`avx_configure_target` 兼容 Clang-MSVC 前端；CRT 静态链接免 VC_redist（依赖校验仅系统 DLL）
+  - **修复 JUCE 源残留**：恢复 `juce_graphics.cpp` 的 `d2d1_3.h` 等 6 处 MinGW 时期补丁（共享 checkout 回到原版 8.0.12）
+  - 排错记录：STL1000 版本检查（`_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH`）、大小写符号链接（Dbghelp.h/D2d1.lib 等）、
+    SSE intrinsics 不内联（clang resource dir `-isystem` 首位）——三个坑的完整分析在 §5 交叉编译章节
+- **UIPI 拖放彻底修复（`source/gui/WinDragCompat.{h,cpp}` 新增）**：
+  - 根因链：JUCE 无条件 `RegisterDragDrop` → Explorer 只走 OLE → 提权进程被 UIPI 拦截 → 禁止符不回退
+  - 修复：提权进程 `RevokeDragDrop` + `DragAcceptFiles` 切换 WM_DROPFILES 老协议（JUCE 已 `ChangeWindowMessageFilterEx`
+    放行该消息，官方允许跨 UIPI）；`SetWindowSubclass` 拦截 WM_DROPFILES → 转 `ComponentPeer::DragInfo`
+    → 复用 JUCE `handleDragDrop` 分发链（画布/兜底/图层逻辑零改动）
+  - 普通权限下 OLE 全功能保留（含拖放悬停 HUD）；画布红色横幅改为提示"legacy drag-drop active"
+- **GUI 参数面板（ParamPanel）**：
+  - Colors 行（Primary/Secondary/Peak/**新增 BG**）从 Appearance 末尾上移到区首（原位置 y≈852px 超首屏需滚动）
+  - BG 按钮接入 `params.bgColor`（JSON/CLI 原已支持，补 GUI 控件）；透明底显示为半透明灰以免不可见
+  - "Peak hold ms" / "Peak decay dB/s" 两滑块从 Time 区上移到 Style 区 Peak caps 开关之后（峰值帽三件套聚合），
+    加 tooltip 说明"下落间隔/下落速度"语义；面板新增 TooltipWindow
+- **bar-line 样式重构（斜面柱顶，`BarLineStyle.{h,cpp}` 重写）**：
+  - 柱体从矩形改为五边形梯形：顶边斜线（柱左缘高 = 相邻带归一化中点插值，右缘同）；同高带 → 水平顶
+  - 首柱左缘/末柱右缘用自身值；空带柱不画但边缘插值仍参与（无悬空跳变）；gap 保留（间隙断开，用户确认）
+  - 删除旧"柱顶中点连线"与水平描边；峰值帽逻辑不变
+  - 像素级验证：扫频音频下 bar-line 顶缘平台占比 26% vs bar 84%（斜面连续 vs 全平顶），柱宽/空隙序列与 bar 逐位一致
+- **验证记录**：Linux 双 target 编译零错误 + GUI 冒烟通过；交叉编译全量通过并已部署
+  `C:\Users\yiyikneesocks\Desktop\AudioVisExport_test\`（COMCTL32 导入确认，无 CRT DLL 依赖）；
+  Windows 侧 UIPI 拖放 / 颜色 / bar-line / 峰值帽实测待用户回归（S6）
+
+**追加（v0.5.0 同日，实测反馈修复）**：
+- **拖放实测结论 + 修复升级**：用户实测提权下禁止符消失但 WM_DROPFILES drop 无反应
+  → 方案升级为两层：①**首选 = 自动降权重启**（`relaunchDeElevated()`，经 explorer.exe 代理
+  重启为 Medium 完整性级别，OLE 拖放完整可用含 HUD；`initialise` 提权时自动触发，旧实例 `quit()`）；
+  ②兜底 = WM_DROPFILES relay 保留（降权失败时生效），新增 `onStatus` 诊断回调 → 面板进度文本
+  实时显示"WM_DROPFILES arrived / relaying / delivered"每一步（远程排障可见）
+- **峰值帽斜面化（BarLineStyle v0.5.1 增强）**：每带形状捕获状态机——峰值未在下落时每帧
+  重置帽形状 = 当时柱顶斜率（与柱顶贴合）；下落开始冻结形状、整条斜线随 peakDb 刚性下落。
+  像素验证：保持期/下落期 peak 线全部呈斜线段（0 平段）
+- **暂停峰值抖动修复（SpectrumCore::setPeaksFrozen）**：根因 = getBandFrame 峰值段是有状态的
+  （GUI 暂停时 timer 仍 30Hz 调用 → hold 倒计时/衰减随 wall-clock dt 持续推进 → 峰值帽继续下落）。
+  修复 = 冻结标志跳过衰减（保留新峰跟随，seek 快进峰值建立不受影响）；MainComponent 每 tick
+  按 `transport.isPlaying()` 设置；离线导出默认不冻结零影响
+- **第二轮实测反馈修复（同日）**：
+  - **拖放方案再升级**：`installDragCompat` 改为**无条件 DragAcceptFiles**（假设 B：OLE 注册失败时
+    Explorer 自动回退 WM_DROPFILES，此前仅提权分支启用是漏洞）；relaunchDeElevated 加
+    `--avx-deelevated` 防死循环标志（UAC 最低档环境下降权必然失败，防无限重启）；画布右下角
+    常显诊断行 `[drag] elevated= oleRevoked= fallback=on wmDropFiles=N`（不靠滚动找）
+  - **bar-line 峰值帽状态机 v2**（修复用户实测"看不到峰值帽"）：v1 两缺陷——帽端点画在柱宽内
+    与柱顶描边重叠视觉淹没；保持期每帧重捕获导致下落前冻结的形状≈水平。v2：仅峰值刷新
+    （peakDb 上升）时捕获形状；帽 x 伸出 gap 两侧 + 斜率线性外推。像素验证：下落期帽悬停
+    柱顶上方 9-11px、斜线保持
+  - **音频文件管理（用户需求）**：传输条新增 `[Load...]`（随时换曲）/ `[Eject]`（移除当前音频：
+    停止播放 + transport/readerSource/pcm 全清 + 画布回空拖放提示态）；加载后显示
+    `♪ 文件名`（左下角 nowPlayingLabel，悬停 helpText 显示完整路径）
+  - **拖放 relay 链最终修复（T3/T4 实测驱动）**：T3 证实 explorer.exe 代理**无法传命令行参数**
+    （args 里的 --avx-deelevated 被 explorer 当作导航位置解析，打开 Documents 而非程序）→
+    改用**环境变量 AVX_DEELEVATED** 传标志（ShellExecuteW 子进程继承环境块）；T4 证实
+    WM_DROPFILES 到达子类（wmDropFiles+1）但 JUCE `handleDragMove/findDragAndDropTarget`
+    分发链跨协议 relay 不可靠（静默吞 drop）→ relayDrop 改为**直连
+    onNativeFilesDropped 回调**（同消息线程确定性交付：图片→图层 / 音频→loadFile / 其他→提示），
+    JUCE 链降为后备。T2 对照同时证实：非管理员禁止符已消失（无条件 DragAcceptFiles 生效，
+    Explorer 全程走 WM_DROPFILES —— 即 OLE RegisterDragDrop 在该环境静默失败，与杀软无关）
+
+### v0.4.2 — 2026-09-05
+**变更（图片图层系统 + bar-line 样式 + 拖放诊断 + 峰值帽开关）**：
+
+- **外部拖放问题定性（UIPI 提权隔离，非程序 bug）**：
+  - 深入排查结论：代码侧 OLE 注册（`RegisterDragDrop` 无条件调用）与目标命中逻辑均正常；
+    禁止符的真因是 **Windows UIPI**——以管理员身份运行的进程（GUI 主进程完整性级别 High）
+    **收不到普通权限 Explorer（Medium）发起的 OLE 拖放**，整条拖放消息链被内核静默拦截，
+    表现恰好是全程禁止符（`ChangeWindowMessageFilterEx` 只放行指定消息，OLE 拖放链不在放行之列）。
+  - **程序内新增两个诊断装置**（`SpectrumCanvas`）：
+    - 启动时检测提权状态（`CheckTokenMembership`/`IsUserAnAdmin` 路径）：若进程为 Elevated，
+      画布顶部显示**红色警告横幅**"Running as Administrator — file drag-drop from Explorer is blocked by Windows (UIPI)"
+    - 拖放悬停 HUD：拖文件进入窗口时画布显示"Drag detected: <文件名>"——
+      若能看到 HUD 说明消息链已通（此时禁止符不存在）；看不到 HUD + 禁止符 = UIPI 拦截
+  - **用户自查步骤**：任务管理器 → 详细信息 → 添加"Elevated"列 → 看 AudioVisGUI.exe 是否 Elevated；
+    或直接看画布是否出现红色横幅。**解决：不要以管理员身份运行 GUI**（也不要从提权终端 start 它）
+- **图片图层系统（第一阶段：静态图片）**：
+  - `SpectrumParams::ImageLayer`（namespace 级结构，`images` 数组成员）：path / centerX / centerY /
+    scaleX / scaleY / rotationDeg / opacity / aboveSpectrum / visible，复用 `VisTransform`
+  - JSON 持久化（`images: [ {...} ]`，像素坐标空间与频谱变换一致）；`--set` 暂不支持数组元素
+  - **VisPipeline 合成**：belowSpectrum 组 → 频谱 → aboveSpectrum 组，图片默认铺满输出画布再套
+    `VisTransform`（与频谱同基准），导出与预览共用同一合成函数（所见即所得）
+  - **画布交互**：拖图片文件进画布即创建图层（默认铺满）；点击切换选中（频谱/图片）；
+    选中图片后与频谱共用同一套 8 角柄/旋转柄/移动/双击复位交互；按图层 z 序做命中测试
+  - **面板新增 Layers 区**：[Add image]（文件选择）/ [Up] / [Down] / [Remove] / Opacity 滑块
+  - CLI `--preview-frame` 与导出全链路验证：img_on/img_off 对照字节不同 ✅
+- **新增样式 `bar-line`**（柱体 + 柱顶直线连接）：
+  - `styles/BarLineStyle.{h,cpp}`：逐柱画柱体（沿用 bar 的 gap/width 布局参数），
+    相邻柱顶点用直线段连接（可选择是否带填充），峰值帽同样受 barParticles 开关控制
+  - 工厂注册 + CMake + 面板下拉第 5 项；CLI 渲染验证 ✅
+- **`barParticles` 参数（柱样式"粒子"开关，默认开）**：
+  - 用户所称"粒子"实为**峰值帽**（peak caps，随峰值缓慢下落的小横线），命名沿用引擎术语
+  - `visual.barParticles`：JSON 写/读/CLI `--set` 三处贯通；GUI Appearance 区新增
+    **"Peak caps"** 开关；BarStyle 与 BarLineStyle 双双接入；开/关对照渲染字节不同 ✅
+- **颜色选择器确认未丢失**：Primary/Secondary/Peak 三色按钮 + 取色器一直在 Appearance 区
+  （面板变长后需要**滚动**才能看到）；在 GUI 指南中注明位置
+- **修复**：`SpectrumCanvas::fileDragExit` 签名对齐 JUCE 基类（`const StringArray&`）；
+  `SpectrumParams::ImageLayer` 限定名统一；`isProcessElevated` 补 `<windows.h>`；
+  ParamPanel 重复的 `addHeader("Export")` 去重；MainComponent `buildRp` 补接 `rp.barParticles`
+  （否则 GUI 预览峰值帽永远关闭、与导出不一致）
+- **CLI UTF-8 修复 + 版本号同步**：
+  - 根因：`juce::String(const char*)` 按 ASCII 处理 UTF-8 中文，多字节被逐字节重编码成双重编码乱码
+    （Release 下 jassert 被禁用无提示）；正确做法是用 `CharPointer_UTF8` 包装
+  - `source/cli/CliArgs.cpp` helpText() 改用 `juce::String(juce::CharPointer_UTF8(...))`；
+    版本号从 `v0.2.0` → `v0.4.2`（与文档一致）
+  - `CMakeLists.txt`：`project(VERSION)` 与两个 target 的 `VERSION` 全部从 `0.2.0`/`0.3.0` 同步到 `0.4.2`
+  - **已重新交付** Windows 测试包（`C:\Users\yiyikneesocks\Desktop\AudioVisExport_test\` 内二进制更新时间戳）
+- **验证记录**：双 target 构建零错误；CLI 四组对照（bar-line / 图层 on-off / 峰值帽 on-off）
+  全部通过；GUI 启动冒烟通过；CLI `--help` 中文版本号显示正确（UTF-8 修复验证）
+
+**追加（v0.4.2 同日）— Windows → WSL Ubuntu 22.04 迁移（仅文档/环境，无功能代码变更）**：
+- **工程迁移**：`d:\Study 'n' Work\Program\AudioVisExport` → `~/CodingProgram/AudioVisualizer/AudioVisExport`；
+  Y2Kmeter 现位于同级 `~/CodingProgram/AudioVisualizer/Y2Kmeter`
+- **文档路径修正**：
+  - `ARCHITECTURE.md`：§2.1 Y2Kmeter 参考路径、§3 产物路径（Linux 无 `.exe`）、
+    §4.5.7 启动命令、§5 构建章节整体重写为 bash + Ninja（含 WSL 依赖一键安装命令 + 本地 JUCE 说明）、
+    §6 手动 ffmpeg 命令代码块、示例输出路径 `D:\...` → `<dir>`
+  - `docs/GUI_GUIDE.md`：§1 构建与启动重写为 WSL/Linux（apt 依赖、Ninja 构建、WSLg 说明）、
+    §3.6 UIPI 节标注"仅 Windows"、FAQ Q1 的 FFMPEG_PATH 说明按平台区分
+- **third_party/JUCE 符号链接重建** → `../../Y2Kmeter/third_party/JUCE`
+  （复用 Y2Kmeter 的 JUCE 8.0.12 本地 checkout；构建需 `-DAVX_USE_LOCAL_JUCE=ON`，见 §5/FAQ）
+- **Windows MSVC 旧 `build/` 已删除**（`.sln/.vcxproj` 与指向 `d:/` 的 CMakeCache 对 Linux 无效），Linux 下重新 configure
+- **代码跨平台核查结论（无需改动）**：
+  - `SpectrumCanvas::isProcessElevated` 与提权横幅已有 `#if JUCE_WINDOWS` 守卫——非 Windows 恒 false，横幅不显示
+  - `PngSequenceEncoder::findFfmpeg_` 的 PATH 分隔符（`;` vs `:`）、可执行名（`ffmpeg.exe` vs `ffmpeg`）、
+    `.exe` 后缀补全逻辑全部已分平台处理，Linux 下开箱即用
+- **环境补齐（WSL 侧，一次性）**：apt 安装 cmake / ninja-build / ffmpeg / pkg-config +
+  JUCE Linux 依赖（libasound2-dev、libx11-dev、libxext-dev、libxrandr-dev、libxinerama-dev、
+  libxcursor-dev、libxcomposite-dev、libxrender-dev、libfreetype6-dev、libfontconfig1-dev、
+  libgl1-mesa-dev），完整命令见 §5
+- **运行时形态**：GUI 显示走 WSLg（`DISPLAY=:0` / `WAYLAND_DISPLAY=wayland-0`），
+  音频走 WSLg PulseAudio；ffmpeg 用 apt 版（Windows 期 gyan.dev 下载包的说法仅适用于旧环境）
+- **验证记录（2026-09-05 WSL 构建，Ninja + 本地 JUCE 8.0.12）**：
+  - 双 target 编译链接零错误（⚠️ 实测 12 核 / 7.7GB 内存下 `-j$(nproc)` 会在 JUCE 大编译单元上
+    OOM（`cc1plus Killed`），须 `-j2` 续编；已写入 §5 构建命令备查）
+  - CLI 冒烟全过：`--gen-tone`（44.1k 立体声 5s 1kHz -6dBFS）→ `--probe-pcm` →
+    `--probe-spectrum` → `--preview-frame`（crystal / bar-line 两样式出图）→
+    `--export` png-seq（480x270@15，75 帧 / 0.9s）
+  - `--export --encoder mov-qtrle` 全链路：Linux PATH 自动找到 apt ffmpeg 4.4.2，
+    产物 ffprobe 实测 `codec=qtrle / pix_fmt=argb`（alpha 无损保留，与 Windows 期结论一致）
+  - GUI 冒烟：WSLg 下启动运行正常（timeout 8s 退出码 124 = 全程存活；
+    `ALSA seq` 提示为 WSL 无 MIDI 设备，无害）
+  - **已交付 Windows 测试包**：`C:\Users\yiyikneesocks\Desktop\AudioVisExport_test\`
+    （AudioVisExport / AudioVisGUI 二进制 + test_tone.wav + sample_mov/test_tone_vis.mov
+    + Run_AudioVisGUI.bat + README_测试说明.txt；bat 经 `wsl -e` 拉起，WSLg 显示窗口）
+
+### v0.4.1 — 2026-09-05
+**变更（频谱元素自由变换 + 输出分辨率所见即所得）**：
+- **新增核心变换类型 `VisTransform`（`source/core/VisTransform.h`）**：
+  - 坐标空间 = 输出分辨率像素；`set/centerX/centerY/scaleX/scaleY/rotationDeg`
+  - `buildVisAffine()`：绕中心（平移→旋转→缩放→平移回中心），GUI 与导出共用同一仿射；
+    `visCorners() / visContains() / visDistanceToSegment()` 供画布命中测试与手柄绘制，
+    后续图片/视频图层可直接复用
+- **`SpectrumParams` 新增 `transform` 成员**：JSON 序列化/解析（`transform.*` 键）+
+  CLI `--set transform.centerX=640` 等覆盖
+- **`VisPipeline::renderFrame` 改为两段式合成**：
+  1) 基础层：频谱按输出分辨率渲染到透明 ARGB（不带变换）
+  2) 合成层：棋盘/半透明 bg + `buildVisAffine(transform)` 叠加 → **导出应用与预览相同的变换**，所见即所得
+- **`SpectrumCanvas` 全重写为"元素式"交互画布**：
+  - 基础层固定渲染到 `params.width×params.height`，画布显示区按 letterbox 居中适配
+  - 鼠标交互：拖动主体 = 移动；四角手柄 = 等比缩放；四边手柄 = 单轴拉伸（非等比）；
+    顶部青色圆柄 = 绕中心自由旋转；双击元素 = 复位铺满画布
+  - 画布坐标 ↔ 输出坐标经 `displayAffine()`（逆变换）互换，全部命中测试在输出坐标系完成
+  - 悬停光标区分：移动/角缩放/边拉伸/旋转/默认
+- **GUI 新增 "Reset element transform" 按钮**（Style 组，全宽按钮行 `addButton` 布局支持）
+- **文档同步**：§4.5.6 渲染管线（两段式）、§10 参数表（transform.* 6 项）、
+  §11 控件映射（Reset 按钮）、`docs/GUI_GUIDE.md`（第 4 步"摆放频谱元素自由变换"）
+- **已知限制**：变换是"整元素仿射"，网格与坐标轴文字随元素一起旋转/拉伸（符合所见即所得）；
+  改变 W×H 后元素保持绝对像素位置，双击复位即可回正
+
+### v0.4.0 — 2026-09-03
+**变更（GUI 视频导出 + 编码器实测校准）**：
+- **GUI 新增 "Export Video" 一键按钮**（ParamPanel Export 区，玫红色）：
+  - 默认把 `params.encoder` 切到 `MovQtrle`（用户已在 Encoder 下拉选了则尊重）
+  - 自动生成输出文件名 `<导出目录>/<音频名>_vis.mov`（无需手填 `outputVideoPath`）
+  - 目录未设时先弹目录选择，选完回调继续导出（`exportKindPending` 标志）
+  - 导出期间与普通 Export 按钮一起禁用；完成消息显示 `Done: video -> <路径>`
+- **PngSequenceEncoder 编码器真正实现**（修复原 buildFfmpegArgs_ 写死 libx264→mp4 的遗留问题）：
+  - `Config` 新增 `encoder` 字段；`buildFfmpegArgs_` 按 encoder 分支：
+    - MOV：`qtrle + rgba`（**实测输出 pix_fmt=argb，无损 alpha**），音轨 `pcm_s16le`
+    - WebM：`libvpx-vp9 + crf 32 + b:v 0 + row-mt 1`（**实测不保留 alpha**，定位为小体积预览片），音轨 `libopus`
+    - PngSeq：跳过 ffmpeg（finalizeAndMux 提前返回）
+  - `finalizeAndMux` 增加空 `outputVideoPath` / 空 args 的防御性校验
+- **重要实测结论（写入本变更日志备查）**：`libvpx-vp9` 官方像素格式表声明支持 `yuva420p`，
+  但 gyan.dev 2026-01 ffmpeg 实测编码后 ffprobe 显示 `yuv420p`，alpha 被静默丢弃
+  （加 `-auto-alt-ref 0` 亦无效）。因此透明视频导出以 **MOV QTRLE** 为准。
+- **VisPipeline::run**：视频模式自动补全 `outputVideoPath`（`<outputDir>/<音频名>_vis.<mov|webm>`），结果键 `mp4_path/mp4_status` → `video_path/video_status`
+- **GUI Encoder 下拉**：调整为 `png-seq` / `mov-qtrle (alpha)` / `webm-vp9 (no alpha)`，避免误导
+- **新增 `docs/GUI_GUIDE.md`**：中文 GUI 使用说明（构建 / 布局 / 5 步上手 / 格式选择 / FAQ）
+- **待办勾销**：§7.2 编码器条目按实测结果校准（MOV alpha 完成；WebM alpha 记录为不可行）
+- **注意**：需要系统 `ffmpeg.exe`（hint / `FFMPEG_PATH` / PATH 任一命中）；推荐 gyan.dev 构建
+
+**追加（v0.4.0 同日）— 外部拖放修复 + Bar 样式参数**：
+- **外部文件拖放修复**：`MainComponent` 原先未实现 `FileDragAndDropTarget`，窗口内唯一的拖放目标
+  是 `SpectrumCanvas` 且 `isInterestedInFileDrag` 只对 `.wav/.aif/.aiff` 返回 true——
+  拖非音频文件时 `ComponentPeer::handleDragMove` 沿父链找不到任何目标，
+  全程 `DROPEFFECT_NONE`（禁止符），表现为"外部文件拖不进来"。修复：
+  - `SpectrumCanvas::isInterestedInFileDrag` 改为接受任意文件；非音频走新回调
+    `onNonAudioDropped` → `MainComponent` 弹警告框
+  - `MainComponent` 补实现 `FileDragAndDropTarget` 兜底（画布外的面板/按钮上方也能接住拖放）
+- **Bar 样式新增两参数**（全管线贯通：SpectrumParams → RenderParams →
+  VisPipeline::buildRenderParams / GUI buildRp → BarStyle 布局）：
+  - `barGapRatio`（0..1，默认 0.28）：柱间空隙占每带 slot 宽度的比例
+  - `barWidthRatio`（0.05..2，默认 1.0）：柱宽占 (slot - gap) 的比例，>1 时相邻柱重叠
+  - 柱改为在 slot 内**居中**；默认值组合与旧版（bar=0.72*slot）视觉完全一致
+  - JSON 键 `visual.barGapRatio` / `visual.barWidthRatio`；CLI `--set visual.barGapRatio=0.5`
+  - GUI 新滑块 **"Bar gap %"**（0..100）与 **"Bar width %"**（5..200），位于 Band count 下方
 
 ### v0.3.2 — 2026-09-02
 **变更（文档重写，纯 .md 变更，无代码修改）**：
@@ -748,6 +1060,7 @@ SpectrumParams.h 默认值
 
 ---
 
-*文档版本：v0.3.2  ·  最后更新：2026-09-02*
+*文档版本：v0.5.0  ·  最后更新：2026-09-06*
 *维护者：AudioVisExport 项目（GPL-3.0）*
 *协作规则：任何功能修改后，必须在 §12 变更日志追加一条，并在文档版本号处 bump。*
+*发布规则：每次小版本更新 → §12 条目 + `docs/RELEASE_NOTES.md` 更新公告 + commit/push + tag，缺一不可（见文档开头「发布规则」与 §12「发版流程」）。*
