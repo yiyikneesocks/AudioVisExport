@@ -662,6 +662,38 @@ A: 需指定 `-DAVX_USE_LOCAL_JUCE=ON`，或确保 `third_party/JUCE/` 存在。
 **Q: ffmpeg 子进程卡死？**
 A: 不能先 wait exit 再 drain stdout/stderr（会死锁）。PngSequenceEncoder::finalizeAndMux 用 200ms 轮询 + 增量读取。
 
+**Q: git push 报 `gnutls_handshake() failed` / TLS 中断？**
+A: 本机（WSL2 Ubuntu 22.04）固定问题：系统 git 用 gnutls 后端被网络环境干扰。**必须**用
+   conda 环境 `gitenv` 的 openssl 版 git + HTTP/1.1，失败重试 1~5 次：
+   ```bash
+   PATH=/home/azulores/miniconda3/envs/gitenv/bin:$PATH git -c http.version=HTTP/1.1 push origin main
+   ```
+   凭据已在 `~/.git-credentials`（0600）；token 轮换 / 凭据维护见 §12 发版流程注记。
+   协作 AI 严禁让用户把 token 明文贴进对话。
+
+---
+
+## 9.5 Git 推送速查（2026-09-07 实测固化）
+
+```bash
+# 推 main（失败就重跑，1~5 次内成功）
+PATH=/home/azulores/miniconda3/envs/gitenv/bin:$PATH git -c http.version=HTTP/1.1 push origin main
+
+# 推 tag
+PATH=/home/azulores/miniconda3/envs/gitenv/bin:$PATH git -c http.version=HTTP/1.1 push origin vX.Y.Z
+```
+
+| 组件 | 说明 |
+|---|---|
+| `gitenv` conda 环境 | git 2.55 openssl 后端（`~/miniconda3/envs/gitenv/`），绕开系统 gnutls TLS 中断 |
+| `http.version=HTTP/1.1` | HTTP/2 在该网络下也会被重置，HTTP/1.1 稳定 |
+| `~/.git-credentials` | PAT 凭据（0600，credential.helper=store）；remote URL 干净无 token |
+| PAT 权限 | fine-grained，仅 AudioVisExport 仓库 Contents 读写 |
+| 验证命令 | `... git -c http.version=HTTP/1.1 ls-remote --heads origin main`（只读，测凭据/网络） |
+
+**发 Release**：push tag 后用 GitHub API POST `/repos/yiyikneesocks/AudioVisExport/releases`
+（正文取 `docs/RELEASE_NOTES.md` 对应版本节），或网页 Releases → Draft a new release。
+
 ---
 
 ## 10. 完整可调参数表（~50 个，供 AI 快速查询）
@@ -814,11 +846,18 @@ SpectrumParams.h 默认值
 > 4. `git push origin main` + 打 tag `git tag vX.Y.Z && git push origin vX.Y.Z`
 > 5. 在 GitHub 用 `docs/RELEASE_NOTES.md` 内容创建 Release
 >
-> **（2026-09-06 v0.5.0 实测更新的 push 环境事实）**：
+> **（2026-09-06 v0.5.0 实测更新的 push 环境事实，实测验证 2026-09-07）**：
 > · 系统 git（gnutls 后端）连 GitHub 必 TLS 中断；须用 conda 环境 gitenv 的 openssl 版 git：
->   `PATH=/home/azulores/miniconda3/envs/gitenv/bin:$PATH git -c http.version=HTTP/1.1 push ...`
-> · TLS 偶发抖动，失败就重试（实测 1~5 次内成功）；凭据已存 `~/.git-credentials`（0600），
->   remote URL 保持干净形式（不含 token，防泄漏进仓库/截图）
+>   ```bash
+>   PATH=/home/azulores/miniconda3/envs/gitenv/bin:$PATH git -c http.version=HTTP/1.1 push origin main
+>   PATH=/home/azulores/miniconda3/envs/gitenv/bin:$PATH git -c http.version=HTTP/1.1 push origin vX.Y.Z
+>   ```
+> · TLS 偶发抖动（openssl 后端也偶发 "unexpected eof"），失败就重试 1~5 次；
+> · 凭据：GitHub PAT（fine-grained，仅本仓库 Contents 读写）存 `~/.git-credentials`
+>   （0600，credential.helper=store），remote URL 保持干净形式（不含 token，防泄漏）；
+>   **协作 AI 注意：不要要求用户把 token 贴进对话/命令行明文**——用上面的 credentials
+>   文件机制，token 轮换由用户在 GitHub 网页 Regenerate 后自行写入该文件；
+> · push 后发版 = GitHub API 创建 Release（正文取 `docs/RELEASE_NOTES.md` 对应版本节）。
 
 ### v0.5.0 — 2026-09-06
 **变更（Windows 原生交付 + UIPI 拖放修复 + GUI/样式增强；实施计划见 `docs/PLAN_v0.5.0.md`）**：
@@ -1064,7 +1103,7 @@ SpectrumParams.h 默认值
 
 ---
 
-*文档版本：v0.5.0  ·  最后更新：2026-09-06*
+*文档版本：v0.5.0  ·  最后更新：2026-09-07*
 *维护者：AudioVisExport 项目（GPL-3.0）*
 *协作规则：任何功能修改后，必须在 §12 变更日志追加一条，并在文档版本号处 bump。*
 *发布规则：每次小版本更新 → §12 条目 + `docs/RELEASE_NOTES.md` 更新公告 + commit/push + tag，缺一不可（见文档开头「发布规则」与 §12「发版流程」）。*
