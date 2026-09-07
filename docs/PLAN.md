@@ -17,7 +17,18 @@
 
 ---
 
-## 当前状态（2026-09-08）
+## 文档更新触发点（checklist，防遗漏）
+
+| 时刻 | 必须更新的文档 |
+|---|---|
+| 开版：计划获批 | `PLAN.md` 写入任务拆分与验证方案 |
+| 每完成一步 / 发现偏差 | `PLAN.md`「当前状态」+ 最后更新时间戳 |
+| 闸门前（本地 commit 时） | `HISTORY.md` §2 版本条目 + `RELEASE_NOTES.md` + `ARCHITECTURE.md` 版本映射表 + 代码版本号（CMake/CLI） |
+| 发版推送后（用户指令） | `PLAN.md` 摘要并入 `HISTORY.md` 后清空重写 |
+
+---
+
+## 当前状态（最后更新：2026-09-08）
 
 - **v0.5.2 已完整发版**（commit `0a92842`、tag `v0.5.2`、GitHub Release 已发）
 - 文档四拆重构完成（ARCHITECTURE / HISTORY / ROADMAP / PLAN），无代码变更
