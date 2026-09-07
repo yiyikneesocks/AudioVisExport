@@ -40,6 +40,7 @@ public:
     std::function<void (const juce::File&)> onNonAudioDropped;
     std::function<void (const juce::File&)> onImageDropped;   // 拖入图片 → 创建/选中图片图层
     std::function<void ()> onEmptyClicked;
+    std::function<void ()> onDeleteRequested;  // v0.5.2: 键盘 Delete/Backspace 删除选中图层
 
     // ---- 图层选择 API（ParamPanel / MainComponent 访问）----
     int  selectedImageIndex() const noexcept { return selectedImage; }  // -1 = 频谱元素
@@ -71,14 +72,22 @@ private:
     VisTransform       startTransform;  // 拖拽开始时变换副本
     std::array<juce::Point<float>, 4> currentCorners() const;  // 元素外框四角（输出坐标）
 
+    // ---- 对边锚定缩放（P2）----
+    juce::Point<float> dragAnchorElem;      // 锚点元素坐标（对角/对边中点）
+    juce::Point<float> dragHandleElem;      // 被拖点元素坐标（角/边中点）
+
     // ---- 交互 ----
     void mouseDown  (const juce::MouseEvent&) override;
     void mouseDrag  (const juce::MouseEvent&) override;
     void mouseUp    (const juce::MouseEvent&) override;
     void mouseMove  (const juce::MouseEvent&) override;
     void mouseDoubleClick (const juce::MouseEvent&) override;
+    bool keyPressed (const juce::KeyPress&) override;
 
     DragMode hitHandle (juce::Point<float> out) const;
+    DragMode hitHandleForCorners (const std::array<juce::Point<float>, 4>& c,
+                                  float elemW, float elemH,
+                                  juce::Point<float> out) const;
     void beginTransformIfNeeded();
     void updateHoverCursor (juce::Point<float> out);
     void paintOverlay (juce::Graphics& g);
@@ -90,7 +99,6 @@ private:
     VisTransform&       activeTransform();
     const VisTransform& activeTransform() const;
     std::pair<float, float> activeElementSize() const;   // 选中元素基础尺寸（输出坐标）
-    int  hitImage (juce::Point<float> out) const;                               // 点落在哪张图片上（顶层优先）
     juce::Image loadCached (const juce::String& path) const;
     static bool isProcessElevated();                                            // UIPI 诊断
 

@@ -75,23 +75,31 @@ void SpectrumCanvas::paint (juce::Graphics& g)
     // 合成频谱元素：输出坐标 × 元素变换 × 画布显示适配
     if (style != nullptr)
     {
-        // v0.5.1: 与导出 VisPipeline 同源分层合成：
-        //   下方图片组 → 频谱元素 → 上方图片组
-        paintImages (g, disp, /*aboveOnly=*/false);
+        // v0.5.2: 统一 z 序分层合成：
+        //   下方图片组 → 频谱元素（若存在）→ 上方图片组
+        const int N = (int) params.images.size();
+        const int k = juce::jlimit (0, N, params.spectrumIndex);
 
-        const auto total = buildVisAffine (params.transform).followedBy (disp);
-        g.saveState();
-        g.addTransform (total);
-        g.drawImageAt (base, 0, 0);
-        g.restoreState();
+        for (int i = 0; i < k; ++i)
+            paintImageLayer (g, disp, params.images[(size_t) i]);
 
-        paintImages (g, disp, /*aboveOnly=*/true);
+        if (params.spectrumPresent)
+        {
+            const auto total = buildVisAffine (params.transform).followedBy (disp);
+            g.saveState();
+            g.addTransform (total);
+            g.drawImageAt (base, 0, 0);
+            g.restoreState();
+        }
+
+        for (int i = k; i < N; ++i)
+            paintImageLayer (g, disp, params.images[(size_t) i]);
     }
     else
     {
         // 无样式（极端情况）：图片仍需可见
-        paintImages (g, disp, /*aboveOnly=*/false);
-        paintImages (g, disp, /*aboveOnly=*/true);
+        for (const auto& im : params.images)
+            paintImageLayer (g, disp, im);
     }
 
     // 变换手柄 UI（有音频时始终显示）
@@ -134,16 +142,18 @@ void SpectrumCanvas::paintImageLayer (juce::Graphics& g,
 void SpectrumCanvas::paintImages (juce::Graphics& g, const juce::AffineTransform& disp,
                                   bool aboveOnly)
 {
-    for (const auto& layer : params.images)
-    {
-        if (layer.aboveSpectrum != aboveOnly)
-            continue;
-        paintImageLayer (g, disp, layer);
-    }
+    const int N = (int) params.images.size();
+    const int k = juce::jlimit (0, N, params.spectrumIndex);
+    for (int i = aboveOnly ? k : 0; i < (aboveOnly ? N : k); ++i)
+        paintImageLayer (g, disp, params.images[(size_t) i]);
 }
 
 void SpectrumCanvas::paintOverlay (juce::Graphics& g)
 {
+    // 无选中元素或频谱已删除且无图片选中时不画
+    if (selectedImage < 0 && ! params.spectrumPresent)
+        return;
+
     const auto disp = displayAffine();
 
     auto cOut = currentCorners();                    // 输出坐标（已按选中元素的尺寸）
@@ -275,13 +285,16 @@ void SpectrumCanvas::beginTransformIfNeeded()
     params.transform.scaleY      = 1.0f;
     params.transform.rotationDeg = 0.0f;
 }
-SpectrumCanvas::DragMode SpectrumCanvas::hitHandle (juce::Point<float> out) const
+
+SpectrumCanvas::DragMode SpectrumCanvas::hitHandleForCorners (
+    const std::array<juce::Point<float>, 4>& c,
+    float elemW, float elemH,
+    juce::Point<float> out) const
 {
     const float s = displayScale();
     const float hitR = (s > 1e-3f) ? (kHitRadiusPx / s) : (kHitRadiusPx * 20.0f);
+    juce::ignoreUnused (elemW, elemH);
 
-    const auto c = currentCorners();
-    // 仿射保持中点 → 元素中心 = 四角平均（自动跟随选中元素）
     const auto centerOut = juce::Point<float> (
         (c[0].getX() + c[1].getX() + c[2].getX() + c[3].getX()) * 0.25f,
         (c[0].getY() + c[1].getY() + c[2].getY() + c[3].getY()) * 0.25f);
@@ -326,8 +339,31 @@ SpectrumCanvas::DragMode SpectrumCanvas::hitHandle (juce::Point<float> out) cons
 
     return DragMode::None;
 }
+
+SpectrumCanvas::DragMode SpectrumCanvas::hitHandle (juce::Point<float> out) const
+{
+    // 选中的是图片 → 命中测试针对该图片
+    if (selectedImage >= 0 && selectedImage < (int) params.images.size())
+    {
+        const auto& layer = params.images[(size_t) selectedImage];
+        const juce::Image img = loadCached (layer.path);
+        const float w = img.isValid() ? (float) img.getWidth()  : (float) params.width;
+        const float h = img.isValid() ? (float) img.getHeight() : (float) params.height;
+        const auto c = visCorners (layer.transform, w, h);
+        return hitHandleForCorners (c, w, h, out);
+    }
+
+    // 选中频谱（或默认）→ 命中测试针对频谱
+    if (! params.spectrumPresent)
+        return DragMode::None;
+    const auto c = currentCorners();
+    return hitHandleForCorners (c, (float) params.width, (float) params.height, out);
+}
+
 void SpectrumCanvas::mouseDown (const juce::MouseEvent& e)
 {
+    grabKeyboardFocus();   // 确保 Delete/Backspace 键能到达本组件
+
     if (! hasAudio)
     {
         if (onEmptyClicked)
@@ -337,35 +373,66 @@ void SpectrumCanvas::mouseDown (const juce::MouseEvent& e)
 
     const auto out = toOutput (e.position);
 
-    auto h = hitHandle (out);          // 针对当前选中元素的手柄
+    // 1) 先检查当前选中元素的手柄
+    auto h = hitHandle (out);
 
-    // 未命中手柄 → 元素拾取：图片顶层优先，其次频谱主体
+    // 2) 未命中手柄 → 统一 z 序元素拾取（从栈顶向下：上方图片 → 频谱 → 下方图片）
     if (h == DragMode::None)
     {
-        const int img = hitImage (out);
-        if (img >= 0)
+        const int N = (int) params.images.size();
+        const int k = juce::jlimit (0, N, params.spectrumIndex);
+        int picked = -2;                       // -2 = 无命中；-1 = 频谱；>=0 = 图片下标
+
+        auto tryImage = [&] (int i) -> bool
         {
-            if (selectedImage != img)
-            {
-                selectedImage = img;
-                activeTransform();     // 惰性初始化该图层变换
-            }
-            h = hitHandle (out);       // 对新选中元素重新命中手柄
-        }
-        else if (visContains (currentCorners(), out))
+            const juce::Image img = loadCached (params.images[(size_t) i].path);
+            const float w = img.isValid() ? (float) img.getWidth()  : (float) params.width;
+            const float h2 = img.isValid() ? (float) img.getHeight() : (float) params.height;
+            return visContains (visCorners (params.images[(size_t) i].transform, w, h2), out);
+        };
+
+        for (int i = N - 1; i >= k && picked == -2; --i)      // 上方图片组（顶→底）
+            if (tryImage (i)) picked = i;
+        if (picked == -2 && params.spectrumPresent
+            && visContains (visCorners (params.transform,
+                                        (float) params.width, (float) params.height), out))
+            picked = -1;                                       // 频谱
+        for (int i = k - 1; i >= 0 && picked == -2; --i)      // 下方图片组（顶→底）
+            if (tryImage (i)) picked = i;
+
+        if (picked == -2)
         {
-            selectedImage = -1;        // 频谱
-            h = hitHandle (out);
+            dragMode = DragMode::None;
+            repaint();
+            return;
         }
+
+        selectedImage = picked;
+        if (picked >= 0)
+            activeTransform();     // 惰性初始化该图层变换
+        else
+            beginTransformIfNeeded();
+        h = hitHandle (out);       // 对新选中元素重新命中手柄
     }
 
-    const bool bodyHit = (selectedImage >= 0)
-                       ? (hitImage (out) == selectedImage)
-                       : visContains (currentCorners(), out);
+    // 3) bodyHit 检查：当前选中元素是否包含点击点
+    bool bodyHit = false;
+    if (selectedImage >= 0 && selectedImage < (int) params.images.size())
+    {
+        const juce::Image img = loadCached (params.images[(size_t) selectedImage].path);
+        const float w = img.isValid() ? (float) img.getWidth()  : (float) params.width;
+        const float h2 = img.isValid() ? (float) img.getHeight() : (float) params.height;
+        bodyHit = visContains (visCorners (params.images[(size_t) selectedImage].transform, w, h2), out);
+    }
+    else if (selectedImage < 0 && params.spectrumPresent)
+    {
+        bodyHit = visContains (visCorners (params.transform,
+                                           (float) params.width, (float) params.height), out);
+    }
 
     if (h == DragMode::None && ! bodyHit)
     {
-        dragMode = DragMode::None;   // 点在外框外 → 不动作
+        dragMode = DragMode::None;
         repaint();
         return;
     }
@@ -375,6 +442,35 @@ void SpectrumCanvas::mouseDown (const juce::MouseEvent& e)
     dragStartOut   = out;
     startTransform = activeTransform();
     dragMode = (h != DragMode::None) ? h : DragMode::Move;
+
+    // 对边锚定缩放：记录锚点与被拖点（均为元素坐标）
+    if (dragMode >= DragMode::ScaleTL && dragMode <= DragMode::ScaleR)
+    {
+        const auto [ew, eh] = activeElementSize();
+        const auto mid = [] (juce::Point<float> a, juce::Point<float> b)
+        {
+            return juce::Point<float> ((a.getX() + b.getX()) * 0.5f,
+                                       (a.getY() + b.getY()) * 0.5f);
+        };
+
+        switch (dragMode)
+        {
+            case DragMode::ScaleTL: dragAnchorElem = { ew, eh }; dragHandleElem = { 0,  0 }; break;
+            case DragMode::ScaleTR: dragAnchorElem = { 0, eh };  dragHandleElem = { ew, 0 }; break;
+            case DragMode::ScaleBR: dragAnchorElem = { 0,  0 };  dragHandleElem = { ew, eh }; break;
+            case DragMode::ScaleBL: dragAnchorElem = { ew,  0 }; dragHandleElem = { 0,  eh }; break;
+            case DragMode::ScaleT:  dragAnchorElem = { ew * 0.5f, eh };
+                                    dragHandleElem = { ew * 0.5f, 0 }; break;
+            case DragMode::ScaleB:  dragAnchorElem = { ew * 0.5f, 0 };
+                                    dragHandleElem = { ew * 0.5f, eh }; break;
+            case DragMode::ScaleL:  dragAnchorElem = { ew, eh * 0.5f };
+                                    dragHandleElem = { 0,  eh * 0.5f }; break;
+            case DragMode::ScaleR:  dragAnchorElem = { 0,  eh * 0.5f };
+                                    dragHandleElem = { ew, eh * 0.5f }; break;
+            default: break;
+        }
+    }
+
     repaint();
 }
 
@@ -385,78 +481,147 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
 
     const auto out = toOutput (e.position);
     auto& t = activeTransform();
-    const auto [ew, eh] = activeElementSize();   // 选中元素基础尺寸（输出坐标）
-    // 变换前枢轴的输出坐标（缩放/旋转的不动点，对图片含 pos 偏移）
-    const auto startCenterOut = visTransformPoint (buildVisAffine (startTransform),
-                                                   juce::Point<float> (ew * 0.5f, eh * 0.5f));
+    const auto [ew, eh] = activeElementSize();
 
     switch (dragMode)
     {
     case DragMode::Move:
-        // v0.5.1: 移动走附加平移（图片/频谱统一；频谱 pos 初始 0，行为不变）
-        t.posX = startTransform.posX + (out.getX() - dragStartOut.getX());
-        t.posY = startTransform.posY + (out.getY() - dragStartOut.getY());
+    {
+        float dx = out.getX() - dragStartOut.getX();
+        float dy = out.getY() - dragStartOut.getY();
+
+        // P3: 移动吸附
+        if (params.snapEnabled)
+        {
+            const float dispS = displayScale();
+            const float thresh = (dispS > 1e-3f) ? (8.0f / dispS) : 2.0f;
+            const float newPosX = startTransform.posX + dx;
+            const float newPosY = startTransform.posY + dy;
+            const auto corners = visCorners (VisTransform { true, startTransform.centerX, startTransform.centerY,
+                                              startTransform.scaleX, startTransform.scaleY,
+                                              startTransform.rotationDeg, newPosX, newPosY },
+                                              ew, eh);
+            const float minX = juce::jmin (corners[0].getX(), corners[1].getX(),
+                                           corners[2].getX(), corners[3].getX());
+            const float maxX = juce::jmax (corners[0].getX(), corners[1].getX(),
+                                           corners[2].getX(), corners[3].getX());
+            const float minY = juce::jmin (corners[0].getY(), corners[1].getY(),
+                                           corners[2].getY(), corners[3].getY());
+            const float maxY = juce::jmax (corners[0].getY(), corners[1].getY(),
+                                           corners[2].getY(), corners[3].getY());
+            const float centerX = (minX + maxX) * 0.5f;
+            const float centerY = (minY + maxY) * 0.5f;
+
+            // 候选对齐位置（其他元素 AABB + 画布中心/边缘）
+            struct SnapVal { float pos; float target; };
+            std::vector<SnapVal> xCands, yCands;
+            xCands.push_back ({ centerX, (float) params.width * 0.5f });
+            yCands.push_back ({ centerY, (float) params.height * 0.5f });
+            xCands.push_back ({ minX, 0.0f });
+            xCands.push_back ({ maxX, (float) params.width });
+            yCands.push_back ({ minY, 0.0f });
+            yCands.push_back ({ maxY, (float) params.height });
+
+            const int N = (int) params.images.size();
+            const int k = juce::jlimit (0, N, params.spectrumIndex);
+            for (int i = 0; i < N; ++i)
+            {
+                if (i == selectedImage) continue;
+                const auto& im = params.images[(size_t) i];
+                const juce::Image img = loadCached (im.path);
+                const float iw = img.isValid() ? (float) img.getWidth()  : (float) params.width;
+                const float ih = img.isValid() ? (float) img.getHeight() : (float) params.height;
+                const auto ic = visCorners (im.transform, iw, ih);
+                const float ixMin = juce::jmin (ic[0].getX(), ic[1].getX(), ic[2].getX(), ic[3].getX());
+                const float ixMax = juce::jmax (ic[0].getX(), ic[1].getX(), ic[2].getX(), ic[3].getX());
+                const float iyMin = juce::jmin (ic[0].getY(), ic[1].getY(), ic[2].getY(), ic[3].getY());
+                const float iyMax = juce::jmax (ic[0].getY(), ic[1].getY(), ic[2].getY(), ic[3].getY());
+                const float icx = (ixMin + ixMax) * 0.5f;
+                const float icy = (iyMin + iyMax) * 0.5f;
+                xCands.push_back ({ centerX, icx });     xCands.push_back ({ centerX, ixMin });
+                xCands.push_back ({ centerX, ixMax });
+                yCands.push_back ({ centerY, icy });     yCands.push_back ({ centerY, iyMin });
+                yCands.push_back ({ centerY, iyMax });
+            }
+            // 频谱 AABB（若存在且非自身）
+            if (params.spectrumPresent && selectedImage < 0)
+            {
+                const auto sc = visCorners (params.transform,
+                                            (float) params.width, (float) params.height);
+                const float sxMin = juce::jmin (sc[0].getX(), sc[1].getX(), sc[2].getX(), sc[3].getX());
+                const float sxMax = juce::jmax (sc[0].getX(), sc[1].getX(), sc[2].getX(), sc[3].getX());
+                const float syMin = juce::jmin (sc[0].getY(), sc[1].getY(), sc[2].getY(), sc[3].getY());
+                const float syMax = juce::jmax (sc[0].getY(), sc[1].getY(), sc[2].getY(), sc[3].getY());
+                xCands.push_back ({ centerX, (sxMin + sxMax) * 0.5f });
+                xCands.push_back ({ centerX, sxMin });
+                xCands.push_back ({ centerX, sxMax });
+                yCands.push_back ({ centerY, (syMin + syMax) * 0.5f });
+                yCands.push_back ({ centerY, syMin });
+                yCands.push_back ({ centerY, syMax });
+            }
+
+            float bestDx = 0.0f, bestDy = 0.0f;
+            float bestDistX = thresh + 1.0f, bestDistY = thresh + 1.0f;
+            for (auto& sv : xCands)
+            {
+                const float d = std::abs (sv.pos - sv.target);
+                if (d < bestDistX && d < thresh) { bestDistX = d; bestDx = sv.target - sv.pos; }
+            }
+            for (auto& sv : yCands)
+            {
+                const float d = std::abs (sv.pos - sv.target);
+                if (d < bestDistY && d < thresh) { bestDistY = d; bestDy = sv.target - sv.pos; }
+            }
+            dx += bestDx;
+            dy += bestDy;
+        }
+
+        t.posX = startTransform.posX + dx;
+        t.posY = startTransform.posY + dy;
         break;
+    }
 
     case DragMode::Rotate:
     {
-        const float a0 = std::atan2 (dragStartOut.getY() - startCenterOut.getY(),
-                                     dragStartOut.getX() - startCenterOut.getX());
-        const float a1 = std::atan2 (out.getY() - startCenterOut.getY(),
-                                     out.getX() - startCenterOut.getX());
-        t.rotationDeg = startTransform.rotationDeg + juce::radiansToDegrees (a1 - a0);
+        const auto [ew2, eh2] = activeElementSize();
+        const auto cc = visTransformPoint (buildVisAffine (startTransform),
+                                           juce::Point<float> (ew2 * 0.5f, eh2 * 0.5f));
+        const float a0 = std::atan2 (dragStartOut.getY() - cc.getY(),
+                                     dragStartOut.getX() - cc.getX());
+        const float a1 = std::atan2 (out.getY() - cc.getY(),
+                                     out.getX() - cc.getX());
+        float rot = startTransform.rotationDeg + juce::radiansToDegrees (a1 - a0);
+
+        // P3: 旋转吸附（接近 90°×n 自动校正）
+        if (params.snapEnabled)
+        {
+            const float snapDeg = 3.0f;
+            const float n = std::round (rot / 90.0f);
+            const float snapped = n * 90.0f;
+            if (std::abs (rot - snapped) <= snapDeg)
+                rot = snapped;
+        }
+
+        t.rotationDeg = rot;
         break;
     }
 
     case DragMode::ScaleTL: case DragMode::ScaleTR:
     case DragMode::ScaleBR: case DragMode::ScaleBL:
     {
-        // 等比缩放：以枢轴为不动点，按拖动距离比例伸缩
-        const float d0 = dragStartOut.getDistanceFrom (startCenterOut);
-        const float d1 = out.getDistanceFrom (startCenterOut);
-        const float f = (d0 > 1e-3f) ? (d1 / d0) : 1.0f;
-        t.scaleX = juce::jlimit (0.05f, 50.0f, startTransform.scaleX * f);
-        t.scaleY = juce::jlimit (0.05f, 50.0f, startTransform.scaleY * f);
+        // P2: 对边锚定等比缩放——对角固定不动
+        t = applyAnchorScaled (startTransform, dragAnchorElem, dragHandleElem, out,
+                               VisScaleAxis::Both);
         break;
     }
 
     case DragMode::ScaleT: case DragMode::ScaleB:
     case DragMode::ScaleL: case DragMode::ScaleR:
     {
-        // 单轴拉伸：被拖动的边跟随鼠标，沿对应旋转轴投影求新缩放
-        const auto m  = buildVisAffine (startTransform);
-        const auto cc = startCenterOut;
-
-        juce::Point<float> axis;
+        // P2: 对边锚定单轴拉伸——对边中点固定不动（仅单轴缩放）
         const bool vertical = (dragMode == DragMode::ScaleT || dragMode == DragMode::ScaleB);
-        if (vertical)
-        {
-            const auto top = visTransformPoint (m, juce::Point<float> (ew * 0.5f, 0.0f));
-            axis = top - cc;
-        }
-        else
-        {
-            const auto right = visTransformPoint (m, juce::Point<float> (ew, eh * 0.5f));
-            axis = right - cc;
-        }
-        const float alen = std::sqrt (axis.getX() * axis.getX() + axis.getY() * axis.getY());
-        if (alen > 1e-4f)
-            axis = juce::Point<float> (axis.getX() / alen, axis.getY() / alen);
-
-        const float proj = (out.getX() - cc.getX()) * axis.getX()
-                         + (out.getY() - cc.getY()) * axis.getY();
-        const float half = (vertical ? eh : ew) * 0.5f;
-        float factor = 0.0f;
-        switch (dragMode)
-        {
-        case DragMode::ScaleT: factor =  proj / half; break;
-        case DragMode::ScaleB: factor = -proj / half; break;
-        case DragMode::ScaleR: factor =  proj / half; break;
-        case DragMode::ScaleL: factor = -proj / half; break;
-        default: break;
-        }
-        const float clamped = juce::jlimit (0.05f, 50.0f, factor);
-        if (vertical) t.scaleY = clamped; else t.scaleX = clamped;
+        t = applyAnchorScaled (startTransform, dragAnchorElem, dragHandleElem, out,
+                               vertical ? VisScaleAxis::OnlyY : VisScaleAxis::OnlyX);
         break;
     }
 
@@ -481,7 +646,16 @@ void SpectrumCanvas::mouseMove (const juce::MouseEvent& e)
 void SpectrumCanvas::updateHoverCursor (juce::Point<float> out)
 {
     const auto h = hitHandle (out);
-    const bool body = visContains (currentCorners(), out);
+    const bool body = (selectedImage >= 0 && selectedImage < (int) params.images.size())
+        ? [&]
+        {
+            const auto& layer = params.images[(size_t) selectedImage];
+            const juce::Image img = loadCached (layer.path);
+            const float w = img.isValid() ? (float) img.getWidth()  : (float) params.width;
+            const float h2 = img.isValid() ? (float) img.getHeight() : (float) params.height;
+            return visContains (visCorners (layer.transform, w, h2), out);
+        }()
+        : (params.spectrumPresent && visContains (currentCorners(), out));
 
     if (h == DragMode::Rotate)
         setMouseCursor (juce::MouseCursor::CrosshairCursor);
@@ -503,7 +677,7 @@ void SpectrumCanvas::mouseDoubleClick (const juce::MouseEvent&)
 {
     if (! hasAudio)
         return;
-    // 双击元素 → 复位变换：频谱回铺满画布（旧行为），图片回等比 contain 居中
+    // 双击元素 → 复位变换：频谱回铺满画布，图片回等比 contain 居中
     if (selectedImage >= 0 && selectedImage < (int) params.images.size())
     {
         const juce::Image img = loadCached (params.images[(size_t) selectedImage].path);
@@ -512,12 +686,23 @@ void SpectrumCanvas::mouseDoubleClick (const juce::MouseEvent&)
         params.images[(size_t) selectedImage].transform
             = makeContainTransform (ew, eh, (float) params.width, (float) params.height);
     }
-    else
+    else if (params.spectrumPresent)
     {
         activeTransform() = VisTransform {};
     }
     dragMode = DragMode::None;
     repaint();
+}
+
+bool SpectrumCanvas::keyPressed (const juce::KeyPress& key)
+{
+    if (key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey)
+    {
+        if (onDeleteRequested)
+            onDeleteRequested();
+        return true;
+    }
+    return false;
 }
 
 // =============================================================================
@@ -592,21 +777,6 @@ VisTransform& SpectrumCanvas::activeTransform()
     return params.transform;
 }
 
-int SpectrumCanvas::hitImage (juce::Point<float> out) const
-{
-    const auto [w0, h0] = activeElementSize();
-    juce::ignoreUnused (w0, h0);
-    for (int i = (int) params.images.size() - 1; i >= 0; --i)   // 顶层优先
-    {
-        const juce::Image img = loadCached (params.images[(size_t) i].path);
-        const float w = img.isValid() ? (float) img.getWidth()  : (float) params.width;
-        const float h = img.isValid() ? (float) img.getHeight() : (float) params.height;
-        if (visContains (visCorners (params.images[(size_t) i].transform, w, h), out))
-            return i;
-    }
-    return -1;
-}
-
 juce::Image SpectrumCanvas::loadCached (const juce::String& path) const
 {
     auto it = imageCache.find (path);
@@ -617,10 +787,6 @@ juce::Image SpectrumCanvas::loadCached (const juce::String& path) const
         imageCache[path] = img;
     return img;
 }
-
-// 图片图层绘制（与 VisPipeline::drawImageLayer 同一约定）：
-// 基础矩形 = 图片自然尺寸；identity 变换 = 等比 contain 居中。
-// （v0.5.1：旧版 paintImages 已被 paintImages(g,disp,aboveOnly) 分组渲染取代）
 
 // =============================================================================
 // 提权警告横幅 + 拖放 HUD（诊断"禁止符号"是系统 UIPI 还是程序问题）

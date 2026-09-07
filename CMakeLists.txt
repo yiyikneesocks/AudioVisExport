@@ -11,7 +11,7 @@
 # 协议：GPL-3.0
 # =============================================================================
 cmake_minimum_required(VERSION 3.22)
-project(AudioVisExport VERSION 0.5.1 LANGUAGES C CXX)
+project(AudioVisExport VERSION 0.5.2 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -140,7 +140,7 @@ endfunction()
 # =============================================================================
 juce_add_console_app(AudioVisExport
     PRODUCT_NAME "AudioVisExport"
-    VERSION "0.5.1"
+    VERSION "0.5.2"
     COMPANY_NAME "AudioVisExport"
 )
 
@@ -168,7 +168,7 @@ avx_configure_target(AudioVisExport)
 # =============================================================================
 juce_add_gui_app(AudioVisGUI
     PRODUCT_NAME "AudioVisGUI"
-    VERSION "0.5.1"
+    VERSION "0.5.2"
     COMPANY_NAME "AudioVisExport"
 )
 
@@ -193,3 +193,11 @@ target_link_libraries(AudioVisGUI PRIVATE
     juce::juce_gui_extra        # ColourSelector（颜色选择弹层）
 )
 avx_configure_target(AudioVisGUI)
+
+# =============================================================================
+# （临时）对边锚定缩放数学断言测试 — v0.5.2 验证用
+# =============================================================================
+add_executable(vis_anchor_test EXCLUDE_FROM_ALL
+    scripts/vis_anchor_test.cpp)
+target_compile_definitions(vis_anchor_test PRIVATE JUCE_USE_CURL=0)
+target_link_libraries(vis_anchor_test PRIVATE juce::juce_graphics juce::juce_events)

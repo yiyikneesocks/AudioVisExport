@@ -166,27 +166,31 @@ namespace
                 g.fillAll (rp.bg);
             }
 
-            // 图片图层：频谱下方组（列表顺序）→ 频谱元素 → 频谱上方组
-            for (const auto& layer : p.images)
-                if (! layer.aboveSpectrum)
-                    drawImageLayer (g, layer, p.width, p.height);
+            // 图片图层：频谱下方组 → 频谱元素（若存在）→ 频谱上方组
+            const int N = (int) p.images.size();
+            const int k = juce::jlimit (0, N, p.spectrumIndex);
+
+            for (int i = 0; i < k; ++i)
+                drawImageLayer (g, p.images[(size_t) i], p.width, p.height);
 
             // 频谱元素：未变换（set=false）直接铺满；已变换则按仿射合成
-            if (p.transform.set)
+            if (p.spectrumPresent)
             {
-                g.saveState();
-                g.addTransform (buildVisAffine (p.transform));
-                g.drawImageAt (base, 0, 0);
-                g.restoreState();
-            }
-            else
-            {
-                g.drawImageAt (base, 0, 0);
+                if (p.transform.set)
+                {
+                    g.saveState();
+                    g.addTransform (buildVisAffine (p.transform));
+                    g.drawImageAt (base, 0, 0);
+                    g.restoreState();
+                }
+                else
+                {
+                    g.drawImageAt (base, 0, 0);
+                }
             }
 
-            for (const auto& layer : p.images)
-                if (layer.aboveSpectrum)
-                    drawImageLayer (g, layer, p.width, p.height);
+            for (int i = k; i < N; ++i)
+                drawImageLayer (g, p.images[(size_t) i], p.width, p.height);
         }
         return img;
     }

@@ -236,14 +236,22 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     addRow ("Move up",   &layerUpBtn);
     addRow ("Move down", &layerDownBtn);
     addRow ("Remove",    &layerRemoveBtn);
+    addRow ("", &addSpectrumBtn);
+    addRow ("", &selectSpectrumBtn);
     addAndMakeVisible (addImageBtn);
     addAndMakeVisible (layerUpBtn);
     addAndMakeVisible (layerDownBtn);
     addAndMakeVisible (layerRemoveBtn);
-    addImageBtn.onClick    = [this] { if (onAddImageClicked) onAddImageClicked(); };
-    layerUpBtn.onClick     = [this] { if (onLayerUp)     onLayerUp(); };
-    layerDownBtn.onClick   = [this] { if (onLayerDown)   onLayerDown(); };
-    layerRemoveBtn.onClick = [this] { if (onLayerRemove) onLayerRemove(); };
+    addAndMakeVisible (addSpectrumBtn);
+    addAndMakeVisible (selectSpectrumBtn);
+    addImageBtn.onClick       = [this] { if (onAddImageClicked) onAddImageClicked(); };
+    layerUpBtn.onClick        = [this] { if (onLayerUp)     onLayerUp(); };
+    layerDownBtn.onClick      = [this] { if (onLayerDown)   onLayerDown(); };
+    layerRemoveBtn.onClick    = [this] { if (onLayerRemove) onLayerRemove(); };
+    addSpectrumBtn.onClick    = [this] { if (onAddSpectrumClicked) onAddSpectrumClicked(); };
+    selectSpectrumBtn.onClick = [this] { if (onSelectSpectrumClicked) onSelectSpectrumClicked(); };
+    addSpectrumBtn.setTooltip ("Restore deleted spectrum layer");
+    selectSpectrumBtn.setTooltip ("Select spectrum layer (useful when covered by images)");
     // v0.5.1: 图层上下（选中图片时与频谱的层级关系）
     addRow ("Above spec", &layerAboveToggle);
     addAndMakeVisible (layerAboveToggle);
@@ -255,6 +263,16 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
                [this] { return onReadLayerOpacity ? onReadLayerOpacity() : 100.0; },
                [this] (double v) { if (onWriteLayerOpacity) onWriteLayerOpacity (v); });
     layerOpacitySliderPtr = opacitySlider;
+
+    // v0.5.2: 吸附开关
+    addRow ("", &snapToggle);
+    addAndMakeVisible (snapToggle);
+    snapToggle.setToggleState (params.snapEnabled, juce::dontSendNotification);
+    snapToggle.onClick = [this]
+    {
+        params.snapEnabled = snapToggle.getToggleState();
+        notify();
+    };
 
     // ---- Export ----
     addHeader ("Export");
@@ -427,13 +445,19 @@ void ParamPanel::setExportEnabled (bool b)
     exportVideoBtn.setEnabled (b);
 }
 
-// v0.5.1: 画布选中元素变化时同步图层区控件（每 tick 由 MainComponent 调用）
-void ParamPanel::refreshLayerControls (bool imageSelected, bool above, double opacityPct)
+// v0.5.2: 画布选中元素变化时同步图层区控件（每 tick 由 MainComponent 调用）
+void ParamPanel::refreshLayerControls (bool imageSelected, bool above, double opacityPct,
+                                       bool spectrumPresent)
 {
     layerAboveToggle.setEnabled (imageSelected);
     layerAboveToggle.setToggleState (imageSelected && above, juce::dontSendNotification);
     if (layerOpacitySliderPtr != nullptr)
         layerOpacitySliderPtr->setValue (opacityPct, juce::dontSendNotification);
+    // 频谱按钮状态
+    addSpectrumBtn.setEnabled (! spectrumPresent);
+    selectSpectrumBtn.setEnabled (spectrumPresent);
+    // Remove 按钮：有选中元素或频谱在场时可用
+    layerRemoveBtn.setEnabled (imageSelected || spectrumPresent);
 }
 
 void ParamPanel::resized()

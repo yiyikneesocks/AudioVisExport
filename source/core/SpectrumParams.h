@@ -78,8 +78,11 @@ struct SpectrumParams
     // ---- 频谱元素变换（GUI 画布自由拖动/缩放/旋转；导出所见即所得）----
     VisTransform transform;            // set=false = 填满画布（旧行为）
 
-    // ---- 图片图层（列表顺序 = 叠放顺序；频谱夹在 below/above 两组之间）----
+    // ---- 图片图层（统一 z 序模型；频谱插在 images[spectrumIndex-1] 与 images[spectrumIndex] 之间）----
     std::vector<ImageLayer> images;
+    bool spectrumPresent = true;       // false = 频谱被删除（可一键恢复）
+    int  spectrumIndex   = 0;          // 统一 z 序中"频谱之下"的图片数量（上方 = N - spectrumIndex）
+    bool snapEnabled     = true;       // 吸附开关（旋转 + 移动）
 
     // ---- 输出 ----
     int width  = 1280;

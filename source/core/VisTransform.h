@@ -117,3 +117,54 @@ inline float visDistanceToSegment (juce::Point<float> a, juce::Point<float> b,
     const float dy = p.getY() - (a.getY() + aby * t);
     return std::sqrt (dx * dx + dy * dy);
 }
+
+// 对边锚定缩放轴模式：角柄 = 双轴等比；上下边 = 仅 Y；左右边 = 仅 X
+enum class VisScaleAxis { Both, OnlyX, OnlyY };
+
+// 对边锚定缩放：拖角/边时锚点（对角/对边中点）在输出坐标中固定不动。
+// startT = 拖拽开始时的变换；anchorElem / draggedElem = 锚点与被拖点的**元素坐标**；
+// outPoint = 当前鼠标输出坐标。枢轴 = startT.centerX/centerY（无需元素尺寸）。
+// 返回：缩放后的 VisTransform（pos 已补偿使锚点输出位置恒定）。
+inline VisTransform applyAnchorScaled (const VisTransform& startT,
+                                       juce::Point<float> anchorElem,
+                                       juce::Point<float> draggedElem,
+                                       juce::Point<float> outPoint,
+                                       VisScaleAxis axis)
+{
+    const auto startAffine = buildVisAffine (startT);
+    const auto anchorOut = visTransformPoint (startAffine, anchorElem);
+    const auto startDraggedOut = visTransformPoint (startAffine, draggedElem);
+
+    // 缩放系数 = 锚点到鼠标距离 / 锚点到被拖点起始距离
+    const float d0 = startDraggedOut.getDistanceFrom (anchorOut);
+    const float d1 = outPoint.getDistanceFrom (anchorOut);
+    const float f = (d0 > 1e-3f) ? (d1 / d0) : 1.0f;
+
+    VisTransform r = startT;
+    if (axis == VisScaleAxis::Both)
+    {
+        r.scaleX = juce::jlimit (0.05f, 50.0f, startT.scaleX * f);
+        r.scaleY = juce::jlimit (0.05f, 50.0f, startT.scaleY * f);
+    }
+    else if (axis == VisScaleAxis::OnlyX)
+        r.scaleX = juce::jlimit (0.05f, 50.0f, startT.scaleX * f);
+    else
+        r.scaleY = juce::jlimit (0.05f, 50.0f, startT.scaleY * f);
+
+    // 锚定补偿：buildVisAffine 的合成顺序 = S·R·(p−c) + c + pos
+    const float cx = startT.centerX;
+    const float cy = startT.centerY;
+    const float ax = anchorElem.getX() - cx;
+    const float ay = anchorElem.getY() - cy;
+    const float rad = juce::degreesToRadians (startT.rotationDeg);
+    const float cosA = std::cos (rad);
+    const float sinA = std::sin (rad);
+    const float rx = ax * cosA - ay * sinA;
+    const float ry = ax * sinA + ay * cosA;
+    const float anchorNewX = cx + r.scaleX * rx;
+    const float anchorNewY = cy + r.scaleY * ry;
+
+    r.posX = startT.posX + (anchorOut.getX() - anchorNewX);
+    r.posY = startT.posY + (anchorOut.getY() - anchorNewY);
+    return r;
+}

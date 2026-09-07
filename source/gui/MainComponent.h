@@ -96,8 +96,9 @@ private:
     void chooseAudioFile();
     void chooseImageFile();
     void addImageLayer (const juce::File& f);   // 拖入/选择图片 → 新建图片图层并选中
-    void moveSelectedLayer (int delta);         // +1 = 上移一层，-1 = 下移一层
-    void removeSelectedLayer();
+    void moveSelectedLayer (int delta);         // +1 = 上移一层，-1 = 下移一层（统一 z 序）
+    void removeSelectedLayer();                 // 统一删除（图片或频谱）
+    void addSpectrumLayer();                    // v0.5.2: 恢复被删除的频谱层
     void chooseExportDir (bool runAfter);
     void startExport();
     void startExportVideo();        // 一键视频导出（默认透明 WebM，自动生成输出路径）

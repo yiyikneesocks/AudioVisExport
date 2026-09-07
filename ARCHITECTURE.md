@@ -996,8 +996,47 @@ SpectrumParams.h 默认值
     版本号从 `v0.2.0` → `v0.4.2`（与文档一致）
   - `CMakeLists.txt`：`project(VERSION)` 与两个 target 的 `VERSION` 全部从 `0.2.0`/`0.3.0` 同步到 `0.4.2`
   - **已重新交付** Windows 测试包（`C:\Users\yiyikneesocks\Desktop\AudioVisExport_test\` 内二进制更新时间戳）
-- **验证记录**：双 target 构建零错误；CLI 四组对照（bar-line / 图层 on-off / 峰值帽 on-off）
-  全部通过；GUI 启动冒烟通过；CLI `--help` 中文版本号显示正确（UTF-8 修复验证）
+ - **验证记录**：双 target 构建零错误；CLI 四组对照（bar-line / 图层 on-off / 峰值帽 on-off）
+   全部通过；GUI 启动冒烟通过；CLI `--help` 中文版本号显示正确（UTF-8 修复验证）
+
+**追加（v0.5.2 — 2026-09-07，统一图层模型 + 对边锚定缩放 + 吸附）**：
+
+- **P1 统一图层模型——频谱成为真正的层**（用户反馈：加图片后频谱无法拖放/无法删除）：
+  - "无法拖放"根因：`mouseDown` 图片命中优先于频谱判定，任何覆盖点击点的图片抢走选中。
+    修复 = **统一 z 序拾取**：上方图片组（顶→底）→ 频谱 → 下方图片组，首个命中者胜出
+  - 新参数：`spectrumPresent`（false = 频谱真删除，渲染/命中/导出全部跳过，音乐不受影响）、
+    `spectrumIndex`（统一 z 序中频谱之下的图片数；images[0..k) 在频谱下，images[k..N) 在上）、
+    `snapEnabled`（吸附开关，默认开）
+  - `aboveSpectrum` 变为**派生值**（i >= spectrumIndex）；旧 JSON 读取时从标志推导 index，
+    新 JSON 两者都写（向后兼容）；per-image flag 仍在结构体中仅作缓存
+  - `moveSelectedLayer` 重写为统一 z 序：概念位置 = 图片 i<k?i:i+1 / 频谱 k；Up/Down 对
+    频谱与图片一视同仁（跨边界移动自动调整 spectrumIndex）；Above spec 开关等效跨边界移动
+  - 新图片默认插在频谱下方（insert at spectrumIndex 然后 ++index）
+  - **删除/恢复**：[Remove] 对选中元素通吃（图片=erase；频谱=置 spectrumPresent=false）；
+    键盘 **Delete/Backspace** = 等效点 [Remove]（画布 mouseDown grabKeyboardFocus +
+    keyPressed → onDeleteRequested 回调）；面板新增 [Add spectrum]（频谱在场时禁用，
+    恢复默认铺满变换）与 [Select spectrum]（频谱被盖住时选中它）按钮
+  - ParamPanel `refreshLayerControls` 扩展：Add/Select spectrum 按钮可用性随 spectrumPresent
+    同步；Remove 按钮在频谱在场时也可用
+- **P2 对边锚定缩放**（用户反馈：拖角中心不动反直觉，应"拖左下角=右上角不动"）：
+  - `VisTransform.h` 新增纯函数 `applyAnchorScaled(startT, anchorElem, draggedElem, outPoint, axis)`
+    + `enum VisScaleAxis { Both, OnlyX, OnlyY }`：角柄=对角锚定等比；边柄=对边中点锚定单轴
+  - 数学：新 scale = 锚距比 f；锚定补偿 pos = start.pos + anchorOut − (c + s′·R·(a−c))，
+    使锚点输出位置恒定（旋转保持）；枢轴 = startT.centerX/centerY（无需外部传尺寸）
+  - `mouseDown` 记录 `dragAnchorElem` / `dragHandleElem`（元素坐标）；mouseDrag 调纯函数
+  - 独立断言测试 `scripts/vis_anchor_test.cpp`（CMake target `vis_anchor_test`，EXCLUDE_FROM_ALL）：
+    11 项断言全过（contain 基线 / 锚点固定 / 距离比 / 被拖点跟手 / 旋转 30° 锚定 / 单轴仅 Y 变）
+- **P3 吸附系统**（`snapEnabled` 默认开 + 面板 "Snapping" 开关 + JSON + `--set spectrum.snapEnabled`）：
+  - 旋转吸附：结果角接近 90°×n（±3°）自动校正
+  - 移动吸附：被拖元素 AABB 的中心/四边 接近 其他元素 AABB 中心/边、画布中心/边缘
+    （≤8 屏幕像素）→ 自动校正；X/Y 独立取最近候选
+  - `--set spectrum.present / spectrum.index / spectrum.snapEnabled` CLI 覆盖三连
+- **验证记录**：Linux + Win 交叉双构建零错误；CLI 像素级五组对照全过——
+  (1) spectrumPresent=false：全画布无频谱像素（19200 红像素完整保留）
+  (2) k=0 图片在上：图片区纯红（频谱被盖）
+  (3) k=1 图片在下：图片区频谱透出 121px
+  (4) 旧 JSON（仅 aboveSpectrum 标志）与 k=1 渲染逐像素一致（兼容层验证）
+  (5) 锚定数学 11 断言 ALL PASS；其余 z 序/键盘/恢复按钮为 GUI 手测项
 
 **追加（v0.4.2 同日）— Windows → WSL Ubuntu 22.04 迁移（仅文档/环境，无功能代码变更）**：
 - **工程迁移**：`d:\Study 'n' Work\Program\AudioVisExport` → `~/CodingProgram/AudioVisualizer/AudioVisExport`；
@@ -1128,7 +1167,7 @@ SpectrumParams.h 默认值
 
 ---
 
-*文档版本：v0.5.1  ·  最后更新：2026-09-07*
+*文档版本：v0.5.2  ·  最后更新：2026-09-07*
 *维护者：AudioVisExport 项目（GPL-3.0）*
 *协作规则：任何功能修改后，必须在 §12 变更日志追加一条，并在文档版本号处 bump。*
 *发布规则：每次小版本更新 → §12 条目 + `docs/RELEASE_NOTES.md` 更新公告 + commit/push + tag，缺一不可（见文档开头「发布规则」与 §12「发版流程」）。*

@@ -28,6 +28,7 @@ MainComponent::MainComponent() : canvas (params), panel (params)
     };
     canvas.onImageDropped = [this] (const juce::File& f) { addImageLayer (f); };
     canvas.onEmptyClicked = [this] { chooseAudioFile(); };
+    canvas.onDeleteRequested = [this] { removeSelectedLayer(); };
     addAndMakeVisible (canvas);
 
     // 参数面板
@@ -67,6 +68,8 @@ MainComponent::MainComponent() : canvas (params), panel (params)
     panel.onLayerUp         = [this] { moveSelectedLayer (1);  };   // 上移一层（z 序靠顶）
     panel.onLayerDown       = [this] { moveSelectedLayer (-1); };   // 下移一层
     panel.onLayerRemove     = [this] { removeSelectedLayer(); };
+    panel.onAddSpectrumClicked  = [this] { addSpectrumLayer(); };
+    panel.onSelectSpectrumClicked = [this] { canvas.selectSpectrum(); canvas.repaint(); };
     panel.onReadLayerOpacity = [this]() -> double
     {
         const int sel = canvas.selectedImageIndex();
@@ -86,15 +89,42 @@ MainComponent::MainComponent() : canvas (params), panel (params)
     panel.onReadLayerAbove = [this]() -> bool
     {
         const int sel = canvas.selectedImageIndex();
-        return sel >= 0 && sel < (int) params.images.size()
-               && params.images[(size_t) sel].aboveSpectrum;
+        if (sel < 0 || sel >= (int) params.images.size())
+            return false;
+        return (int) sel >= params.spectrumIndex;
     };
     panel.onWriteLayerAbove = [this] (bool above)
     {
         const int sel = canvas.selectedImageIndex();
         if (sel < 0 || sel >= (int) params.images.size())
             return;
-        params.images[(size_t) sel].aboveSpectrum = above;
+        const int N = (int) params.images.size();
+        const int k = juce::jlimit (0, N, params.spectrumIndex);
+        const bool currentlyAbove = (sel >= k);
+        if (above == currentlyAbove)
+            return;
+
+        if (above && sel < k)
+        {
+            // 移到频谱上方：移除并插入到 spectrumIndex - 1 位置（从 below 到 above）
+            ImageLayer img = std::move (params.images[(size_t) sel]);
+            params.images.erase (params.images.begin() + sel);
+            params.images.insert (params.images.begin() + k - 1, std::move (img));
+            --params.spectrumIndex;
+            canvas.selectImage (k - 1);
+        }
+        else if (! above && sel >= k)
+        {
+            // 移到频谱下方：移除并插入到 spectrumIndex 位置
+            ImageLayer img = std::move (params.images[(size_t) sel]);
+            params.images.erase (params.images.begin() + sel);
+            params.images.insert (params.images.begin() + k, std::move (img));
+            ++params.spectrumIndex;
+            canvas.selectImage (k);
+        }
+
+        for (size_t i = 0; i < params.images.size(); ++i)
+            params.images[i].aboveSpectrum = ((int) i >= params.spectrumIndex);
         canvas.repaint();
     };
 
@@ -272,7 +302,7 @@ void MainComponent::timerCallback()
                                juce::dontSendNotification);
         }
 
-        // v0.5.1: 画布选中元素变化时同步图层区控件（Above spec 开关 / 透明度）
+        // v0.5.2: 画布选中元素变化时同步图层区控件（Above spec / 透明度 / 频谱按钮）
         const int selNow = canvas.selectedImageIndex();
         if (selNow != layerSelCache)
         {
@@ -281,7 +311,8 @@ void MainComponent::timerCallback()
             panel.refreshLayerControls (imgSel,
                                         imgSel && params.images[(size_t) selNow].aboveSpectrum,
                                         imgSel ? params.images[(size_t) selNow].opacity * 100.0
-                                               : 100.0);
+                                               : 100.0,
+                                        params.spectrumPresent);
         }
     }
 
@@ -628,35 +659,123 @@ void MainComponent::addImageLayer (const juce::File& f)
     ImageLayer layer;
     layer.path    = f.getFullPathName();
     layer.opacity = 1.0f;
-    // v0.5.1: 默认等比 contain 居中（不再是 identity 强制拉伸铺满）
     layer.transform = makeContainTransform ((float) juce::ImageCache::getFromFile (f).getWidth(),
                                             (float) juce::ImageCache::getFromFile (f).getHeight(),
                                             (float) params.width, (float) params.height);
-    params.images.push_back (layer);
-    canvas.selectImage ((int) params.images.size() - 1);
+    // v0.5.2: 插在频谱下方（spectrumIndex 位置）
+    const int N = (int) params.images.size();
+    const int k = juce::jlimit (0, N, params.spectrumIndex);
+    params.images.insert (params.images.begin() + k, layer);
+    ++params.spectrumIndex;
+    for (size_t i = 0; i < params.images.size(); ++i)
+        params.images[i].aboveSpectrum = ((int) i >= params.spectrumIndex);
+    canvas.selectImage (k);
     canvas.repaint();
 }
 
+// v0.5.2: 恢复被删除的频谱层（以默认变换重建，插入记住的 z 位置）
+void MainComponent::addSpectrumLayer()
+{
+    if (params.spectrumPresent)
+        return;
+    params.spectrumPresent = true;
+    params.transform = VisTransform {};   // 默认铺满画布
+    canvas.selectSpectrum();
+    canvas.repaint();
+}
+
+// v0.5.2: 统一 z 序移动（概念栈：images[0..k) → 频谱 → images[k..N)）
 void MainComponent::moveSelectedLayer (int delta)
 {
     const int sel = canvas.selectedImageIndex();
-    if (sel < 0)
-        return;                          // 频谱固定最底层
-    const int target = sel + delta;
-    if (target < 0 || target >= (int) params.images.size())
+    const int N = (int) params.images.size();
+    const int k = juce::jlimit (0, N, params.spectrumIndex);
+
+    // 概念位置：图片 i → i < k ? i : i+1；频谱 → k
+    auto imgPos = [k] (int i) { return i < k ? i : i + 1; };
+    int pos = (sel < 0) ? k : imgPos (sel);
+    int target = pos + delta;
+    if (target < 0 || target > N)
         return;
-    std::swap (params.images[(size_t) sel], params.images[(size_t) target]);
-    canvas.selectImage (target);
+
+    if (sel < 0)
+    {
+        // 频谱移动
+        if (target == k)
+            return;
+        if (target == k + 1 && k < N)
+        {
+            // 频谱上移：images[k] → images[k]
+            params.images[(size_t) k].aboveSpectrum = false;
+            ++params.spectrumIndex;
+        }
+        else if (target == k - 1 && k > 0)
+        {
+            // 频谱下移：images[k-1] → images[k-1]
+            --params.spectrumIndex;
+            params.images[(size_t) params.spectrumIndex].aboveSpectrum = true;
+        }
+    }
+    else
+    {
+        // 图片移动
+        if (target == k)
+        {
+            // 图片跨边界向上（从 below 到 above）：原 images[sel] → images[k]
+            if (sel < k && k < N)
+            {
+                ImageLayer img = std::move (params.images[(size_t) sel]);
+                params.images.erase (params.images.begin() + sel);
+                params.images.insert (params.images.begin() + k - 1, std::move (img));
+                --params.spectrumIndex;
+                canvas.selectImage (k - 1);
+            }
+            else if (sel >= k && k > 0)
+            {
+                // 图片跨边界向下（从 above 到 below）
+                ImageLayer img = std::move (params.images[(size_t) sel]);
+                params.images.erase (params.images.begin() + sel);
+                params.images.insert (params.images.begin() + k, std::move (img));
+                ++params.spectrumIndex;
+                canvas.selectImage (k);
+            }
+        }
+        else
+        {
+            // 同组内交换
+            int newIdx = (target < k) ? target : target - 1;
+            std::swap (params.images[(size_t) sel], params.images[(size_t) newIdx]);
+            canvas.selectImage (newIdx);
+        }
+    }
+
+    // 同步 aboveSpectrum 标记
+    for (size_t i = 0; i < params.images.size(); ++i)
+        params.images[i].aboveSpectrum = ((int) i >= params.spectrumIndex);
+
     canvas.repaint();
 }
 
 void MainComponent::removeSelectedLayer()
 {
     const int sel = canvas.selectedImageIndex();
-    if (sel < 0)
-        return;
-    params.images.erase (params.images.begin() + sel);
-    canvas.selectImage (params.images.empty() ? -1 : (int) params.images.size() - 1);
+    if (sel >= 0)
+    {
+        // 删除图片
+        params.images.erase (params.images.begin() + sel);
+        // 重算 spectrumIndex（图片数减少，钳制）
+        params.spectrumIndex = juce::jlimit (0, (int) params.images.size(), params.spectrumIndex);
+        for (size_t i = 0; i < params.images.size(); ++i)
+            params.images[i].aboveSpectrum = ((int) i >= params.spectrumIndex);
+        canvas.selectImage (params.images.empty() ? -1
+                            : juce::jmin (sel, (int) params.images.size() - 1));
+    }
+    else if (params.spectrumPresent)
+    {
+        // 删除频谱（真删除，音乐不受影响）
+        params.spectrumPresent = false;
+        canvas.selectImage (params.images.empty() ? -1 : (int) params.images.size() - 1);
+    }
     canvas.repaint();
 }
 

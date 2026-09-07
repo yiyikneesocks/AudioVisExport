@@ -227,6 +227,10 @@ juce::String SpectrumParams::toJson() const
     s << "    \"posX\": " << transform.posX << ",\n";
     s << "    \"posY\": " << transform.posY << "\n";
     s << "  },\n";
+    // 频谱层状态 + 统一 z 序
+    s << "  \"spectrumPresent\": " << (spectrumPresent ? "true" : "false") << ",\n";
+    s << "  \"spectrumIndex\": " << spectrumIndex << ",\n";
+    s << "  \"snapEnabled\": " << (snapEnabled ? "true" : "false") << ",\n";
     // output
     s << "  \"output\": {\n";
     s << "    \"width\": " << width << ",\n";
@@ -246,6 +250,7 @@ juce::String SpectrumParams::toJson() const
         for (size_t i = 0; i < images.size(); ++i)
         {
             const auto& im = images[i];
+            const bool above = ((int) i >= spectrumIndex);
             s << "    { \"path\": \"" << escJson (im.path) << "\","
               << " \"centerX\": " << im.transform.centerX
               << ", \"centerY\": " << im.transform.centerY
@@ -255,7 +260,7 @@ juce::String SpectrumParams::toJson() const
               << ", \"posX\": " << im.transform.posX
               << ", \"posY\": " << im.transform.posY
               << ", \"opacity\": " << im.opacity
-              << ", \"aboveSpectrum\": " << (im.aboveSpectrum ? "true" : "false")
+              << ", \"aboveSpectrum\": " << (above ? "true" : "false")
               << ", \"visible\": " << (im.visible ? "true" : "false") << " }"
               << (i + 1 < images.size() ? "," : "") << "\n";
         }
@@ -381,6 +386,10 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
         p.transform.posX        = getFloat (tf, "posX", p.transform.posX);
         p.transform.posY        = getFloat (tf, "posY", p.transform.posY);
     }
+    // 频谱层状态 + 统一 z 序
+    p.spectrumPresent = getBool (root, "spectrumPresent", true);
+    p.snapEnabled     = getBool (root, "snapEnabled", true);
+    p.spectrumIndex   = getInt  (root, "spectrumIndex", -1);  // -1 = 旧 JSON 无此字段
     auto out = root.getProperty ("output", juce::var());
     if (auto* o = out.getDynamicObject()) {
         p.width         = getInt (out, "width", p.width);
@@ -416,11 +425,23 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
             L.transform.posY       = (float) (double) item.getProperty ("posY", juce::var (0.0));
             L.transform.set        = true;
             L.opacity              = (float) (double) item.getProperty ("opacity", juce::var (1.0));
-            L.aboveSpectrum        = (bool) (bool) item.getProperty ("aboveSpectrum", juce::var (false));
             L.visible              = (bool) (bool) item.getProperty ("visible", juce::var (true));
             p.images.push_back (L);
         }
     }
+    // 统一 z 序：从旧 aboveSpectrum 标志推导 spectrumIndex（新 JSON 直接读 spectrumIndex）
+    if (p.spectrumIndex < 0)
+    {
+        p.spectrumIndex = 0;
+        for (size_t i = 0; i < p.images.size(); ++i)
+        {
+            if (! p.images[i].aboveSpectrum)
+                p.spectrumIndex = (int) i + 1;
+        }
+    }
+    // 从 spectrumIndex 派生每张图片的 aboveSpectrum（保持一致）
+    for (size_t i = 0; i < p.images.size(); ++i)
+        p.images[i].aboveSpectrum = ((int) i >= p.spectrumIndex);
     errorMessage.clear();
     return p;
 }
@@ -522,6 +543,10 @@ bool SpectrumParams::applyOverride (const juce::String& dottedKey,
     if      (key == "output.encoder")        { bool ok; auto v=parseEncoder(val, &ok); if(!ok) return setErr("invalid encoder"); encoder=v; return true; }
     // audio.*
     if      (key == "audio.path")            { audioPath = val; return true; }
+    // spectrum.*
+    if      (key == "spectrum.present")      { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); spectrumPresent=v; return true; }
+    if      (key == "spectrum.index")        { bool ok=true; int v=toInt(&ok);  if(!ok) return setErr("invalid int"); spectrumIndex=juce::jmax(0, v); return true; }
+    if      (key == "spectrum.snapEnabled")  { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); snapEnabled=v; return true; }
 
     errorMessage = "unknown key: " + key;
     return false;
