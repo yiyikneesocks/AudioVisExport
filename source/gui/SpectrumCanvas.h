@@ -21,6 +21,7 @@
 #include "../core/BandFrame.h"
 #include <array>
 #include <map>
+#include <vector>
 
 class SpectrumCanvas : public juce::Component,
                        private juce::FileDragAndDropTarget
@@ -76,6 +77,20 @@ private:
     juce::Point<float> dragAnchorElem;      // 锚点元素坐标（对角/对边中点）
     juce::Point<float> dragHandleElem;      // 被拖点元素坐标（角/边中点）
 
+    // ---- 吸附辅助线（v0.5.3，CAD 风格；仅 snapEnabled 且拖拽 Move 期间实时填充/清空）----
+    enum class SnapKind { Center, EdgeMid, Corner };
+    struct SnapGuide
+    {
+        bool vertical = false;              // true = X 吸附（竖线），false = Y 吸附（横线）
+        float coord = 0.0f;                 // 吸附到的输出坐标（竖线取 x，横线取 y）
+        juce::Point<float> dragPt;          // 被拖元素对齐点（输出坐标，coord 已对齐）
+        juce::Point<float> targetPt;        // 目标对齐点（输出坐标）
+        SnapKind dragKind = SnapKind::Center;
+        SnapKind targetKind = SnapKind::Center;
+        juce::String label;                 // 目标描述（"Canvas" / "Spectrum" / "Image N"）
+    };
+    std::vector<SnapGuide> activeSnapGuides;   // 拖拽期间有效，paintOverlay 读取；mouseUp 清空
+
     // ---- 交互 ----
     void mouseDown  (const juce::MouseEvent&) override;
     void mouseDrag  (const juce::MouseEvent&) override;
@@ -91,6 +106,7 @@ private:
     void beginTransformIfNeeded();
     void updateHoverCursor (juce::Point<float> out);
     void paintOverlay (juce::Graphics& g);
+    void paintSnapGuides (juce::Graphics& g, const juce::AffineTransform& disp);  // v0.5.3 吸附辅助线
     // 图片图层（v0.5.1 分组渲染：aboveOnly=false=频谱下方组，true=上方组）
     void paintImages (juce::Graphics& g, const juce::AffineTransform& disp, bool aboveOnly);
     void paintImageLayer (juce::Graphics& g, const juce::AffineTransform& disp,
@@ -106,6 +122,7 @@ private:
     juce::AffineTransform displayAffine() const;   // 输出坐标 → 画布坐标（contain 适配）
     juce::Point<float> toOutput (juce::Point<float> canvasPos) const;  // 反变换
     float displayScale() const;
+    juce::Rectangle<float> outputDisplayRect() const;   // v0.5.3: "范围内"输出画布的组件矩形
 
     // ---- 拖放 ----
     bool isInterestedInFileDrag (const juce::StringArray& files) override;

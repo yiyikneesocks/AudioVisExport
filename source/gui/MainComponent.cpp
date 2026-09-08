@@ -12,6 +12,11 @@ MainComponent::MainComponent() : canvas (params), panel (params)
 {
     formatManager.registerBasicFormats();
 
+    // v0.5.3: 让本组件可直接持有键盘焦点（配合 loadFile 末尾 grabKeyboardFocus，
+    //   修复"刚拖入音频立即按空格无效，须先点一下窗口才生效"——根因：无焦点时
+    //   JUCE 按键只投递到顶层窗口并向上走父链，永不进入作为子组件的本类）。
+    setWantsKeyboardFocus (true);
+
     // 音频设备（0 in / 2 out）
     deviceManager.initialiseWithDefaultDevices (0, 2);
     player.setSource (&transport);
@@ -95,28 +100,7 @@ MainComponent::MainComponent() : canvas (params), panel (params)
     addAndMakeVisible (panelViewport);
 
     // 传输条
-    playBtn.onClick = [this]
-    {
-        if (! hasAudio)
-            return;
-        if (transport.isPlaying())
-        {
-            pausedPos = transport.getCurrentPosition();
-            transport.stop();
-            playBtn.setButtonText ("Play");
-        }
-        else
-        {
-            if (pausedPos >= transport.getLengthInSeconds() - 0.05)
-            {
-                pausedPos = 0.0;
-                pendingSeekFrame = 0;
-            }
-            transport.setPosition (pausedPos);
-            transport.start();
-            playBtn.setButtonText ("Pause");
-        }
-    };
+    playBtn.onClick = [this] { togglePlayPause(); };
     addAndMakeVisible (playBtn);
 
     seekBar.setSliderStyle (juce::Slider::LinearHorizontal);
@@ -298,6 +282,30 @@ void MainComponent::timerCallback()
 // ---------------------------------------------------------------------------
 // 音频加载与引擎同步
 // ---------------------------------------------------------------------------
+// v0.5.3: 播放/暂停切换（Play 按钮与空格键共用同一逻辑）
+void MainComponent::togglePlayPause()
+{
+    if (! hasAudio)
+        return;
+    if (transport.isPlaying())
+    {
+        pausedPos = transport.getCurrentPosition();
+        transport.stop();
+        playBtn.setButtonText ("Play");
+    }
+    else
+    {
+        if (pausedPos >= transport.getLengthInSeconds() - 0.05)
+        {
+            pausedPos = 0.0;
+            pendingSeekFrame = 0;
+        }
+        transport.setPosition (pausedPos);
+        transport.start();
+        playBtn.setButtonText ("Pause");
+    }
+}
+
 // v0.5.0: 移除当前音频——停止播放、清空状态、画布回空拖放提示
 void MainComponent::ejectAudio()
 {
@@ -366,6 +374,9 @@ void MainComponent::loadFile (const juce::File& f)
     seekBar.setRange (0.0, 1.0, 0.001);
     seekBar.setValue (0.0, juce::dontSendNotification);
     canvas.repaint();
+
+    // v0.5.3: 拖入/载入音频后主动抓键盘焦点 → 空格/ Delete 立即生效，无需先点窗口
+    grabKeyboardFocus();
 }
 
 void MainComponent::chooseAudioFile()
@@ -727,6 +738,11 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
     if (key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey)
     {
         removeSelectedLayer();
+        return true;
+    }
+    if (key == juce::KeyPress::spaceKey)   // v0.5.3: 空格播放/暂停（方案 A：画布/滑块/无焦点时生效；
+    {                                     // 文本框内空格照常输入；某非播放按钮持焦时被其消费）
+        togglePlayPause();
         return true;
     }
     return false;

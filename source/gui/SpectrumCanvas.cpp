@@ -20,6 +20,12 @@ namespace
     constexpr float kRotHandleDistPx = 24.0f;   // 旋转圆柄到顶边距离（屏幕像素）
     constexpr float kHitRadiusPx     = 12.0f;   // 命中半径（屏幕像素）
     constexpr float kRotHitRadiusPx  =  14.0f;   // v0.5.3: 旋转圆柄圆心命中半径（屏幕像素）
+
+    // v0.5.3: 范围内 / 范围外视觉区分
+    const juce::Colour kOutsideBg        (0xff54545c);   // 范围外灰底
+    const juce::Colour kInsideBg         (0xff17171c);   // 棋盘关时范围内近黑底
+    const juce::Colour kBorderCol        (0xe6ffffff);   // 输出画布边界线（半透白）
+    constexpr float    kOutsideImageMul  = 0.35f;        // 范围外元素不透明度乘子（压在灰底上 → 变暗发灰）
 }
 
 SpectrumCanvas::SpectrumCanvas (SpectrumParams& paramsRef) : params (paramsRef)
@@ -35,30 +41,28 @@ SpectrumCanvas::SpectrumCanvas (SpectrumParams& paramsRef) : params (paramsRef)
 // =============================================================================
 void SpectrumCanvas::paint (juce::Graphics& g)
 {
-    g.fillAll (juce::Colour (0xff2b2b33));   // 深色画布底
-
+    // v0.5.3: 范围内 / 范围外 背景区分——范围外统一偏灰，范围内偏黑（或棋盘），
+    //   并描一圈边界线，让人一眼看出元素是否越出输出画布（导出仅取范围内，不受影响）。
     const int ow = juce::jmax (1, params.width);
     const int oh = juce::jmax (1, params.height);
     const auto disp = displayAffine();
-    const float s = displayScale();
 
-    // 显示区（letterbox 居中）
-    juce::Rectangle<float> dispRect;
-    {
-        auto b = getLocalBounds();
-        dispRect = juce::Rectangle<float> ((b.getWidth()  - ow * s) * 0.5f,
-                                           (b.getHeight() - oh * s) * 0.5f,
-                                           ow * s, oh * s);
-    }
+    g.fillAll (kOutsideBg);                       // 先整体铺"范围外"灰底
 
-    // 棋盘格（GUI 专用，仅显示区内；不影响导出）
+    const auto dispRect = outputDisplayRect();    // "范围内"输出画布矩形
     if (showCheckerboard)
     {
         g.saveState();
+        g.reduceClipRegion (dispRect.toNearestInt());
         g.addTransform (juce::AffineTransform::translation (dispRect.getX(), dispRect.getY()));
         drawCheckerboard (g, (int) juce::jmax (1.0f, dispRect.getWidth()),
                              (int) juce::jmax (1.0f, dispRect.getHeight()), 10);
         g.restoreState();
+    }
+    else
+    {
+        g.setColour (kInsideBg);                  // 棋盘关时范围内铺近黑底
+        g.fillRect (dispRect);
     }
 
     // 基础层：输出分辨率渲染频谱（与 VisPipeline::renderFrame 完全同源；不带变换）
@@ -90,8 +94,17 @@ void SpectrumCanvas::paint (juce::Graphics& g)
         if (params.spectrumPresent)
         {
             const auto total = buildVisAffine (params.transform).followedBy (disp);
+            // 范围内：原样
             g.saveState();
+            g.reduceClipRegion (dispRect.toNearestInt());
             g.addTransform (total);
+            g.drawImageAt (base, 0, 0);
+            g.restoreState();
+            // 范围外：频谱 base 大部分是透明的，只把"画到的部分"变暗压在灰底上（不整块涂灰，避免矩形灰框伪影）
+            g.saveState();
+            g.excludeClipRegion (dispRect.toNearestInt());
+            g.addTransform (total);
+            g.setOpacity (kOutsideImageMul);
             g.drawImageAt (base, 0, 0);
             g.restoreState();
         }
@@ -104,6 +117,16 @@ void SpectrumCanvas::paint (juce::Graphics& g)
         // 无样式（极端情况）：图片仍需可见
         for (const auto& im : params.images)
             paintImageLayer (g, disp, im);
+    }
+
+    // v0.5.3: 输出画布边界（"范围内/范围外"分界）。压在图之上、UI 手柄之下。
+    {
+        const auto dr = outputDisplayRect();
+        g.setColour (kBorderCol);
+        g.drawLine (juce::Line<float> (dr.getTopLeft(),    dr.getTopRight()),    1.0f);
+        g.drawLine (juce::Line<float> (dr.getBottomLeft(), dr.getBottomRight()),  1.0f);
+        g.drawLine (juce::Line<float> (dr.getTopLeft(),    dr.getBottomLeft()),   1.0f);
+        g.drawLine (juce::Line<float> (dr.getTopRight(),   dr.getBottomRight()),  1.0f);
     }
 
     // 变换手柄 UI（有音频时始终显示）
@@ -123,6 +146,7 @@ void SpectrumCanvas::paint (juce::Graphics& g)
 
 // 图片图层绘制（与 VisPipeline::drawImageLayer 同一约定）：
 // 基础矩形 = 图片自然尺寸；identity 变换 = 等比 contain 居中。
+// v0.5.3: 范围内正常绘制；范围外**变暗+灰衣**，明确告知"这部分不在导出画布内"。
 void SpectrumCanvas::paintImageLayer (juce::Graphics& g,
                                       const juce::AffineTransform& disp,
                                       const ImageLayer& layer)
@@ -136,9 +160,22 @@ void SpectrumCanvas::paintImageLayer (juce::Graphics& g,
         ? layer.transform
         : makeContainTransform (ew, eh, (float) params.width, (float) params.height);
     const auto total = buildVisAffine (tf).followedBy (disp);
+    const float op = juce::jlimit (0.0f, 1.0f, layer.opacity);
+    const auto dispRect = outputDisplayRect();
+
+    // 范围内：正常绘制
     g.saveState();
+    g.reduceClipRegion (dispRect.toNearestInt());
     g.addTransform (total);
-    g.setOpacity (juce::jlimit (0.0f, 1.0f, layer.opacity));
+    g.setOpacity (op);
+    g.drawImageAt (img, 0, 0);
+    g.restoreState();
+
+    // 范围外：降不透明压在灰底上 → 自然"变暗 + 发灰"（不对 alpha 图整块涂灰，避免透明角出现灰框）
+    g.saveState();
+    g.excludeClipRegion (dispRect.toNearestInt());
+    g.addTransform (total);
+    g.setOpacity (op * kOutsideImageMul);
     g.drawImageAt (img, 0, 0);
     g.restoreState();
 }
@@ -221,12 +258,78 @@ void SpectrumCanvas::paintOverlay (juce::Graphics& g)
         g.drawRect (hp.getX() - hh * 0.5f, hp.getY() - hh * 0.5f, hh, hh, 1.0f);
     }
 
+    // v0.5.3: 吸附辅助线 + 对齐点标记（画在手柄之上、提示文字之下）
+    paintSnapGuides (g, disp);
+
     // 操作提示
     g.setColour (juce::Colours::white.withAlpha (0.45f));
     g.setFont (juce::FontOptions (11.0f));
     g.drawText ("Drag to move - corners:scale - edges:stretch - top:rotate - double-click:reset",
                 juce::Rectangle<int> (0, getHeight() - 18, getWidth(), 18),
                 juce::Justification::centred);
+}
+
+// v0.5.3: CAD 风格吸附辅助线——竖/横虚线 + 两端特征点（中心圆/边中点菱形/角点方框）+ 目标标签
+void SpectrumCanvas::paintSnapGuides (juce::Graphics& g, const juce::AffineTransform& disp)
+{
+    if (activeSnapGuides.empty())
+        return;
+
+    const juce::Colour lineCol = juce::Colour (0xFFFF7A00);   // 高对比橙（区别于 cyan 旋转柄 / pink 缩放手柄）
+    const float dashes[] = { 6.0f, 4.0f };
+    const float r = 4.5f;
+
+    auto marker = [&] (juce::Point<float> p, SnapKind k)
+    {
+        juce::Path path;
+        if (k == SnapKind::Corner)
+        {
+            path.addRectangle (p.getX() - r, p.getY() - r, 2.0f * r, 2.0f * r);
+        }
+        else if (k == SnapKind::EdgeMid)
+        {
+            path.startNewSubPath (p.getX(), p.getY() - r);
+            path.lineTo (p.getX() + r, p.getY());
+            path.lineTo (p.getX(), p.getY() + r);
+            path.lineTo (p.getX() - r, p.getY());
+            path.closeSubPath();
+        }
+        else
+        {
+            path.addEllipse (p.getX() - r, p.getY() - r, 2.0f * r, 2.0f * r);
+        }
+        g.setColour (lineCol);
+        g.fillPath (path);
+        g.setColour (juce::Colours::white);
+        g.strokePath (path, juce::PathStrokeType (1.0f));
+    };
+
+    g.setColour (lineCol.withAlpha (0.9f));
+    for (const auto& gd : activeSnapGuides)
+    {
+        if (gd.vertical)
+        {
+            const float gx = visTransformPoint (disp, juce::Point<float> (gd.coord, 0.0f)).getX();
+            g.drawDashedLine (juce::Line<float> (gx, 0.0f, gx, (float) getHeight()),
+                              dashes, 2, 1.0f);
+        }
+        else
+        {
+            const float gy = visTransformPoint (disp, juce::Point<float> (0.0f, gd.coord)).getY();
+            g.drawDashedLine (juce::Line<float> (0.0f, gy, (float) getWidth(), gy),
+                              dashes, 2, 1.0f);
+        }
+        marker (visTransformPoint (disp, gd.dragPt),   gd.dragKind);
+        marker (visTransformPoint (disp, gd.targetPt), gd.targetKind);
+
+        // 目标点旁小标签
+        const auto tp = visTransformPoint (disp, gd.targetPt);
+        g.setColour (juce::Colours::white);
+        g.setFont (juce::FontOptions (10.5f));
+        g.drawText (gd.label,
+                    juce::Rectangle<float> (tp.getX() + 7.0f, tp.getY() - 8.0f, 90.0f, 16.0f),
+                    juce::Justification::left);
+    }
 }
 // =============================================================================
 // 坐标映射
@@ -253,6 +356,18 @@ juce::AffineTransform SpectrumCanvas::displayAffine() const
 juce::Point<float> SpectrumCanvas::toOutput (juce::Point<float> p) const
 {
     return visTransformPoint (displayAffine().inverted(), p);
+}
+
+// 输出分辨率画布（"范围内"）在组件坐标系下的矩形（letterbox 居中）
+juce::Rectangle<float> SpectrumCanvas::outputDisplayRect() const
+{
+    const int ow = juce::jmax (1, params.width);
+    const int oh = juce::jmax (1, params.height);
+    const float s = displayScale();
+    const auto b = getLocalBounds();
+    return { (b.getWidth()  - ow * s) * 0.5f,
+             (b.getHeight() - oh * s) * 0.5f,
+             ow * s, oh * s };
 }
 
 // 当前选中元素的基础尺寸（输出坐标）：频谱 = 输出画布；图片 = 图片自然尺寸
@@ -493,6 +608,8 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
     {
     case DragMode::Move:
     {
+        activeSnapGuides.clear();   // v0.5.3: 每次拖拽重算辅助线（关吸附 / 未命中 → 空）
+
         float dx = out.getX() - dragStartOut.getX();
         float dy = out.getY() - dragStartOut.getY();
 
@@ -507,80 +624,90 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
                                               startTransform.scaleX, startTransform.scaleY,
                                               startTransform.rotationDeg, newPosX, newPosY },
                                               ew, eh);
-            const float minX = juce::jmin (corners[0].getX(), corners[1].getX(),
-                                           corners[2].getX(), corners[3].getX());
-            const float maxX = juce::jmax (corners[0].getX(), corners[1].getX(),
-                                           corners[2].getX(), corners[3].getX());
-            const float minY = juce::jmin (corners[0].getY(), corners[1].getY(),
-                                           corners[2].getY(), corners[3].getY());
-            const float maxY = juce::jmax (corners[0].getY(), corners[1].getY(),
-                                           corners[2].getY(), corners[3].getY());
-            const float centerX = (minX + maxX) * 0.5f;
-            const float centerY = (minY + maxY) * 0.5f;
+            // —— 特征点吸附（v0.5.3 N2 增强）——
+            //   被拖元素与每个目标各取 9 个特征点（4 角 + 4 边中点 + 中心），逐点按 X/Y 轴对齐比较。
+            //   取代旧版"仅被拖中心对齐目标 + 边只对齐画布"：
+            //     · 修复两张图片边-边不吸附（旧版被拖侧只有中心参与目标比较）
+            //     · 辅助线/标记落在真实角点、边中点而非隐形 AABB（旋转元素 AABB 与视觉不符 → 旧"虚空"感）
+            const float cw = (float) params.width, ch = (float) params.height;
+            const bool draggingImage = (selectedImage >= 0);   // v0.5.3(B5): 画布特征点仅图片吸附
 
-            // 候选对齐位置（其他元素 AABB + 画布中心/边缘）
-            struct SnapVal { float pos; float target; };
-            const bool draggingImage = (selectedImage >= 0);   // v0.5.3: 画布中心/边缘吸附仅图片启用
-            std::vector<SnapVal> xCands, yCands;
-            if (draggingImage) {
-            xCands.push_back ({ centerX, (float) params.width * 0.5f });
-            yCands.push_back ({ centerY, (float) params.height * 0.5f });
-            xCands.push_back ({ minX, 0.0f });
-            xCands.push_back ({ maxX, (float) params.width });
-            yCands.push_back ({ minY, 0.0f });
-            yCands.push_back ({ maxY, (float) params.height });
-            }
+            struct Feat { juce::Point<float> p; SnapKind k; };
+            auto featOf = [] (const std::array<juce::Point<float>, 4>& c)
+            {
+                auto mid = [] (juce::Point<float> a, juce::Point<float> b)
+                { return juce::Point<float> ((a.getX() + b.getX()) * 0.5f, (a.getY() + b.getY()) * 0.5f); };
+                std::array<Feat, 9> f;
+                f[0] = { c[0], SnapKind::Corner }; f[1] = { c[1], SnapKind::Corner };
+                f[2] = { c[2], SnapKind::Corner }; f[3] = { c[3], SnapKind::Corner };
+                f[4] = { mid (c[0], c[1]), SnapKind::EdgeMid };   // top
+                f[5] = { mid (c[1], c[2]), SnapKind::EdgeMid };   // right
+                f[6] = { mid (c[2], c[3]), SnapKind::EdgeMid };   // bottom
+                f[7] = { mid (c[3], c[0]), SnapKind::EdgeMid };   // left
+                f[8] = { juce::Point<float> (
+                             (c[0].getX() + c[1].getX() + c[2].getX() + c[3].getX()) * 0.25f,
+                             (c[0].getY() + c[1].getY() + c[2].getY() + c[3].getY()) * 0.25f),
+                         SnapKind::Center };
+                return f;
+            };
+            const auto df = featOf (corners);   // 被拖元素 9 特征点（proposed 位置）
+
+            struct Cand { float dragVal, targetVal; juce::Point<float> dragPt, targetPt;
+                          SnapKind dragKind, targetKind; juce::String label; };
+            std::vector<Cand> xCands, yCands;   // xCands→竖线(X 吸附)  yCands→横线(Y 吸附)
+
+            auto addTarget = [&] (const std::array<juce::Point<float>, 4>& tc, const juce::String& label)
+            {
+                const auto tf = featOf (tc);
+                for (int d = 0; d < 9; ++d)
+                    for (int a = 0; a < 9; ++a)
+                    {
+                        if (std::abs (df[d].p.getX() - tf[a].p.getX()) < thresh)
+                            xCands.push_back ({ df[d].p.getX(), tf[a].p.getX(), df[d].p, tf[a].p, df[d].k, tf[a].k, label });
+                        if (std::abs (df[d].p.getY() - tf[a].p.getY()) < thresh)
+                            yCands.push_back ({ df[d].p.getY(), tf[a].p.getY(), df[d].p, tf[a].p, df[d].k, tf[a].k, label });
+                    }
+            };
+
+            if (draggingImage)
+                addTarget (std::array<juce::Point<float>, 4> { { {0, 0}, {cw, 0}, {cw, ch}, {0, ch} } }, "Canvas");
 
             const int N = (int) params.images.size();
-            const int k = juce::jlimit (0, N, params.spectrumIndex);
             for (int i = 0; i < N; ++i)
             {
                 if (i == selectedImage) continue;
                 const auto& im = params.images[(size_t) i];
                 const juce::Image img = loadCached (im.path);
-                const float iw = img.isValid() ? (float) img.getWidth()  : (float) params.width;
-                const float ih = img.isValid() ? (float) img.getHeight() : (float) params.height;
-                const auto ic = visCorners (im.transform, iw, ih);
-                const float ixMin = juce::jmin (ic[0].getX(), ic[1].getX(), ic[2].getX(), ic[3].getX());
-                const float ixMax = juce::jmax (ic[0].getX(), ic[1].getX(), ic[2].getX(), ic[3].getX());
-                const float iyMin = juce::jmin (ic[0].getY(), ic[1].getY(), ic[2].getY(), ic[3].getY());
-                const float iyMax = juce::jmax (ic[0].getY(), ic[1].getY(), ic[2].getY(), ic[3].getY());
-                const float icx = (ixMin + ixMax) * 0.5f;
-                const float icy = (iyMin + iyMax) * 0.5f;
-                xCands.push_back ({ centerX, icx });     xCands.push_back ({ centerX, ixMin });
-                xCands.push_back ({ centerX, ixMax });
-                yCands.push_back ({ centerY, icy });     yCands.push_back ({ centerY, iyMin });
-                yCands.push_back ({ centerY, iyMax });
+                const float iw = img.isValid() ? (float) img.getWidth()  : cw;
+                const float ih = img.isValid() ? (float) img.getHeight() : ch;
+                addTarget (visCorners (im.transform, iw, ih), "Image " + juce::String (i + 1));
             }
-            // 频谱 AABB（若存在且非自身）
-            if (params.spectrumPresent && selectedImage < 0)
-            {
-                const auto sc = visCorners (params.transform,
-                                            (float) params.width, (float) params.height);
-                const float sxMin = juce::jmin (sc[0].getX(), sc[1].getX(), sc[2].getX(), sc[3].getX());
-                const float sxMax = juce::jmax (sc[0].getX(), sc[1].getX(), sc[2].getX(), sc[3].getX());
-                const float syMin = juce::jmin (sc[0].getY(), sc[1].getY(), sc[2].getY(), sc[3].getY());
-                const float syMax = juce::jmax (sc[0].getY(), sc[1].getY(), sc[2].getY(), sc[3].getY());
-                xCands.push_back ({ centerX, (sxMin + sxMax) * 0.5f });
-                xCands.push_back ({ centerX, sxMin });
-                xCands.push_back ({ centerX, sxMax });
-                yCands.push_back ({ centerY, (syMin + syMax) * 0.5f });
-                yCands.push_back ({ centerY, syMin });
-                yCands.push_back ({ centerY, syMax });
-            }
+
+            // 频谱作为目标——仅拖图片时（N1：不把被拖频谱自身当目标，避免自我吸附抖动）
+            if (draggingImage && params.spectrumPresent)
+                addTarget (visCorners (params.transform, cw, ch), "Spectrum");
 
             float bestDx = 0.0f, bestDy = 0.0f;
             float bestDistX = thresh + 1.0f, bestDistY = thresh + 1.0f;
-            for (auto& sv : xCands)
-            {
-                const float d = std::abs (sv.pos - sv.target);
-                if (d < bestDistX && d < thresh) { bestDistX = d; bestDx = sv.target - sv.pos; }
-            }
-            for (auto& sv : yCands)
-            {
-                const float d = std::abs (sv.pos - sv.target);
-                if (d < bestDistY && d < thresh) { bestDistY = d; bestDy = sv.target - sv.pos; }
-            }
+            const Cand* winX = nullptr;
+            const Cand* winY = nullptr;
+            for (auto& c : xCands)   // 已在 push 时按 thresh 剪枝，这里只取最近
+            { const float dd = std::abs (c.dragVal - c.targetVal);
+              if (dd < bestDistX) { bestDistX = dd; bestDx = c.targetVal - c.dragVal; winX = &c; } }
+            for (auto& c : yCands)
+            { const float dd = std::abs (c.dragVal - c.targetVal);
+              if (dd < bestDistY) { bestDistY = dd; bestDy = c.targetVal - c.dragVal; winY = &c; } }
+
+            // 命中即生成辅助线；drag 端标记取吸附后真实位置（+bestD/bestDy）
+            if (winX != nullptr)
+                activeSnapGuides.push_back ({ true, winX->targetVal,
+                    { winX->dragPt.getX() + bestDx, winX->dragPt.getY() + bestDy }, winX->targetPt,
+                    winX->dragKind, winX->targetKind, winX->label });
+            if (winY != nullptr)
+                activeSnapGuides.push_back ({ false, winY->targetVal,
+                    { winY->dragPt.getX() + bestDx, winY->dragPt.getY() + bestDy }, winY->targetPt,
+                    winY->dragKind, winY->targetKind, winY->label });
+
             dx += bestDx;
             dy += bestDy;
         }
@@ -643,6 +770,7 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
 void SpectrumCanvas::mouseUp (const juce::MouseEvent&)
 {
     dragMode = DragMode::None;
+    activeSnapGuides.clear();   // v0.5.3: 松开鼠标清除吸附辅助线
     repaint();
 }
 

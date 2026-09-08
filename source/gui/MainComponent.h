@@ -35,7 +35,7 @@ public:
     ~MainComponent() override;
 
     void resized() override;
-    bool keyPressed (const juce::KeyPress&) override;  // v0.5.3: Delete/Backspace fallback
+    bool keyPressed (const juce::KeyPress&) override;  // v0.5.3: Delete/Backspace + Space fallback
 
 private:
     // ---- 音频 ----
@@ -94,6 +94,7 @@ private:
     int64_t currentTargetFrame() const;
     static SpectrumStyle::RenderParams buildRp (const SpectrumParams& p);
     void chooseAudioFile();
+    void togglePlayPause();                   // v0.5.3: 播放/暂停切换（Play 按钮 + 空格共用）
     void chooseImageFile();
     void addImageLayer (const juce::File& f);   // 拖入/选择图片 → 新建图片图层并选中
     void moveSelectedLayer (int delta);         // +1 = 上移一层，-1 = 下移一层（统一 z 序）
