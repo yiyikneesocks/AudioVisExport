@@ -19,10 +19,14 @@ namespace
     constexpr float kHandleScreenPx  = 7.0f;    // 手柄边长（屏幕像素）
     constexpr float kRotHandleDistPx = 24.0f;   // 旋转圆柄到顶边距离（屏幕像素）
     constexpr float kHitRadiusPx     = 12.0f;   // 命中半径（屏幕像素）
+    constexpr float kRotHitRadiusPx  =  14.0f;   // v0.5.3: 旋转圆柄圆心命中半径（屏幕像素）
 }
 
 SpectrumCanvas::SpectrumCanvas (SpectrumParams& paramsRef) : params (paramsRef)
 {
+    // v0.5.3: 确保画布能拿到键盘焦点（修复 Delete/Backspace 偶发无反应：
+    // 否则首次按键可能被窗口焦点消化）
+    setWantsKeyboardFocus (true);
     processElevated = isProcessElevated();   // UIPI 诊断：提权进程收不到资源管理器拖放
 }
 
@@ -198,9 +202,9 @@ void SpectrumCanvas::paintOverlay (juce::Graphics& g)
     g.setColour (juce::Colours::white.withAlpha (0.85f));
     g.drawLine (juce::Line<float> (topMid, rotHandle), 1.0f);
     g.setColour (juce::Colours::cyan);
-    g.fillEllipse (rotHandle.getX() - 5.0f, rotHandle.getY() - 5.0f, 10.0f, 10.0f);
+    g.fillEllipse (rotHandle.getX() - 7.0f, rotHandle.getY() - 7.0f, 14.0f, 14.0f);
     g.setColour (juce::Colours::white);
-    g.drawEllipse (rotHandle.getX() - 5.0f, rotHandle.getY() - 5.0f, 10.0f, 10.0f, 1.0f);
+    g.drawEllipse (rotHandle.getX() - 7.0f, rotHandle.getY() - 7.0f, 14.0f, 14.0f, 1.0f);
 
     // 8 个手柄
     const float hh = kHandleScreenPx;
@@ -315,7 +319,9 @@ SpectrumCanvas::DragMode SpectrumCanvas::hitHandleForCorners (
             const float nlen = std::sqrt (nlen2);
             norm = juce::Point<float> (norm.getX() / nlen, norm.getY() / nlen);
             const auto outer = topMid + norm * (kRotHandleDistPx / s);
-            if (visDistanceToSegment (topMid, outer, out) <= hitR)
+            // v0.5.3: 旋转柄命中仅限圆柄圆心——修复\"上边中点被旋转抢走\"
+            //   （此前是 topMid→圆柄整条线段且先于边柄判定；现上边中点完整归还 ScaleT）
+            if (outer.getDistanceFrom (out) <= (kRotHitRadiusPx / s))
                 return DragMode::Rotate;
         }
     }
@@ -514,13 +520,16 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
 
             // 候选对齐位置（其他元素 AABB + 画布中心/边缘）
             struct SnapVal { float pos; float target; };
+            const bool draggingImage = (selectedImage >= 0);   // v0.5.3: 画布中心/边缘吸附仅图片启用
             std::vector<SnapVal> xCands, yCands;
+            if (draggingImage) {
             xCands.push_back ({ centerX, (float) params.width * 0.5f });
             yCands.push_back ({ centerY, (float) params.height * 0.5f });
             xCands.push_back ({ minX, 0.0f });
             xCands.push_back ({ maxX, (float) params.width });
             yCands.push_back ({ minY, 0.0f });
             yCands.push_back ({ maxY, (float) params.height });
+            }
 
             const int N = (int) params.images.size();
             const int k = juce::jlimit (0, N, params.spectrumIndex);
@@ -610,7 +619,7 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
     case DragMode::ScaleBR: case DragMode::ScaleBL:
     {
         // P2: 对边锚定等比缩放——对角固定不动
-        t = applyAnchorScaled (startTransform, dragAnchorElem, dragHandleElem, out,
+        t = applyAnchorScaled (startTransform, dragAnchorElem, dragHandleElem, out, dragStartOut,
                                VisScaleAxis::Both);
         break;
     }
@@ -620,8 +629,7 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
     {
         // P2: 对边锚定单轴拉伸——对边中点固定不动（仅单轴缩放）
         const bool vertical = (dragMode == DragMode::ScaleT || dragMode == DragMode::ScaleB);
-        t = applyAnchorScaled (startTransform, dragAnchorElem, dragHandleElem, out,
-                               vertical ? VisScaleAxis::OnlyY : VisScaleAxis::OnlyX);
+        t = applyAnchorScaled (startTransform, dragAnchorElem, dragHandleElem, out, dragStartOut, vertical ? VisScaleAxis::OnlyY : VisScaleAxis::OnlyX);
         break;
     }
 

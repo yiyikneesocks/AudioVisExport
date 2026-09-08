@@ -119,6 +119,7 @@ private:
     std::vector<float> smoothedDb_;       // attack/release 后的 dB
     std::vector<float> peakDb_;           // 峰值保持 dB
     std::vector<float> peakHoldRemainMs_; // 滞留剩余 ms（已滞留时长）
+    std::vector<float> peakVelDbPerSec_;  // v0.5.3: 峰值帽当前下落速度 dB/s（二阶下落）
     mutable std::vector<float> bandLinScratch_;   // 临时：每带线性幅度（band mapping 输出）
     std::vector<float> blurScratch_;              // 临时：列间模糊 [1,2,1]/4
 

@@ -77,6 +77,12 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
                [this] (double v) { params.peakDecayDbPerSec = (float) v; notify(); });
     peakDecaySlider->setTooltip ("Peak-cap fall speed after the hold time elapses\n"
                                  "(dB per second). Higher = faster drop.");
+// v0.5.3: 峰值帽下落加速度（二阶下落：accel>0=越落越快，=0=匀速=旧行为）
+    auto* peakAccelSlider = addSlider ("Decay accel dB/s²", 0,  200, 10, 1.0,
+               [this] { return (double) params.peakDecayAccelDbPerSec2; },
+               [this] (double v) { params.peakDecayAccelDbPerSec2 = (float) v; notify(); });
+    peakAccelSlider->setTooltip ("Peak-cap fall acceleration after the hold time elapses\n"
+                                 "(dB/s².  0=drifting at constant speed (legacy); higher = accelerates falling).");
     addButton ("Reset element transform", [this]
     {
         params.transform = VisTransform {};
@@ -252,13 +258,6 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     selectSpectrumBtn.onClick = [this] { if (onSelectSpectrumClicked) onSelectSpectrumClicked(); };
     addSpectrumBtn.setTooltip ("Restore deleted spectrum layer");
     selectSpectrumBtn.setTooltip ("Select spectrum layer (useful when covered by images)");
-    // v0.5.1: 图层上下（选中图片时与频谱的层级关系）
-    addRow ("Above spec", &layerAboveToggle);
-    addAndMakeVisible (layerAboveToggle);
-    layerAboveToggle.onClick = [this]
-    {
-        if (onWriteLayerAbove) onWriteLayerAbove (layerAboveToggle.getToggleState());
-    };
     auto* opacitySlider = addSlider ("Img opacity %", 0, 100, 1, 1.0,
                [this] { return onReadLayerOpacity ? onReadLayerOpacity() : 100.0; },
                [this] (double v) { if (onWriteLayerOpacity) onWriteLayerOpacity (v); });
@@ -446,11 +445,9 @@ void ParamPanel::setExportEnabled (bool b)
 }
 
 // v0.5.2: 画布选中元素变化时同步图层区控件（每 tick 由 MainComponent 调用）
-void ParamPanel::refreshLayerControls (bool imageSelected, bool above, double opacityPct,
+void ParamPanel::refreshLayerControls (bool imageSelected, double opacityPct,
                                        bool spectrumPresent)
 {
-    layerAboveToggle.setEnabled (imageSelected);
-    layerAboveToggle.setToggleState (imageSelected && above, juce::dontSendNotification);
     if (layerOpacitySliderPtr != nullptr)
         layerOpacitySliderPtr->setValue (opacityPct, juce::dontSendNotification);
     // 频谱按钮状态

@@ -234,6 +234,78 @@
   (4) 旧 JSON（仅 aboveSpectrum 标志）与 k=1 渲染逐像素一致（兼容层验证）
   (5) 锚定数学 11 断言 ALL PASS；其余 z 序/键盘/恢复按钮为 GUI 手测项
 
+**追加（v0.5.3 — 2026-09-08，图层护栏清理 + 画布体验修复 + 锚定缩放数学修正 + 峰值帽二阶下落）**：
+
+- **B1 图层移动跨层护栏移除**：moveSelectedLayer 不再限制频谱/图片的跨边界移动路径
+  （v0.5.2 统一 z 序后护栏已无必要；z 序仍由 spectrumIndex 派生规则保证）
+- **B2 画布键盘焦点 + 每 tick 面板刷新**：
+  - SpectrumCanvas `setWantsKeyboardFocus(true)`：画布可持焦，Delete/Backspace 路径稳定
+  - MainComponent `keyPressed` 兜底：画布未持焦时 Delete/Backspace 同样触发 removeSelectedLayer
+    （画布自处理时返回 true，不双触发；文本输入控件自消费按键，无冲突）
+  - 移除 `layerSelCache` 守卫 → `refreshLayerControls` 每 tick 调用：Remove / Add spectrum
+    按钮可用性实时跟随"选中图片或频谱在场"（修复"没图时删不掉频谱"）
+- **B3 锚定缩放数学修正（旋转 + 单轴组合）**：
+  - `applyAnchorScaled` 新增第 5 参 `grabOut`（被拖点**起始**输出位置）；
+    锚定补偿由 R·S·a 修正为 **S·(R·a)**——与 buildVisAffine 的 `translation().rotated().scaled()`
+    复合序一致（`c + pos + S·R·(p−c)`）；scaleX==scaleY 或旋转 0 时公式等价（旧行为不变）
+- **B4 旋转柄命中仅限圆柄圆心**（`kRotHitRadiusPx = 14`）：修复"上边中点被旋转抢走"；
+  绘制圆柄直径同步 10px → 14px，视觉与命中区一致
+- **B5 吸附作用域限定 `draggingImage`**：频谱拖动不再触发画布/边缘吸附
+- **F1 峰值帽二阶下落**：新参 `peakDecayAccelDbPerSec2`（0 = 旧一阶行为；>0 峰值下落随时间加速），
+  Params/Core/ParamPanel/JSON 全链路 + `--set time.peakDecayAccelDbPerSec2` CLI 覆盖
+- **测试**：`scripts/vis_anchor_test.cpp` 扩至 16 项断言（新增 旋转30°+单轴锚定补偿 3 项、
+  grab 基线 2 项）ALL PASS；修正迁移期 4 处以鼠标当前位置冒充 grabOut 的旧断言
+  （正确语义 = 被拖点起始输出位置）
+- **验证记录**：Linux 全量构建零错误；锚定测试 16/16 ALL PASS；
+  B1–B5 / F1 GUI 手测项见交付清单
+- **进度状态（2026-09-08，发版前快照）**：
+  - ✅ **代码全部完成**：B1–B5 + F1 + 附加加固（MainComponent `keyPressed` 兜底、
+    旋转柄绘制直径 10px → 14px 与命中区一致、移除死代码 `layerSelCache` 成员）；
+    Linux 全量构建零错误 + `vis_anchor_test` 16/16 ALL PASS
+  - ✅ **Windows 交叉编译部署完成**：`bash scripts/build_win_cross.sh --deploy` →
+    `C:\Users\yiyikneesocks\Desktop\AudioVisExport_test\`
+    （AudioVisGUI.exe / AudioVisExport.exe，部署于 2026-09-08 15:45，
+    CLI 版本串确认 "AudioVisExport v0.5.3"；测试目录其余文件未动）
+  - ⏳ **用户 GUI 手测未做**：B1–B5 / F1 清单已交付；重点 B3——旋转 30° 后拖边柄，
+    对边应钉死不漂移（旧版旋转+单轴时对边漂移，本次核心数学修复）
+  - ⏳ **暂未发版**：全部改动在工作区，未 commit / 未打 tag，等手测通过后一起发；
+    发版前还欠：RELEASE_NOTES.md v0.5.3 节、ARCHITECTURE.md 版本映射表行 + 页脚版本号、
+    PLAN.md 当前状态更新
+  - 📌 **发版后须回改本文档**：将本"进度状态"块更新为已发版（补 commit hash /
+    tag `v0.5.3` / 发版日期，删除⏳等待项），并完成上述欠账文档
+    （checklist 见 docs/PLAN.md「文档更新触发点」）
+
+**追加（v0.5.3 续 — 2026-09-09，B3 真因复核 + B6 旋转拉伸平行四边形 + Above spectrum UI 移除）**：
+
+> 说明：v0.5.3 自始未 commit / 未 tag（最后发版仍是 v0.5.2 `0a92842`）。下列改动与
+> 上面 v0.5.3 主体块一并纳入同一未发版工作区，本条为续。
+
+- **B3 真因复核（订正上文 B3 描述）**：上条把 B3 记为"补偿由 R·S·a 改为 S·(R·a)"——
+  经复核该改动对 `pos≠0` 漂移**无效**（v0.5.2 起本就是 S·R·a，属空操作）。真正根因是
+  `applyAnchorScaled` 把 `startT.pos` 多算一次：`pos = startT.pos + (anchorOut − anchorNew)`
+  → 最终锚点 = `anchorOut + startT.pos`，故 pos≠0 时"钉死的对角"瞬移 |pos|（被 pos=0 测试用例掩盖）。
+  - **修复**：`r.posX = anchorOut.getX() - anchorNewX`（去掉 `startT.pos +`）。
+  - 测试新增**情形 7/8**（pos=40,10 锚点固定 + f=1 时 pos 不变），旧代码漂移 41px FAIL，修复后 PASS。
+- **B6 旋转后拉伸变平行四边形**：`buildVisAffine` 原合成序 **S·R**（先旋转后缩放）→ 缩放作用在
+  **画布轴**；当旋转 θ≠0 且 scaleX≠scaleY 时，正方形四角不再垂直（相邻边点积 =(Sy²−Sx²)·sinθ·cosθ≠0），
+  渲染成平行四边形。
+  - **修复**：`buildVisAffine` 改合成序为 **R·S**（先沿元素本地轴缩放，再旋转）→ 恒保直角；
+    `applyAnchorScaled` 锚点补偿公式同步改 `c + R·S₁·(a−c)`；边缘中点拖拽的缩放系数 f 由"画布距离比"
+    改为"位移在本地轴方向上的**投影比**"（角拖 Both 的距离比在任意旋转下已正确，未改）。
+  - 测试新增**情形 9**（旋转37°+非等比，拖角/拖边后**四角正交性断言** + 锚点不动 + 被拖点跟鼠标）、
+    **情形 10**（θ=0 时 R·S 与旧 S·R 逐点等价 → 频谱/导出零回归）。共 28/28 ALL PASS。
+- **Above spectrum UI 按钮移除**：删 `ParamPanel` 的 "Above spectrum" ToggleButton +
+  `onReadLayerAbove`/`onWriteLayerAbove` 回调 + `MainComponent` 对应接线（4 处）；
+  `refreshLayerControls` 签名去掉 `above` 形参。**底层 `aboveSpectrum` 标志、JSON 兼容、
+  跨层 Up/Down 逻辑（B1）全部保留**——层级仍由数组顺序 + spectrumIndex 派生。
+- **验证记录**：Linux 主程序 + GUI 全量构建零错误；`vis_anchor_test` 28/28 ALL PASS；
+  Windows 交叉编译 32/32 部署至 `AudioVisExport_test\`（CLI 版本串 v0.5.3）。
+- **发现待办（未修，见 PLAN.md）**：仅频谱在场拖动频谱时"手感卡顿"——
+  `mouseDrag` 的 Move 吸附块把**被拖频谱自身的实时 corners** 当作吸附候选
+  （`SpectrumCanvas.cpp:556` 条件 `selectedImage < 0` 恰为"自身"），导致自我吸附抖动。
+  计划连同"吸附辅助线/对齐点提示（CAD 风格）"一起在下一版处理。
+
+
 **追加（v0.4.2 同日）— Windows → WSL Ubuntu 22.04 迁移（仅文档/环境，无功能代码变更）**：
 - **工程迁移**：`d:\Study 'n' Work\Program\AudioVisExport` → `~/CodingProgram/AudioVisualizer/AudioVisExport`；
   Y2Kmeter 现位于同级 `~/CodingProgram/AudioVisualizer/Y2Kmeter`

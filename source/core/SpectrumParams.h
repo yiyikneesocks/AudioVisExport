@@ -49,6 +49,7 @@ struct SpectrumParams
     float  releaseMs          = 200.0f;   // Y2K alpha=0.12 @30fps 反推 ≈ 250ms，取 200
     float  peakHoldMs         = 3500.0f;  // Y2K 原值
     float  peakDecayDbPerSec  = 12.0f;    // Y2K 原值
+    float  peakDecayAccelDbPerSec2 = 0.0f;  // v0.5.3: 峰值帽下落加速度 dB/s²（0=匀速=旧行为）
     float  temporalSmoothing  = 0.5f;     // 0..1 列间模糊强度（0=关闭）
 
     // ---- 动态强度（y 轴非线性）----

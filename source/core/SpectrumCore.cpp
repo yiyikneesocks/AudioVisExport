@@ -90,6 +90,7 @@ SpectrumCore::SpectrumCore (const SpectrumParams& params)
     smoothedDb_.assign (params_.bandCount, params_.minDb);
     peakDb_.assign (params_.bandCount, params_.minDb);
     peakHoldRemainMs_.assign (params_.bandCount, 0.0f);
+    peakVelDbPerSec_.assign (params_.bandCount, 0.0f);   // v0.5.3: 峰值帽下落速度
     bandLinScratch_.assign (params_.bandCount, 0.0f);
     blurScratch_.assign (params_.bandCount, params_.minDb);
 }
@@ -127,6 +128,7 @@ void SpectrumCore::reset()
     std::fill (smoothedDb_.begin(), smoothedDb_.end(), params_.minDb);
     std::fill (peakDb_.begin(), peakDb_.end(), params_.minDb);
     std::fill (peakHoldRemainMs_.begin(), peakHoldRemainMs_.end(), 0.0f);
+    std::fill (peakVelDbPerSec_.begin(), peakVelDbPerSec_.end(), 0.0f);   // v0.5.3
     fifoIdxHi_ = 0;
     fifoIdxLo_ = 0;
 }
@@ -385,15 +387,22 @@ void SpectrumCore::getBandFrame (BandFrame& out)
     //    peaksFrozen_（GUI 暂停）：跳过 hold 计时与衰减，峰值帽原地保持；
     //    新峰跟随分支保留（seek 快进时峰值仍能建立）
     {
-        const float fallDelta = params_.peakDecayDbPerSec * (dtMs / 1000.0f);
+        // v0.5.3: 峰值帽二阶下落（初速度 peakDecayDbPerSec + 加速度 peakDecayAccelDbPerSec2）。
+        //   peakVelDbPerSec_[i] = 当前下落速度；accel == 0 时退化为原匀速行为（v 恒等于初速度）。
+        //   accel > 0 = 越落越快；accel < 0 = 减速下落（可落停）。peaksFrozen 时速度也冻结。
+        const float dtSec = static_cast<float> (dt);
+        const float accel = params_.peakDecayAccelDbPerSec2;
         for (int i = 0; i < N; ++i) {
             if (smoothedDb_[i] > peakDb_[i]) {
                 peakDb_[i] = smoothedDb_[i];
                 peakHoldRemainMs_[i] = 0.0f;
+                peakVelDbPerSec_[i] = params_.peakDecayDbPerSec;   // 新峰：速度重置为初速度
             } else if (! peaksFrozen_) {
                 peakHoldRemainMs_[i] += dtMs;
-                if (peakHoldRemainMs_[i] > params_.peakHoldMs)
-                    peakDb_[i] -= fallDelta;
+                if (peakHoldRemainMs_[i] > params_.peakHoldMs) {
+                    peakVelDbPerSec_[i] += accel * dtSec;          // v += a·dt
+                    peakDb_[i] -= peakVelDbPerSec_[i] * dtSec;     // db -= v·dt
+                }
             }
             peakDb_[i] = juce::jmax (params_.minDb, peakDb_[i]);
         }

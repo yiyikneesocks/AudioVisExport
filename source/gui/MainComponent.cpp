@@ -86,47 +86,8 @@ MainComponent::MainComponent() : canvas (params), panel (params)
         canvas.repaint();
     };
     // v0.5.1: 图层上下（aboveSpectrum）
-    panel.onReadLayerAbove = [this]() -> bool
-    {
-        const int sel = canvas.selectedImageIndex();
-        if (sel < 0 || sel >= (int) params.images.size())
-            return false;
-        return (int) sel >= params.spectrumIndex;
-    };
-    panel.onWriteLayerAbove = [this] (bool above)
-    {
-        const int sel = canvas.selectedImageIndex();
-        if (sel < 0 || sel >= (int) params.images.size())
-            return;
-        const int N = (int) params.images.size();
-        const int k = juce::jlimit (0, N, params.spectrumIndex);
-        const bool currentlyAbove = (sel >= k);
-        if (above == currentlyAbove)
-            return;
-
-        if (above && sel < k)
-        {
-            // 移到频谱上方：移除并插入到 spectrumIndex - 1 位置（从 below 到 above）
-            ImageLayer img = std::move (params.images[(size_t) sel]);
-            params.images.erase (params.images.begin() + sel);
-            params.images.insert (params.images.begin() + k - 1, std::move (img));
-            --params.spectrumIndex;
-            canvas.selectImage (k - 1);
-        }
-        else if (! above && sel >= k)
-        {
-            // 移到频谱下方：移除并插入到 spectrumIndex 位置
-            ImageLayer img = std::move (params.images[(size_t) sel]);
-            params.images.erase (params.images.begin() + sel);
-            params.images.insert (params.images.begin() + k, std::move (img));
-            ++params.spectrumIndex;
-            canvas.selectImage (k);
-        }
-
-        for (size_t i = 0; i < params.images.size(); ++i)
-            params.images[i].aboveSpectrum = ((int) i >= params.spectrumIndex);
-        canvas.repaint();
-    };
+    // v0.5.3: "Above spectrum" UI 按钮已删（层级改由 Up/Down 按钮与数组顺序控制），
+    //   aboveSpectrum 标志与 JSON 兼容逻辑保留
 
     addAndMakeVisible (panel);
     panelViewport.setViewedComponent (&panel, false);
@@ -302,14 +263,14 @@ void MainComponent::timerCallback()
                                juce::dontSendNotification);
         }
 
-        // v0.5.2: 画布选中元素变化时同步图层区控件（Above spec / 透明度 / 频谱按钮）
+        // v0.5.2 / v0.5.3: 同步图层区控件（透明度 / 频谱按钮）
+        // v0.5.3: 去掉 layerSelCache 守卫改每 tick 调用——Remove 按钮可用性
+        // 须随\"选中图片或频谱在场\"实时变化（此前\"无选中→选中频谱\"都是 -1 不触发刷新，
+        //   Remove 在无图片时保持禁用，导致\"没图时删不掉频谱\"）
         const int selNow = canvas.selectedImageIndex();
-        if (selNow != layerSelCache)
         {
-            layerSelCache = selNow;
             const bool imgSel = (selNow >= 0 && selNow < (int) params.images.size());
             panel.refreshLayerControls (imgSel,
-                                        imgSel && params.images[(size_t) selNow].aboveSpectrum,
                                         imgSel ? params.images[(size_t) selNow].opacity * 100.0
                                                : 100.0,
                                         params.spectrumPresent);
@@ -722,7 +683,8 @@ void MainComponent::moveSelectedLayer (int delta)
         if (target == k)
         {
             // 图片跨边界向上（从 below 到 above）：原 images[sel] → images[k]
-            if (sel < k && k < N)
+            // v0.5.3: 去掉 k<N 守卫——频谱最顶（k==N）时图片也能跨越到上方
+            if (sel < k)
             {
                 ImageLayer img = std::move (params.images[(size_t) sel]);
                 params.images.erase (params.images.begin() + sel);
@@ -730,9 +692,10 @@ void MainComponent::moveSelectedLayer (int delta)
                 --params.spectrumIndex;
                 canvas.selectImage (k - 1);
             }
-            else if (sel >= k && k > 0)
+            else if (sel >= k)
             {
                 // 图片跨边界向下（从 above 到 below）
+                // v0.5.3: 去掉 k>0 守卫——频谱最底（k==0）时图片也能跨越到下方
                 ImageLayer img = std::move (params.images[(size_t) sel]);
                 params.images.erase (params.images.begin() + sel);
                 params.images.insert (params.images.begin() + k, std::move (img));
@@ -754,6 +717,19 @@ void MainComponent::moveSelectedLayer (int delta)
         params.images[i].aboveSpectrum = ((int) i >= params.spectrumIndex);
 
     canvas.repaint();
+}
+
+// v0.5.3: keyboard fallback - Delete/Backspace still removes the selected layer
+// when the canvas does not have keyboard focus (canvas handles its own case
+// first and returns true; TextEditor-style controls self-consume, no conflict).
+bool MainComponent::keyPressed (const juce::KeyPress& key)
+{
+    if (key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey)
+    {
+        removeSelectedLayer();
+        return true;
+    }
+    return false;
 }
 
 void MainComponent::removeSelectedLayer()

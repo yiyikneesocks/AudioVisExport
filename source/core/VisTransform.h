@@ -30,13 +30,14 @@ struct VisTransform
 };
 
 // 构建"输出坐标 → 元素变换后坐标"的 AffineTransform：
-//   先平移到枢轴为原点 → 旋转 → 缩放 → 平移回枢轴 + 附加平移
-// posX/posY == 0 时与 v0.5.0 之前行为完全一致（频谱 JSON 兼容）。
+//   先平移到枢轴为原点 → 缩放（元素本地轴）→ 旋转 → 平移回枢轴 + 附加平移
+// v0.5.3: 合成序从 S·R 改为 R·S——缩放沿**元素本地轴**而非画布轴，
+//   旋转后非等比拉伸不再产生平行四边形（θ=0 时两者等价，频谱无影响）。
 inline juce::AffineTransform buildVisAffine (const VisTransform& t)
 {
     auto m = juce::AffineTransform::translation (-t.centerX, -t.centerY);
-    m = m.rotated (juce::degreesToRadians (t.rotationDeg));
     m = m.scaled (t.scaleX, t.scaleY);
+    m = m.rotated (juce::degreesToRadians (t.rotationDeg));
     return m.translated (t.centerX + t.posX, t.centerY + t.posY);
 }
 
@@ -128,17 +129,39 @@ enum class VisScaleAxis { Both, OnlyX, OnlyY };
 inline VisTransform applyAnchorScaled (const VisTransform& startT,
                                        juce::Point<float> anchorElem,
                                        juce::Point<float> draggedElem,
-                                       juce::Point<float> outPoint,
+                                       juce::Point<float> outPoint, juce::Point<float> grabOut,
                                        VisScaleAxis axis)
 {
     const auto startAffine = buildVisAffine (startT);
     const auto anchorOut = visTransformPoint (startAffine, anchorElem);
-    const auto startDraggedOut = visTransformPoint (startAffine, draggedElem);
+    juce::ignoreUnused (draggedElem);   // 抓取基线改用 grabOut（鼠标按下时的实际输出位置）
 
-    // 缩放系数 = 锚点到鼠标距离 / 锚点到被拖点起始距离
-    const float d0 = startDraggedOut.getDistanceFrom (anchorOut);
-    const float d1 = outPoint.getDistanceFrom (anchorOut);
-    const float f = (d0 > 1e-3f) ? (d1 / d0) : 1.0f;
+    const float rad = juce::degreesToRadians (startT.rotationDeg);
+    const float cosA = std::cos (rad);
+    const float sinA = std::sin (rad);
+
+    // 缩放系数：角拖（Both）= 锚点到鼠标距离比（均匀缩放，任意旋转下均正确）；
+    // 边拖（OnlyX/OnlyY）= 位移在**元素本地轴**方向上的投影比——旋转后画布位移
+    //   混合了两个本地轴分量，直接用距离比会把另一轴的分量也算进本轴缩放。
+    // 抓取基线用 grabOut（鼠标按下时的实际输出位置）：无跳变。
+    float f = 1.0f;
+    if (axis == VisScaleAxis::Both)
+    {
+        const float dGrab0 = grabOut.getDistanceFrom (anchorOut);
+        const float dGrab1 = outPoint.getDistanceFrom (anchorOut);
+        f = (dGrab0 > 0.001f) ? (dGrab1 / dGrab0) : 1.0f;
+    }
+    else
+    {
+        // 本地轴方向（画布坐标）：X 轴 = R·(1,0) = (cosA, sinA)；Y 轴 = R·(0,1) = (−sinA, cosA)
+        const float dirX = (axis == VisScaleAxis::OnlyX) ? cosA : -sinA;
+        const float dirY = (axis == VisScaleAxis::OnlyX) ? sinA :  cosA;
+        const float projGrab  = (grabOut.getX()  - anchorOut.getX()) * dirX
+                              + (grabOut.getY()  - anchorOut.getY()) * dirY;
+        const float projMouse = (outPoint.getX() - anchorOut.getX()) * dirX
+                              + (outPoint.getY() - anchorOut.getY()) * dirY;
+        f = (std::abs (projGrab) > 0.001f) ? (projMouse / projGrab) : 1.0f;
+    }
 
     VisTransform r = startT;
     if (axis == VisScaleAxis::Both)
@@ -151,20 +174,21 @@ inline VisTransform applyAnchorScaled (const VisTransform& startT,
     else
         r.scaleY = juce::jlimit (0.05f, 50.0f, startT.scaleY * f);
 
-    // 锚定补偿：buildVisAffine 的合成顺序 = S·R·(p−c) + c + pos
+    // 锚定补偿：buildVisAffine 的合成顺序 = R·S·(p−c) + c + pos
     const float cx = startT.centerX;
     const float cy = startT.centerY;
     const float ax = anchorElem.getX() - cx;
     const float ay = anchorElem.getY() - cy;
-    const float rad = juce::degreesToRadians (startT.rotationDeg);
-    const float cosA = std::cos (rad);
-    const float sinA = std::sin (rad);
-    const float rx = ax * cosA - ay * sinA;
-    const float ry = ax * sinA + ay * cosA;
-    const float anchorNewX = cx + r.scaleX * rx;
-    const float anchorNewY = cy + r.scaleY * ry;
+    // 锚点新位置（不含 pos）：c + R·S₁·(a−c)——先沿本地轴缩放，再旋转
+    //   （v0.5.3: 与 buildVisAffine 的 R·S 合成序一致；旧 S·R 公式在旋转后
+    //    非等比缩放下会把锚点算错位置。）
+    const float anchorNewX = cx + cosA * r.scaleX * ax - sinA * r.scaleY * ay;
+    const float anchorNewY = cy + sinA * r.scaleX * ax + cosA * r.scaleY * ay;
 
-    r.posX = startT.posX + (anchorOut.getX() - anchorNewX);
-    r.posY = startT.posY + (anchorOut.getY() - anchorNewY);
+    // v0.5.3 真修复：锚点补偿 = anchorOut − (c + R·S₁·(a−c))，**不含 startT.pos**。
+    //   （旧代码写成 startT.pos + (anchorOut − anchorNew)，把 startT.pos 多算一次，
+    //    导致 pos≠0 时"钉死的对角"瞬移 |startT.pos|；v0.5.2 起即存在，被 pos=0 测试掩盖。）
+    r.posX = anchorOut.getX() - anchorNewX;
+    r.posY = anchorOut.getY() - anchorNewY;
     return r;
 }

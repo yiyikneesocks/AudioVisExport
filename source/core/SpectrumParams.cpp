@@ -188,6 +188,7 @@ juce::String SpectrumParams::toJson() const
     s << "    \"releaseMs\": " << releaseMs << ",\n";
     s << "    \"peakHoldMs\": " << peakHoldMs << ",\n";
     s << "    \"peakDecayDbPerSec\": " << peakDecayDbPerSec << ",\n";
+    s << "    \"peakDecayAccelDbPerSec2\": " << peakDecayAccelDbPerSec2 << ",\n";
     s << "    \"temporalSmoothing\": " << temporalSmoothing << "\n";
     s << "  },\n";
     // dynamic
@@ -340,6 +341,7 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
         p.releaseMs          = getFloat (time, "releaseMs", p.releaseMs);
         p.peakHoldMs         = getFloat (time, "peakHoldMs", p.peakHoldMs);
         p.peakDecayDbPerSec  = getFloat (time, "peakDecayDbPerSec", p.peakDecayDbPerSec);
+        p.peakDecayAccelDbPerSec2 = getFloat (time, "peakDecayAccelDbPerSec2", p.peakDecayAccelDbPerSec2);
         p.temporalSmoothing  = getFloat (time, "temporalSmoothing", p.temporalSmoothing);
     }
     auto dyn = root.getProperty ("dynamic", juce::var());
@@ -499,6 +501,7 @@ bool SpectrumParams::applyOverride (const juce::String& dottedKey,
     if      (key == "time.releaseMs")        { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); releaseMs=v; return true; }
     if      (key == "time.peakHoldMs")       { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); peakHoldMs=v; return true; }
     if      (key == "time.peakDecayDbPerSec"){ bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); peakDecayDbPerSec=v; return true; }
+    if      (key == "time.peakDecayAccelDbPerSec2"){ bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); peakDecayAccelDbPerSec2=v; return true; }
     if      (key == "time.temporalSmoothing"){ bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); temporalSmoothing=v; return true; }
     // dynamic.*
     if      (key == "dynamic.curve")         { bool ok; auto v=parseDynCurve(val, &ok); if(!ok) return setErr("invalid dynCurve"); dynCurve=v; return true; }
