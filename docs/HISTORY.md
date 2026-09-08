@@ -258,22 +258,20 @@
   （正确语义 = 被拖点起始输出位置）
 - **验证记录**：Linux 全量构建零错误；锚定测试 16/16 ALL PASS；
   B1–B5 / F1 GUI 手测项见交付清单
-- **进度状态（2026-09-08，发版前快照）**：
-  - ✅ **代码全部完成**：B1–B5 + F1 + 附加加固（MainComponent `keyPressed` 兜底、
-    旋转柄绘制直径 10px → 14px 与命中区一致、移除死代码 `layerSelCache` 成员）；
-    Linux 全量构建零错误 + `vis_anchor_test` 16/16 ALL PASS
-  - ✅ **Windows 交叉编译部署完成**：`bash scripts/build_win_cross.sh --deploy` →
-    `C:\Users\yiyikneesocks\Desktop\AudioVisExport_test\`
-    （AudioVisGUI.exe / AudioVisExport.exe，部署于 2026-09-08 15:45，
-    CLI 版本串确认 "AudioVisExport v0.5.3"；测试目录其余文件未动）
-  - ⏳ **用户 GUI 手测未做**：B1–B5 / F1 清单已交付；重点 B3——旋转 30° 后拖边柄，
-    对边应钉死不漂移（旧版旋转+单轴时对边漂移，本次核心数学修复）
-  - ⏳ **暂未发版**：全部改动在工作区，未 commit / 未打 tag，等手测通过后一起发；
-    发版前还欠：RELEASE_NOTES.md v0.5.3 节、ARCHITECTURE.md 版本映射表行 + 页脚版本号、
-    PLAN.md 当前状态更新
-  - 📌 **发版后须回改本文档**：将本"进度状态"块更新为已发版（补 commit hash /
-    tag `v0.5.3` / 发版日期，删除⏳等待项），并完成上述欠账文档
-    （checklist 见 docs/PLAN.md「文档更新触发点」）
+- **进度状态（2026-09-09，已发版）**：
+  - ✅ **v0.5.3 已发版**：tag `v0.5.3`（指向本次发版 commit）；`origin/main` 已推；GitHub Release 正文取
+    `docs/RELEASE_NOTES.md` v0.5.3 节。
+  - ✅ **提交构成**：`688564a`（B1–B5 + F1 + 真·B3 + B6 平行四边形修复 + Above spectrum UI 移除 +
+    版本号 0.5.3）→ `07acd2e`（N1 自吸附 + N2 CAD 辅助线 / 9 特征点对齐 + N3 空格 + 范围内外视觉 +
+    空格焦点修复）→ `52c8603`（参考优先原则入档 + PLAN 状态同步）→ 本次发版 docs commit。
+  - ✅ **代码全部完成**：B1–B5 + F1 + B3（真因）+ B6 + N1–N4；`vis_anchor_test` 扩至 **28 项断言 ALL PASS**
+    （含旋转+非等比正交性、pos≠0 锚点、θ=0 R·S≡S·R 等价）。Linux 全量构建零错误。
+  - ✅ **Windows 交叉编译部署完成**：产物部署 `C:\Users\yiyikneesocks\Desktop\AudioVisExport_test\`
+    （AudioVisGUI.exe / AudioVisExport.exe），CLI 版本串 "AudioVisExport v0.5.3"。
+  - ✅ **用户 GUI 手测通过**：锚定缩放（对角钉死 / 旋转后方正）、吸附辅助线 / 边边对齐、范围内外视觉、
+    空格播放/暂停（焦点修复后）、频谱拖动无自我吸附、删除按钮兜底等主功能均已确认。
+  - ⏳ **发版后遗留**：导出侧范围内裁剪回归（用户暂未复测，导出仅未改 `VisPipeline`，理论不受影响）；
+    缩放态吸附辅助线（P2，未做）。
 
 **追加（v0.5.3 续 — 2026-09-09，B3 真因复核 + B6 旋转拉伸平行四边形 + Above spectrum UI 移除）**：
 
