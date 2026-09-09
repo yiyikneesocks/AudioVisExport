@@ -43,8 +43,10 @@ inline juce::AffineTransform buildVisAffine (const VisTransform& t)
 
 // 图片图层初始变换：等比 contain 适配输出画布并居中。
 // 枢轴 = 元素自身中心；平移 = 把元素中心摆到画布中心。
+// v0.5.4 修正：buildVisAffine 语义为 p → M(p−c)+c+pos（枢轴自抵消，pos 即中心位移），
+//   旧公式 pos=out/2−s·c 只在 s=1 时居中，图片缩放适配（s≠1）时会整体偏移 (1−s)·c。
 inline VisTransform makeContainTransform (float elemW, float elemH,
-                                          float outW, float outH)
+                                           float outW, float outH)
 {
     VisTransform t;
     t.set      = true;
@@ -52,8 +54,8 @@ inline VisTransform makeContainTransform (float elemW, float elemH,
                                         outH / juce::jmax (1.0f, elemH));
     t.centerX  = elemW * 0.5f;
     t.centerY  = elemH * 0.5f;
-    t.posX     = outW * 0.5f - t.scaleX * t.centerX;
-    t.posY     = outH * 0.5f - t.scaleY * t.centerY;
+    t.posX     = outW * 0.5f - t.centerX;
+    t.posY     = outH * 0.5f - t.centerY;
     t.rotationDeg = 0.0f;
     return t;
 }

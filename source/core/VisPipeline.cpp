@@ -200,9 +200,7 @@ namespace
                         const juce::Colour stroke = p.maskImage.strokeAutoColor
                                                   ? averageColourCached (im, p.maskImage.path)
                                                   : p.maskImage.strokeColor;
-                        juce::Image masked = SpectrumMask::compose (
-                            base, im, p.maskImage, stroke,
-                            juce::Rectangle<float> (canvas.toFloat()));
+                        juce::Image masked = SpectrumMask::compose (base, im, p.maskImage, stroke);
                         if (masked.isValid()) layer = masked;
                     }
                 }

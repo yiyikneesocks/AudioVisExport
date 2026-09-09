@@ -718,12 +718,22 @@ PATH=/home/azulores/miniconda3/envs/gitenv/bin:$PATH git -c http.version=HTTP/1.
   须 `setWantsKeyboardFocus(true)` 并在合适时机（如 `loadFile` 末尾）`grabKeyboardFocus()`。
 
 **4. `--set` 点路径前缀别靠猜**
-- 分组前缀固定：`time.` / `visual.` / `transform.` / `output.` / `fft.` / `freq.` / `dynamic.`。
+- 分组前缀固定：`time.` / `visual.` / `transform.` / `output.` / `fft.` / `freq.` / `dynamic.` / `mask.`。
   例：`time.peakDecayAccelDbPerSec2`（**不是** `spectrum.`）、`transform.rotationDeg`（**不是** `spectrum.rotation`）。
 - 拿不准就查 `source/core/SpectrumParams.cpp` 的 `setByKey`（`if (key == "...")` 列表是唯一事实源）。
 
 **5. CLI `--help` 糖列表易过期**
 - `--style <...>` 帮助串落后于工厂；新增样式时顺手同步 `CliArgs::helpText()` 与 GUI `ParamPanel` 的样式下拉数组（两处须一致）。
+
+**6. `VisTransform` 数学：先探针、再断言（v0.5.4 #3 教训）**
+- `buildVisAffine` 语义是 `p → M(p−c) + c + pos`（**枢轴自抵消**，`pos` 就是"元素中心的位移量"）。
+  写任何"把元素摆到某处"的公式时，`pos` 补偿**不要再乘 scale**：`makeContainTransform` 旧公式
+  `pos = out/2 − s·c` 只在 s=1 时居中，图片缩放适配（s≠1）会整体偏 `(1−s)·c`——潜伏数个版本，
+  被"100x50 contain 200x100 恰好 s=2 → pos 算出 0"的自洽假象骗过测试（v0.5.4 修正为 `out/2 − c`）。
+- 同类"两套数学必须一致"的地方还有：`compose()` 渲染 ↔ `visCorners()` 手柄（`vis_mask_test` 情形3 锁死）；
+  改动 `VisTransform.h`/`SpectrumMask.cpp` 任一侧后务必跑 `vis_anchor_test` + `vis_mask_test`。
+- 验证几何的正确姿势：**先打一个最小探针程序看映射值**，别靠脑内推 JUCE `scaled/rotated/translated`
+  的"before/after"文档措辞（极易推反）。
 
 ---
 
@@ -815,7 +825,7 @@ SpectrumParams.h 默认值
 |---|---|---|---|---|
 | maskImage.enabled | `mask.enabled` | false | "Use spectrum mask" toggle | 蒙版总开关（空 path 时开关无效果） |
 | maskImage.path | `mask.path` | "" | "Choose mask image..." 按钮 | 蒙版图片路径（设非空自动置 enabled=true） |
-| maskImage.transform | `mask.{centerX,centerY,scaleX,scaleY,rotationDeg,posX,posY}` / `mask.reset` | set=false | 「Edit image position」模式内画布手柄 | 图片在 base 坐标的独立变换；`set=false`=铺满频谱画框（**与电平无关，恒定不漂移**），设任一 key 即置 true。`mask.reset` 恢复铺满 |
+| maskImage.transform | `mask.{centerX,centerY,scaleX,scaleY,rotationDeg,posX,posY}` / `mask.reset` | set=false | 「Edit image position」模式内画布手柄 | 图片在 base 坐标的独立变换；`set=false`=**与其他图片图层一致：等比 contain 适配输出画布并居中**（v0.5.4 #3；与电平无关不漂移），设任一 key 即置 true。`mask.reset` 回默认 |
 | maskImage.strokeEnabled | `mask.strokeEnabled` | false | "Outline (auto avg color)" toggle | 沿轮廓内侧勾边开关（选项 C） |
 | maskImage.strokeWidth | `mask.strokeWidth` | 2.0 | "Outline width" 滑块（0.5..12） | 描边宽度（≈内侧环像素宽） |
 | maskImage.strokeAutoColor | `mask.strokeAutoColor` | true | （设 `mask.strokeColor` 自动置 false）| 描边色=图片平均色 |

@@ -22,16 +22,14 @@ namespace SpectrumMask
 
     // 生成蒙版合成图（输出分辨率 W×H 的 ARGB）：
     //   · 图片定位由 cfg.transform 决定（base/输出坐标系）：
-    //       - set=false → 图片铺满 frameRect（频谱画框；与当前帧电平无关，恒定不漂移）
+    //       - set=false → 与其他图片图层一致：等比 contain 适配输出画布并居中（v0.5.4 #3）
     //       - set=true  → 按 buildVisAffine(cfg.transform) 把图片本地矩形(0,0,iw,ih)映射过去（可独立缩放/拉伸/旋转/平移）
     //   · 结果 alpha 再被 base 的轮廓 alpha 裁剪（gap / 无电平处不显示图片）
     //   · 若 cfg.strokeEnabled：沿轮廓内侧勾一圈 strokeColor 描边
-    // base / image 都应是已加载好的位图；resolvedStroke 为最终描边色（avg 或手动）；
-    // frameRect = 频谱画框（padding 内的绘制区，输出坐标）。
+    // base / image 都应是已加载好的位图；resolvedStroke 为最终描边色（avg 或手动）。
     // 返回 null 图片 = 无有效轮廓或参数为空。
     juce::Image compose (const juce::Image& base,
                          const juce::Image& image,
                          const MaskImageLayer& cfg,
-                         juce::Colour resolvedStroke,
-                         const juce::Rectangle<float>& frameRect);
+                         juce::Colour resolvedStroke);
 }

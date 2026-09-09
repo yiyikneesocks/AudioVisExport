@@ -206,3 +206,10 @@ add_executable(vis_anchor_test EXCLUDE_FROM_ALL
     scripts/vis_anchor_test.cpp)
 target_compile_definitions(vis_anchor_test PRIVATE JUCE_USE_CURL=0)
 target_link_libraries(vis_anchor_test PRIVATE juce::juce_graphics juce::juce_events)
+
+add_executable(vis_mask_test EXCLUDE_FROM_ALL
+    scripts/vis_mask_test.cpp
+    source/core/SpectrumMask.cpp)
+target_compile_definitions(vis_mask_test PRIVATE JUCE_USE_CURL=0)
+target_include_directories(vis_mask_test PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries(vis_mask_test PRIVATE juce::juce_graphics juce::juce_events)

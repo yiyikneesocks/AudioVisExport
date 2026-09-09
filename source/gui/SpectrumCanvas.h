@@ -115,7 +115,7 @@ private:
     void beginTransformIfNeeded();
     void updateHoverCursor (juce::Point<float> out);
     void paintOverlay (juce::Graphics& g);
-    // v0.5.4: 频谱画框（padding 内绘制区，输出/base 坐标）——蒙版图片 fill 基准 + 编辑手柄/吸附共用
+    // v0.5.4: 频谱画框（padding 内绘制区，输出/base 坐标）——编辑手柄移动吸附的参考框
     juce::Rectangle<float> frameRectOut() const;
     // v0.5.4: 进入"编辑蒙版图片"时，若图片尚未 set 变换，则烘焙一个"铺满画框"的等价 transform
     void ensureMaskTransformInit();

@@ -61,9 +61,14 @@
     实现＝读 `base`（频谱 ARGB 层的 alpha）做 style-agnostic 像素蒙版（预乘安全），`VisPipeline` 与 `SpectrumCanvas` 共用 `SpectrumMask::compose`（预览即所得）。
   - 验证：18 组合（6 样式×3 colormap）出帧 + 蒙版逐柱/整块像素断言（gap 透明、填充被图片替换、auto 平均色、空路径零回归）+ `vis_anchor_test` 28/28。
   - ⏳ **待用户预览**后一起 commit（含本 v0.5.4 全部改动）。
-  - 🔧 **蒙版 Bug 修复轮**（见 `docs/inbox/INBOX_WORKLOG.md`「✅」）：BUG1 图片随电平漂移 → 几何改独立 `VisTransform`（与电平无关，锚定画框，实测 0 漂移）；
+  - 🔧 **蒙版 Bug 修复轮**（见 `docs/inbox/INBOX_WORKLOG.md`「✅」）：BUG1 图片随电平漂移 → 几何改独立 `VisTransform`（与电平无关，实测 0 漂移）；
     BUG2 图片不可独立拉伸 → 「Edit image position」给独立手柄（角缩放/边拉伸/平移/旋转）+ 吸附频谱画框边/中线。已双端构建 0 error + 部署。
-  - 🆕 **协作机制**：新增 `docs/inbox/INBOX.md`「任务收件箱」——用户往里写问题，AI 边做边读、自主推进、做完归档，只在需拍板时回问。
+  - 🔧 **#11 崩溃修复**：勾选平均色描边闪退 = `averageColour()` 按 ARGB 步进读 RGB 格式（JPEG）越界 → 像素访问前归一 ARGB（commit `7f15c3b`）。
+  - 🔧 **#3 蒙版默认行为**（用户修正需求）：`set=false` 从"拉伸铺满频谱画框"改为**与其他图片图层一致（等比 contain 居中输出画布）**；
+    过程中揪出 `makeContainTransform` 潜在 bug（旧 pos 公式 `out/2−s·c` 在 s≠1 时不居中，正确为 `out/2−c`）→ 所有图片图层默认定位一并修正。
+    新增常驻回归 `scripts/vis_mask_test.cpp`（ninja vis_mask_test：contain 居中 / 不漂移 / 手柄=渲染 三断言），与 `vis_anchor_test` 同步更新断言。
+  - 🆕 **协作机制 v2**：`docs/inbox/` 三件套 + 状态开关（INBOX 首行 `状态 0/1`：1=用户编辑中 AI 只读；0=空闲 AI 可精确删已完成且已备份的编号行）；
+    **每完成一条立刻重读 INBOX**；测试反馈写 INBOX；协议全文见上方「文档更新触发点」。`docs/inbox/` 已 gitignore（本地专用）。
 
 ## 候选下一版（v0.5.4 → 重点：频谱样式，草案待用户拍板）
 

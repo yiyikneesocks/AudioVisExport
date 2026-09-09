@@ -115,8 +115,7 @@ void SpectrumCanvas::paint (juce::Graphics& g)
                     const juce::Colour stroke = params.maskImage.strokeAutoColor
                                               ? maskAverageColourCached (im, params.maskImage.path)
                                               : params.maskImage.strokeColor;
-                    juce::Image masked = SpectrumMask::compose (
-                        base, im, params.maskImage, stroke, frameRectOut());
+                    juce::Image masked = SpectrumMask::compose (base, im, params.maskImage, stroke);
                     if (masked.isValid()) specLayer = masked;
                 }
             }
@@ -426,24 +425,18 @@ juce::Rectangle<float> SpectrumCanvas::frameRectOut() const
              juce::jmax (1.0f, oh - (rp.paddingTop  + rp.paddingBottom)) };
 }
 
-// 进入编辑模式时把"铺满画框"默认态烘焙成显式 VisTransform，好让手柄/四角与渲染完全对齐。
+// 进入编辑模式时把默认态（与其他图片一致的等比 contain 居中，v0.5.4 #3）烘焙成显式
+// VisTransform，好让手柄/四角与渲染完全对齐。
 void SpectrumCanvas::ensureMaskTransformInit()
 {
     if (params.maskImage.transform.set)
         return;
+    const float ow = (float) juce::jmax (1, params.width);
+    const float oh = (float) juce::jmax (1, params.height);
     const juce::Image im = loadCached (params.maskImage.path);
-    const float iw = im.isValid() ? (float) im.getWidth()  : frameRectOut().getWidth();
-    const float ih = im.isValid() ? (float) im.getHeight() : frameRectOut().getHeight();
-    const auto fr  = frameRectOut();
-    VisTransform& t = params.maskImage.transform;
-    t.set         = true;
-    t.scaleX      = fr.getWidth()  / juce::jmax (1.0f, iw);
-    t.scaleY      = fr.getHeight() / juce::jmax (1.0f, ih);
-    t.centerX     = iw * 0.5f;
-    t.centerY     = ih * 0.5f;
-    t.rotationDeg = 0.0f;
-    t.posX        = fr.getX() + fr.getWidth()  * 0.5f - t.scaleX * t.centerX;
-    t.posY        = fr.getY() + fr.getHeight() * 0.5f - t.scaleY * t.centerY;
+    const float iw = im.isValid() ? (float) im.getWidth()  : ow;
+    const float ih = im.isValid() ? (float) im.getHeight() : oh;
+    params.maskImage.transform = makeContainTransform (iw, ih, ow, oh);
 }
 
 // 输出坐标 → base/蒙版图片空间（撤销频谱元素变换；未变换时 identity）
