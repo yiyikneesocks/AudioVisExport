@@ -47,6 +47,7 @@ public:
         float fps           = 30.0f;  // #2 峰帽动画用（下落/拉拽按帧积分）
         float baselineY = 0.0f;         // v0.5.4 #4 基线轴（0=底, 0.5=镜像）
         float capPull = 0.35f;          // #2峰帽：拉扯强度（0=关闭）
+        bool  lineOnly = false;         // #6：line 系只画线不画填充
         float peakDecayDbPerSec        = 12.0f;  // #2: 峰帽下落速度（dB/s，与 core 同源）
         float peakDecayAccelDbPerSec2  = 0.0f;   // #2: 峰帽下落加速度（dB/s²）
         bool  barParticles  = true;   // bar / bar-line：峰值帽（缓慢下落的小横线）开关

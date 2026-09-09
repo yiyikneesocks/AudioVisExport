@@ -202,34 +202,37 @@ void CrystalStyle::renderPass (juce::Graphics& g, int pass,
     // ---- pass 1: 玻璃体 glass body ----
     if (pass == 1)
     {
-        // 半透明渐变填充
-        juce::Path fillPath;
-        buildSmoothPath_ (fillPath, pts, true, yBot, yTop);
-
-        juce::ColourGradient grad (rp.primary.withAlpha (0.50f),
-                                   0.0f, yBot,
-                                   rp.secondary.withAlpha (0.15f),
-                                   0.0f, yTop,
-                                   false);
-        grad.point1 = juce::Point<float> ((float) inner.getX(), yBot);
-        grad.point2 = juce::Point<float> ((float) inner.getX(), yTop);
-        g.setGradientFill (grad);
-        g.fillPath (fillPath);
-        // #3(2)：a>0 时下臂玻璃体填充
-        const float aF = juce::jlimit (0.0f, 1.0f, rp.baselineY);
-        if (aF > 0.001f)
+        // 半透明渐变填充（#6 lineOnly → 跳过玻璃体）
+        if (! rp.lineOnly)
         {
-            auto dnPts = buildMirrorPoints_ (pts, aF, canvas, rp);
-            juce::Path fillDn;
-            fillDn.startNewSubPath (dnPts[0].getX(), yBot);
-            fillDn.lineTo (dnPts[0]);
-            for (size_t i = 1; i < dnPts.size(); ++i) fillDn.lineTo (dnPts[i]);
-            fillDn.lineTo (dnPts.back().getX(), yBot);
-            fillDn.closeSubPath();
+            juce::Path fillPath;
+            buildSmoothPath_ (fillPath, pts, true, yBot, yTop);
+
+            juce::ColourGradient grad (rp.primary.withAlpha (0.50f),
+                                       0.0f, yBot,
+                                       rp.secondary.withAlpha (0.15f),
+                                       0.0f, yTop,
+                                       false);
+            grad.point1 = juce::Point<float> ((float) inner.getX(), yBot);
+            grad.point2 = juce::Point<float> ((float) inner.getX(), yTop);
             g.setGradientFill (grad);
-            g.fillPath (fillDn);
+            g.fillPath (fillPath);
+            // #3(2)：a>0 时下臂玻璃体填充
+            const float aF = juce::jlimit (0.0f, 1.0f, rp.baselineY);
+            if (aF > 0.001f)
+            {
+                auto dnPts = buildMirrorPoints_ (pts, aF, canvas, rp);
+                juce::Path fillDn;
+                fillDn.startNewSubPath (dnPts[0].getX(), yBot);
+                fillDn.lineTo (dnPts[0]);
+                for (size_t i = 1; i < dnPts.size(); ++i) fillDn.lineTo (dnPts[i]);
+                fillDn.lineTo (dnPts.back().getX(), yBot);
+                fillDn.closeSubPath();
+                g.setGradientFill (grad);
+                g.fillPath (fillDn);
+            }
+            g.setColour (juce::Colours::white);  // 清除 gradient
         }
-        g.setColour (juce::Colours::white);  // 清除 gradient
 
         // 主曲线双层描边（colormap 时沿频率横向取色）
         ColorMap cm;

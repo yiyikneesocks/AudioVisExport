@@ -113,6 +113,7 @@ void PolylineStyle::render (juce::Graphics& g,
     if (a > 0.001f)
     {
         // 双填充（各自闭合到轴线）
+        if (! rp.lineOnly)
         for (int which = 0; which < 2; ++which)
         {
             const auto& P = which == 0 ? up : dn;
@@ -141,7 +142,10 @@ void PolylineStyle::render (juce::Graphics& g,
     }
     else
     {
-        // 1) 半透明填充
+        // 1) 半透明填充（#6 lineOnly → 跳过）
+        if (rp.lineOnly) { }
+        else
+        {
         juce::Path fillPath;
         fillPath.startNewSubPath (pts[0].x, yBot);
         fillPath.lineTo (pts[0]);
@@ -152,6 +156,7 @@ void PolylineStyle::render (juce::Graphics& g,
         if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 0.25f));
         else        g.setColour (rp.secondary.withAlpha (0.25f));
         g.fillPath (fillPath);
+        }   // end !lineOnly
 
         // 2) 主折线双层描边（外粗半透明 + 内细不透明）
         juce::Path linePath;

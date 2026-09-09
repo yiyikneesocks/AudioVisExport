@@ -106,6 +106,11 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     baselineSlider->setTooltip ("Baseline axis: bars grow from this line, split above/below\n"
                                 "proportionally (50% = mirror look). Also draggable on the canvas\n"
                                 "with snapping (50% hints \"mirror\").");
+    // v0.5.4 #6：line 系只画线
+    addToggle ("Line only (no fill)", params.lineOnly,
+               [this] (bool v) { params.lineOnly = v; notify(); })
+        ->setTooltip ("Line styles (y2k / polyline / crystal): draw the curve only,\n"
+                      "skip the inner tint / glass-body fill.");
     barWidthSliderPtr = barWidthSlider;
     barGapSliderPtr = barGapSlider;
     barPitchSliderPtr = barPitchSlider;

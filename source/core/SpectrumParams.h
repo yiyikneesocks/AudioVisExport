@@ -137,6 +137,7 @@ struct SpectrumParams
     bool  barParticles  = true;    // bar / bar-line 样式：峰值帽（下落小横线）开关，false = 只留柱体
     float baselineY     = 0.0f;    // v0.5.4 #4 基线轴：0=底部，0.5=镜像，1=顶部；柱以轴为零点上下按比例生长
     float capPull       = 0.35f;   // v0.5.4 #2峰帽：帽顶点邻域拉扯强度 0..1；0=关闭拉扯（斜面可拉得很长）
+    bool  lineOnly      = false;   // v0.5.4 #6：line 系只画线条，不画内部填充（tint/玻璃体）
     bool  drawGrid        = false;     // 可视化视频默认不画坐标轴（需要时 CLI 开 --draw-grid on）
     bool  drawAxisLabels  = false;     // 同上（--draw-axis-labels on）
 

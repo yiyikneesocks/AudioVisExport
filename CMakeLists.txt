@@ -69,6 +69,8 @@ endif()
 # =============================================================================
 set(AVX_ENGINE_SOURCES
     source/Y2KLogging.h
+    source/core/CrashReporter.h
+    source/core/CrashReporter.cpp
     source/core/PcmSource.h
     source/core/PcmSource.cpp
     source/core/PngSequenceEncoder.h
@@ -199,6 +201,10 @@ target_link_libraries(AudioVisGUI PRIVATE
     juce::juce_gui_basics
     juce::juce_gui_extra        # ColourSelector（颜色选择弹层）
 )
+if (WIN32)
+    target_link_libraries (AudioVisGUI PRIVATE dbghelp)
+    target_link_libraries (AudioVisExport PRIVATE dbghelp)
+endif()
 avx_configure_target(AudioVisGUI)
 
 # =============================================================================

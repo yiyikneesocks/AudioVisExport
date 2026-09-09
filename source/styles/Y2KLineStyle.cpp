@@ -249,25 +249,31 @@ void Y2KLineStyle::render (juce::Graphics& g,
             up[(size_t) i] = { x, (float) inner.getBottom() - baselineTop    (nv[(size_t) i], a) * (float) canvas.getHeight() };
             dn[(size_t) i] = { x, (float) inner.getBottom() - baselineBottom (nv[(size_t) i], a) * (float) canvas.getHeight() };
         }
-        // 上臂：平滑（yBot=轴 在点集下方 → closeToBottom 剪枝安全）
-        juce::Path fillUp;
-        buildSmoothPath_ (fillUp, up, /*closeToBottom*/ true, yBot, yTop);
-        if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 0.25f));
-        else        g.setColour (rp.secondary.withAlpha (0.25f));
-        g.fillPath (fillUp);
+        // 上臂：平滑（yBot=轴 在点集下方 → closeToBottom 剪枝安全）；#6 lineOnly → 跳过填充
+        if (! rp.lineOnly)
+        {
+            juce::Path fillUp;
+            buildSmoothPath_ (fillUp, up, /*closeToBottom*/ true, yBot, yTop);
+            if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 0.25f));
+            else        g.setColour (rp.secondary.withAlpha (0.25f));
+            g.fillPath (fillUp);
+        }
         juce::Path curveUp;
         buildSmoothPath_ (curveUp, up, false, yBot, yTop);
         if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 1.0f));
         else        g.setColour (rp.primary);
         g.strokePath (curveUp, juce::PathStrokeType (rp.lineWidth));
         // 下臂：点在轴下方，buildSmoothPath_ 的贴底剪枝会把它们砍平 → 手构折线（与 polyline 下臂同法）
-        juce::Path fillDn;
-        fillDn.startNewSubPath (dn[0].getX(), yBot);
-        fillDn.lineTo (dn[0]);
-        for (int i = 1; i < N; ++i) fillDn.lineTo (dn[(size_t) i]);
-        fillDn.lineTo (dn[(size_t) N - 1].getX(), yBot);
-        fillDn.closeSubPath();
-        g.fillPath (fillDn);
+        if (! rp.lineOnly)
+        {
+            juce::Path fillDn;
+            fillDn.startNewSubPath (dn[0].getX(), yBot);
+            fillDn.lineTo (dn[0]);
+            for (int i = 1; i < N; ++i) fillDn.lineTo (dn[(size_t) i]);
+            fillDn.lineTo (dn[(size_t) N - 1].getX(), yBot);
+            fillDn.closeSubPath();
+            g.fillPath (fillDn);
+        }
         juce::Path curveDn;
         curveDn.startNewSubPath (dn[0]);
         for (int i = 1; i < N; ++i) curveDn.lineTo (dn[(size_t) i]);
@@ -276,12 +282,15 @@ void Y2KLineStyle::render (juce::Graphics& g,
     }
     else
     {
-        // 3) 填充区域（从底部到曲线的半透明 tint；colormap 时沿频率横向取色）
-        juce::Path fillPath;
-        buildSmoothPath_ (fillPath, curvePts, /*closeToBottom*/ true, yBot, yTop);
-        if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 0.25f));
-        else        g.setColour (rp.secondary.withAlpha (0.25f));
-        g.fillPath (fillPath);
+        // 3) 填充区域（从底部到曲线的半透明 tint；#6 lineOnly → 跳过）
+        if (! rp.lineOnly)
+        {
+            juce::Path fillPath;
+            buildSmoothPath_ (fillPath, curvePts, /*closeToBottom*/ true, yBot, yTop);
+            if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 0.25f));
+            else        g.setColour (rp.secondary.withAlpha (0.25f));
+            g.fillPath (fillPath);
+        }
 
         // 4) 主曲线双层描边（外粗半透明 + 内细不透明，视觉厚度）
         juce::Path curvePath;

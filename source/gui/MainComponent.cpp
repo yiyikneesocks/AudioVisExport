@@ -502,6 +502,7 @@ SpectrumStyle::RenderParams MainComponent::buildRp (const SpectrumParams& p)
     rp.barPitchRatio  = p.barPitchRatio;
     rp.baselineY      = p.baselineY;
     rp.capPull        = p.capPull;
+    rp.lineOnly       = p.lineOnly;
     rp.fps            = p.fps;
     rp.peakDecayDbPerSec       = p.peakDecayDbPerSec;
     rp.peakDecayAccelDbPerSec2 = p.peakDecayAccelDbPerSec2;
@@ -516,6 +517,7 @@ SpectrumStyle::RenderParams MainComponent::buildRp (const SpectrumParams& p)
     rp.barPitchRatio  = p.barPitchRatio;
     rp.baselineY      = p.baselineY;
     rp.capPull        = p.capPull;
+    rp.lineOnly       = p.lineOnly;
     rp.fps            = p.fps;
     rp.peakDecayDbPerSec       = p.peakDecayDbPerSec;
     rp.peakDecayAccelDbPerSec2 = p.peakDecayAccelDbPerSec2;

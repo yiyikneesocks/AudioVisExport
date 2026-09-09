@@ -15,6 +15,7 @@
 #include "core/PcmSource.h"
 #include "core/VisPipeline.h"
 #include "cli/CliArgs.h"
+#include "core/CrashReporter.h"
 
 #include <cmath>
 #include <iostream>
@@ -139,6 +140,7 @@ static int cmdProbePcm (const juce::String& path)
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI init;
+    CrashReporter::install();   // v0.5.4 #8：Windows 崩溃报告
 
     CliArgs args;
     if (! args.parse (argc, argv)) {

@@ -7,6 +7,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "MainComponent.h"
 #include "WinDragCompat.h"
+#include "../core/CrashReporter.h"
 
 namespace
 {
@@ -54,6 +55,9 @@ namespace
 
         void initialise (const juce::String&) override
         {
+            // v0.5.4 #8：崩溃报告（Windows：未处理异常 → exe/crash/*.dmp+txt）
+            CrashReporter::install();
+
             // v0.5.0: 提权进程自动降权重启（经 explorer.exe 代理）。
             // 管理员运行会触发 UIPI 拖放拦截；降权后 OLE 拖放完整可用
             // （含拖放悬停 HUD）。WM_DROPFILES 兼容层仅作重启失败时的兜底。
@@ -65,6 +69,13 @@ namespace
             }
 
             mainWindow = std::make_unique<AVXGuiWindow> (getApplicationName());
+        }
+
+        void unhandledException (const std::exception* e,
+                                 const juce::String& sourceFile, int lineNumber) override
+        {
+            CrashReporter::writeTextReport (e != nullptr ? juce::String (e->what()) : juce::String ("unknown"),
+                                            sourceFile, lineNumber);
         }
 
         void shutdown() override
