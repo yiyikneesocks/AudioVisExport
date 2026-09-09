@@ -499,6 +499,7 @@ SpectrumStyle::RenderParams MainComponent::buildRp (const SpectrumParams& p)
     rp.bg             = p.bgColor;
     rp.lineWidth      = p.lineWidth;
     rp.opacity        = p.opacity;
+    rp.barPitchRatio  = p.barPitchRatio;
     rp.barGapRatio    = p.barGapRatio;
     rp.barWidthRatio  = p.barWidthRatio;
     rp.drawGrid       = p.drawGrid;
@@ -507,6 +508,7 @@ SpectrumStyle::RenderParams MainComponent::buildRp (const SpectrumParams& p)
     rp.maxHz          = p.maxHz;
     rp.minDb          = p.minDb;
     rp.maxDb          = p.maxDb;
+    rp.barPitchRatio  = p.barPitchRatio;
     rp.barGapRatio    = p.barGapRatio;
     rp.barWidthRatio  = p.barWidthRatio;
     rp.barParticles   = p.barParticles;

@@ -209,6 +209,7 @@ juce::String SpectrumParams::toJson() const
     s << "    \"secondaryColor\": \"" << colourHex (secondaryColor) << "\",\n";
     s << "    \"peakColor\": \"" << colourHex (peakColor) << "\",\n";
     s << "    \"bgColor\": \"" << colourHex (bgColor) << "\",\n";
+    s << "    \"barPitchRatio\": " << barPitchRatio << ",\n";
     s << "    \"barGapRatio\": " << barGapRatio << ",\n";
     s << "    \"barWidthRatio\": " << barWidthRatio << ",\n";
     s << "    \"barParticles\": " << (barParticles ? "true" : "false") << ",\n";
@@ -389,8 +390,21 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
     if (auto* o = vis.getDynamicObject()) {
         p.style         = getStr (vis, "style", p.style);
         p.colorMap      = getStr (vis, "colorMap", p.colorMap);
-        p.barGapRatio   = getFloat (vis, "barGapRatio", p.barGapRatio);
-        p.barWidthRatio = getFloat (vis, "barWidthRatio", p.barWidthRatio);
+        if (o->hasProperty ("barPitchRatio"))
+        {
+            // v0.5.4 #25 新语义：width/gap/pitch 均 ×slot，gap = pitch − width
+            p.barPitchRatio = juce::jlimit (0.05f, 2.5f, getFloat (vis, "barPitchRatio", p.barPitchRatio));
+            p.barWidthRatio = juce::jlimit (0.02f, 2.5f, getFloat (vis, "barWidthRatio", p.barWidthRatio));
+            p.barGapRatio   = juce::jlimit (-2.48f, 2.48f, getFloat (vis, "barGapRatio", p.barGapRatio));
+        }
+        else
+        {
+            // 旧语义迁移：barW = (slot − gap)×width → 新 width' = (1−gap)×width，pitch=1
+            const float gOld = getFloat (vis, "barGapRatio", 0.28f);
+            const float wOld = getFloat (vis, "barWidthRatio", 1.0f);
+            p.setBarPitch (1.0f);
+            p.setBarWidth ((1.0f - juce::jlimit (0.0f, 1.0f, gOld)) * wOld);
+        }
         p.barParticles  = getBool (vis, "barParticles", p.barParticles);
         p.lineWidth     = getFloat (vis, "lineWidth", p.lineWidth);
         p.opacity       = getFloat (vis, "opacity", p.opacity);
@@ -576,8 +590,9 @@ bool SpectrumParams::applyOverride (const juce::String& dottedKey,
     if      (key == "visual.colorMap")       { colorMap = val; return true; }
     if      (key == "visual.lineWidth")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); lineWidth=v; return true; }
     if      (key == "visual.opacity")        { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); opacity=v; return true; }
-    if      (key == "visual.barGapRatio")    { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); barGapRatio=v; return true; }
-    if      (key == "visual.barWidthRatio")  { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); barWidthRatio=v; return true; }
+    if      (key == "visual.barGapRatio")    { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); setBarGap(v); return true; }
+    if      (key == "visual.barWidthRatio")  { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); setBarWidth(v); return true; }
+    if      (key == "visual.barPitchRatio")  { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); setBarPitch(v); return true; }
     if      (key == "visual.barParticles")   { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); barParticles=v; return true; }
     if      (key == "visual.drawGrid")       { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); drawGrid=v; return true; }
     if      (key == "visual.drawAxisLabels") { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); drawAxisLabels=v; return true; }

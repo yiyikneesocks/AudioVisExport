@@ -60,6 +60,7 @@ namespace
         rp.bg        = p.bgColor;
         rp.lineWidth      = p.lineWidth;
         rp.opacity        = p.opacity;
+        rp.barPitchRatio  = p.barPitchRatio;
         rp.barGapRatio    = p.barGapRatio;
         rp.barWidthRatio  = p.barWidthRatio;
         rp.drawGrid       = p.drawGrid;

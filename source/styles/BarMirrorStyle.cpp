@@ -27,9 +27,10 @@ void BarMirrorStyle::render (juce::Graphics& g,
     auto inner = canvas.reduced (2);
     if (inner.getWidth() <= 2 || inner.getHeight() <= 2) return;
 
-    const float slotW = (float) inner.getWidth() / (float) N;
-    const float gap   = slotW * juce::jlimit (0.0f, 1.0f, rp.barGapRatio);
-    const float barW  = (slotW - gap) * juce::jlimit (0.05f, 2.0f, rp.barWidthRatio);
+    // v0.5.4 #25：三联动布局（与 BarStyle 同式）
+    const float slotW = (float) inner.getWidth() / (float) N * juce::jlimit (0.05f, 2.5f, rp.barPitchRatio);
+    const float gap   = juce::jlimit (-2.48f, 2.48f, rp.barGapRatio) * (float) inner.getWidth() / (float) N;
+    const float barW  = juce::jlimit (0.02f, 2.5f, rp.barWidthRatio) * (float) inner.getWidth() / (float) N;
     const float x0    = (float) inner.getX() + (slotW - barW) * 0.5f;
     const float yMid  = (float) inner.getCentreY();
 

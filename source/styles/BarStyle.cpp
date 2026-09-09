@@ -77,9 +77,11 @@ void BarStyle::render (juce::Graphics& g,
     //   gap  = slot * barGapRatio          （柱间空隙，0 = 无缝）
     //   barW = (slot - gap) * barWidthRatio（柱宽，>1 时侵入空隙 / 与相邻柱重叠）
     // 默认 gap=0.28、width=1.0 时与旧版（bar=0.72*slot）视觉完全一致。
-    const float slotW = (float) inner.getWidth() / (float) N;
-    const float gap   = slotW * juce::jlimit (0.0f, 1.0f, rp.barGapRatio);
-    const float barW  = (slotW - gap) * juce::jlimit (0.05f, 2.0f, rp.barWidthRatio);
+    // v0.5.4 #25：三联动布局。slot = 带 pitch（两柱锚点间距）；
+    //   间隙 gap = pitch − width（可负=重叠）；柱锚点 x 间距用 pitch。
+    const float slotW = (float) inner.getWidth() / (float) N * juce::jlimit (0.05f, 2.5f, rp.barPitchRatio);
+    const float gap   = juce::jlimit (-2.48f, 2.48f, rp.barGapRatio) * (float) inner.getWidth() / (float) N;
+    const float barW  = juce::jlimit (0.02f, 2.5f, rp.barWidthRatio) * (float) inner.getWidth() / (float) N;
     const float x0    = (float) inner.getX() + (slotW - barW) * 0.5f;
     const float yBot  = (float) inner.getBottom();
     const float yTop  = (float) inner.getY();

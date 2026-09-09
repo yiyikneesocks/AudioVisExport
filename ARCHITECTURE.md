@@ -764,7 +764,7 @@ SpectrumParams.h 默认值
 
 | 字段 | 点路径 | 默认 | GUI 控件 | 说明 |
 |---|---|---|---|---|
-| bandCount | `freq.bandCount` | 160 | "Band count" 滑块（16..512） | 频带数量（越大视觉越密）|
+| bandCount | `freq.bandCount` | 90（v0.5.4 #25）| "Band count" 滑块（16..512） | 频带数量（越大视觉越密）|
 | freqScale | `freq.freqScale` | `Log` | "Freq scale" 下拉 | `log`/`linear`/`mel`/`bark` |
 | minHz | `freq.minHz` | 20.0 | "Min Hz" 滑块（20..2000）| 横轴左端频率 |
 | maxHz | `freq.maxHz` | 20000.0 | "Max Hz" 滑块（1000..20000）| 横轴右端频率 |
@@ -810,8 +810,9 @@ SpectrumParams.h 默认值
 | transform.scaleX | `transform.scaleX` | 1.0 | （画布角/边柄拖拽） | X 轴缩放（非等比即拉伸） |
 | transform.scaleY | `transform.scaleY` | 1.0 | （画布角/边柄拖拽） | Y 轴缩放 |
 | transform.rotationDeg | `transform.rotationDeg` | 0.0 | （画布顶部圆柄拖拽） | 绕中心旋转角度（度） |
-| barGapRatio | `visual.barGapRatio` | 0.28 | "Bar gap %" 滑块（0..100%） | bar 样式：柱间空隙占 slot 比例 |
-| barWidthRatio | `visual.barWidthRatio` | 1.0 | "Bar width %" 滑块（5..200%） | bar 样式：柱宽占 (slot-gap) 比例，>1 相邻柱重叠 |
+| barPitchRatio | `visual.barPitchRatio` | 1.0 | "Bar pitch %" 滑块（5..250%） | v0.5.4 #25：两柱锚点间距（×slot）；调 pitch 不动 width，gap 联动 |
+| barGapRatio | `visual.barGapRatio` | 0.28 | "Bar gap %" 滑块（-248..248%） | #25 三联动：gap = pitch − width，**可为负（重叠）**；调 gap 不动 pitch，width = pitch − gap |
+| barWidthRatio | `visual.barWidthRatio` | 0.72 | "Bar width %" 滑块（2..250%） | #25 三联动：柱宽（×slot）；调 width 不动 pitch，gap 联动 |
 | drawGrid | `visual.drawGrid` | false | "Draw grid" toggle | 开关网格 |
 | drawAxisLabels | `visual.drawAxisLabels` | false | "Axis labels" toggle | 开关坐标轴标签 |
 | （非 param，仅 GUI 状态）| — | — | "Checkerboard BG" toggle | 预览画布是否画棋盘格（方便肉眼判断透明区，**不影响导出**）|
@@ -866,7 +867,9 @@ SpectrumParams.h 默认值
 |---|---|---|---|---|
 | Style | Render style | Combo | params.style | 4 选项 |
 | Style | Band count | Slider (int) | params.bandCount | 16..512 |
-| Style | Bar gap % | Slider (int, %) | params.barGapRatio | 0..100 → 0..1；仅 bar 样式生效 |
+| Style | Bar width % | Slider (int, %) | params.setBarWidth | 2..250 → ×slot；联动：pitch 不动 gap 变 |
+| Style | Bar gap % | Slider (int, %) | params.setBarGap | -248..248；可为负=重叠；联动：pitch 不动 width 变 |
+| Style | Bar pitch % | Slider (int, %) | params.setBarPitch | 5..250 → ×slot；联动：width 不动 gap 变 |
 | Style | Bar width % | Slider (int, %) | params.barWidthRatio | 5..200 → 0.05..2；仅 bar 样式生效 |
 | Style | Reset element transform | Button | params.transform = VisTransform{} | 复位元素变换；画布内双击元素同效 |
 | Style | Freq scale | Combo | params.freqScale | 枚举 |

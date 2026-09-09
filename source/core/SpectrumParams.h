@@ -69,7 +69,7 @@ struct SpectrumParams
     float minHz   = 20.0f;
     float maxHz   = 20000.0f;
     enum FreqScale { Log, Linear, Mel, Bark } freqScale = Log;
-    int bandCount = 160;
+    int bandCount = 90;
 
     // ---- 时间 ----
     double fps                 = 30.0;
@@ -98,8 +98,34 @@ struct SpectrumParams
     juce::Colour bgColor       { 0x00000000 };   // 默认全透明
     float lineWidth = 1.4f;
     float opacity   = 1.0f;
-    float barGapRatio   = 0.28f;   // bar 样式：柱间空隙占每带 slot 宽度的比例（0 = 无缝）
-    float barWidthRatio = 1.0f;    // bar 样式：柱宽占 (slot - gap) 的比例（>1 时相邻柱可重叠）
+    // ---- bar 布局三联动（v0.5.4 #25）----
+    //   pitch(间距) = 两柱同锚点间距 = slot × barPitchRatio（slot = 画布宽/带数）
+    //   width(柱宽) = slot × barWidthRatio
+    //   gap(间隙)   = pitch − width（可为负 = 相邻柱重叠）
+    //   不变式：gap = pitch − width；调任一滑条按此式联动第三个：
+    //     · 调 width → pitch 不动，gap 联动
+    //     · 调 gap   → pitch 不动，width = pitch − gap
+    //     · 调 pitch → width 不动，gap 联动
+    float barPitchRatio = 1.0f;    // 间距（×slot），0.05..2.5
+    float barWidthRatio = 0.72f;   // 柱宽（×slot），0.02..2.5（默认 0.72 = 旧默认外观 (1-0.28)×1.0）
+    float barGapRatio   = 0.28f;   // 间隙（×slot，派生值，可为负）；默认 0.28 保持旧观感
+
+    void setBarWidth (float v)
+    {
+        barWidthRatio = juce::jlimit (0.02f, 2.5f, v);
+        barGapRatio   = juce::jlimit (-2.48f, 2.48f, barPitchRatio - barWidthRatio);
+    }
+    void setBarGap (float v)
+    {
+        barGapRatio   = juce::jlimit (-2.48f, 2.48f, v);
+        barWidthRatio = juce::jlimit (0.02f, 2.5f, barPitchRatio - barGapRatio);
+        barGapRatio   = barPitchRatio - barWidthRatio;   // width 被夹住时回推 gap，保不变式
+    }
+    void setBarPitch (float v)
+    {
+        barPitchRatio = juce::jlimit (0.05f, 2.5f, v);
+        barGapRatio   = juce::jlimit (-2.48f, 2.48f, barPitchRatio - barWidthRatio);
+    }
     bool  barParticles  = true;    // bar / bar-line 样式：峰值帽（下落小横线）开关，false = 只留柱体
     bool  drawGrid        = false;     // 可视化视频默认不画坐标轴（需要时 CLI 开 --draw-grid on）
     bool  drawAxisLabels  = false;     // 同上（--draw-axis-labels on）

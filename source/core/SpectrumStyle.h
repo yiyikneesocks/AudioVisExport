@@ -41,8 +41,9 @@ public:
         float opacity   = 1.0f;
 
         // BarStyle 专用：柱宽 / 柱间隙（相对每带 slot 宽度的比例）
-        float barGapRatio   = 0.28f;  // 柱间空隙比例（0 = 无缝）
-        float barWidthRatio = 1.0f;   // 柱宽占 (slot-gap) 的比例（>1 允许相邻柱重叠）
+        float barPitchRatio = 1.0f;   // v0.5.4 #25: 两柱锚点间距（×slot）；gap = pitch − width
+        float barGapRatio   = 0.28f;  // 柱间空隙比例（可负 = 重叠）
+        float barWidthRatio = 0.72f;  // 柱宽（×slot）
         bool  barParticles  = true;   // bar / bar-line：峰值帽（缓慢下落的小横线）开关
 
         // 元素开关

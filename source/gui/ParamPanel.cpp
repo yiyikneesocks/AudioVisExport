@@ -68,15 +68,32 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     addSlider ("Band count", 16, 512, 1, 1.0,
                [this] { return (double) params.bandCount; },
                [this] (double v) { params.bandCount = (int) v; notify(); });
-    addSlider ("Bar gap %", 0, 100, 1, 1.0,
-               [this] { return (double) params.barGapRatio * 100.0; },
-               [this] (double v) { params.barGapRatio = (float) (v / 100.0); notify(); });
-    addSlider ("Bar width %", 5, 200, 1, 1.0,
+    // v0.5.4 #25：三联动布局（gap = pitch − width，gap 可为负 = 重叠）
+    auto* barWidthSlider = addSlider ("Bar width %", 2, 250, 1, 1.0,
                [this] { return (double) params.barWidthRatio * 100.0; },
-               [this] (double v) { params.barWidthRatio = (float) (v / 100.0); notify(); });
+               [this] (double v) { params.setBarWidth ((float) (v / 100.0));
+                                  syncBarLayoutSliders(); notify(); });
+    barWidthSlider->setTooltip ("Bar width (x slot). Moving this keeps the PITCH fixed;\n"
+                                "the gap follows: gap = pitch - width (negative = overlap).");
+    auto* barGapSlider = addSlider ("Bar gap %", -248, 248, 1, 1.0,
+               [this] { return (double) params.barGapRatio * 100.0; },
+               [this] (double v) { params.setBarGap ((float) (v / 100.0));
+                                  syncBarLayoutSliders(); notify(); });
+    barGapSlider->setTooltip ("Bar gap = pitch - width. Can be NEGATIVE (bars overlap).\n"
+                              "Moving this keeps the pitch fixed and changes width.");
+    auto* barPitchSlider = addSlider ("Bar pitch %", 5, 250, 1, 1.0,
+               [this] { return (double) params.barPitchRatio * 100.0; },
+               [this] (double v) { params.setBarPitch ((float) (v / 100.0));
+                                  syncBarLayoutSliders(); notify(); });
+    barPitchSlider->setTooltip ("Pitch = anchor-to-anchor distance between neighbouring bars (x slot).\n"
+                                "Moving this keeps the WIDTH fixed; the gap follows.");
     addToggle ("Peak caps", params.barParticles,
                [this] (bool v) { params.barParticles = v; notify(); });
-    // Peak-cap behaviour controls (v0.5.0): "fall delay" + "fall speed" live next
+    barWidthSliderPtr = barWidthSlider;
+    barGapSliderPtr = barGapSlider;
+    barPitchSliderPtr = barPitchSlider;
+
+    // Peak caps (v0.5.0): "fall delay" + "fall speed" live next
     // to the toggle so the three peak-cap controls stay together (was: Time section).
     auto* peakHoldSlider = addSlider ("Peak hold ms", 0, 10000, 50, 0.5,
                [this] { return (double) params.peakHoldMs; },
@@ -507,6 +524,17 @@ void ParamPanel::setMaskEditChecked (bool b)
 {
     if (maskEditToggle.getToggleState() != b)
         maskEditToggle.setToggleState (b, juce::dontSendNotification);
+}
+
+// v0.5.4 #25：三联动滑条回填（任一动，另两条显示同步；dontSendNotification 防递归）
+void ParamPanel::syncBarLayoutSliders()
+{
+    if (barWidthSliderPtr != nullptr)
+        barWidthSliderPtr->setValue (params.barWidthRatio * 100.0, juce::dontSendNotification);
+    if (barGapSliderPtr != nullptr)
+        barGapSliderPtr->setValue (params.barGapRatio * 100.0, juce::dontSendNotification);
+    if (barPitchSliderPtr != nullptr)
+        barPitchSliderPtr->setValue (params.barPitchRatio * 100.0, juce::dontSendNotification);
 }
 
 void ParamPanel::syncMaskControls()
