@@ -53,3 +53,6 @@ desktop.ini
 
 # === JUCE FetchContent 缓存 ===
 /_deps/
+
+# === 人机协作收件箱（本地对话用，无需推送）===
+/docs/inbox/
