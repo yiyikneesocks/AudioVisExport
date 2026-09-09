@@ -29,7 +29,8 @@ struct ImageLayer
 // 频谱蒙版图片（v0.5.4）：图片只在"频谱轮廓"覆盖到的区域可见——
 //   频谱填充区变成一扇"窗口"，图片从窗口里透出来；频谱自身退为可选描边。
 //   几何用**独立 VisTransform**（base/输出坐标系）：
-//     · set=false → 铺满频谱画框（canvas 区域，与当前帧电平无关 → 图片恒定不动）；
+//     · set=false → 与其他图片图层一致：等比 contain 适配输出画布并居中（不随电平漂移）；
+//     · set=true  → 用户显式编辑后的定位/缩放/旋转；
 //     · 电平只通过 base alpha 决定"露出多少"，绝不改变图片位置/大小；
 //   整套变换再随频谱元素 p.transform 一起拖动/缩放/旋转（绑定为整体）。
 //   GUI「编辑图片位置」模式给这张图独立的手柄（移动/角缩放/边拉伸 + 吸附）。
@@ -37,12 +38,16 @@ struct MaskImageLayer
 {
     bool  enabled = false;
     juce::String path;
-    VisTransform transform;        // 图片在 base/输出坐标的定位；set=false = 铺满画框
+    VisTransform transform;        // 图片在 base/输出坐标的定位；set=false = 等比 contain 居中
     // 描边（沿轮廓内侧勾边）
     bool  strokeEnabled   = false;
     float strokeWidth     = 2.0f;
     bool  strokeAutoColor = true;  // true = 用图片平均色；false = 用 strokeColor
     juce::Colour strokeColor { 0xffffffff };
+    // 色彩调整（v0.5.4 #4）：1.0 = 原图。亮度/对比度/饱和度，处理时预乘安全换算
+    float brightness = 1.0f;       // 0..2，RGB × b（sRGB 空间近似）
+    float contrast   = 1.0f;       // 0..2，以 0.5 为轴 (v−0.5)×c+0.5
+    float saturation = 1.0f;       // 0..2，向灰度 lerp：luma+(v−luma)×s
 };
 
 struct SpectrumParams

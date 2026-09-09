@@ -66,6 +66,80 @@ juce::Colour SpectrumMask::averageColour (const juce::Image& img)
     return juce::Colour::fromRGB (r, g, b);
 }
 
+juce::Image SpectrumMask::adjustedImage (const juce::Image& img,
+                                         float brightness, float contrast, float saturation)
+{
+    if (! img.isValid())
+        return {};
+    brightness = juce::jlimit (0.0f, 2.0f, brightness);
+    contrast   = juce::jlimit (0.0f, 2.0f, contrast);
+    saturation = juce::jlimit (0.0f, 2.0f, saturation);
+    const bool identity = std::abs (brightness - 1.0f) < 1e-4f
+                       && std::abs (contrast   - 1.0f) < 1e-4f
+                       && std::abs (saturation - 1.0f) < 1e-4f;
+    if (identity)
+        return img;   // juce::Image 是 COW 句柄，浅拷贝零开销
+
+    const juce::Image src = (img.getFormat() == juce::Image::ARGB)
+                                ? img : img.convertedToFormat (juce::Image::ARGB);
+    const int w = src.getWidth(), h = src.getHeight();
+    juce::Image out (juce::Image::ARGB, w, h, false);
+    juce::Image::BitmapData si (src, juce::Image::BitmapData::readOnly);
+    juce::Image::BitmapData di (out, juce::Image::BitmapData::writeOnly);
+
+    for (int y = 0; y < h; ++y)
+    {
+        const auto* row = reinterpret_cast<const juce::PixelARGB*> (si.getLinePointer (y));
+        auto* dst       = reinterpret_cast<juce::PixelARGB*> (di.getLinePointer (y));
+        for (int x = 0; x < w; ++x)
+        {
+            const int a = row[x].getAlpha();
+            if (a == 0) { dst[x] = juce::PixelARGB (0, 0, 0, 0); continue; }
+
+            // 预乘 → 直通（straight）后在 sRGB 通道上做调整
+            float r = (float) row[x].getRed()   * 255.0f / (float) a;
+            float g = (float) row[x].getGreen() * 255.0f / (float) a;
+            float b = (float) row[x].getBlue()  * 255.0f / (float) a;
+
+            r *= brightness; g *= brightness; b *= brightness;                       // 亮度
+            r = (r - 128.0f) * contrast + 128.0f;                                     // 对比度（中灰轴）
+            g = (g - 128.0f) * contrast + 128.0f;
+            b = (b - 128.0f) * contrast + 128.0f;
+            const float luma = 0.299f * r + 0.587f * g + 0.114f * b;                  // 饱和度
+            r = luma + (r - luma) * saturation;
+            g = luma + (g - luma) * saturation;
+            b = luma + (b - luma) * saturation;
+
+            auto cl = [] (float v) { return (int) juce::jlimit (0.0f, 255.0f, v + 0.5f); };
+            // 再预乘写回
+            dst[x] = juce::PixelARGB (a, cl (r) * a / 255, cl (g) * a / 255, cl (b) * a / 255);
+        }
+    }
+    return out;
+}
+
+juce::Image SpectrumMask::adjustedImageCached (const juce::Image& img, const MaskImageLayer& cfg)
+{
+    const juce::String key = juce::String::formatted ("%s|%.4f|%.4f|%.4f",
+                                                      cfg.path.toRawUTF8(),
+                                                      cfg.brightness, cfg.contrast, cfg.saturation);
+    // GUI 绘制线程与导出线程共享此缓存：查表加锁，慢计算放锁外（幂等，最坏各算一次）。
+    struct Entry { juce::CriticalSection lock; juce::String key; juce::Image img; };
+    static Entry e;
+    {
+        const juce::ScopedLock sl (e.lock);
+        if (e.key == key && e.img.isValid())
+            return e.img;
+    }
+    juce::Image out = adjustedImage (img, cfg.brightness, cfg.contrast, cfg.saturation);
+    {
+        const juce::ScopedLock sl (e.lock);
+        e.key = key;
+        e.img = out;
+    }
+    return out;
+}
+
 juce::Image SpectrumMask::compose (const juce::Image& base,
                                    const juce::Image& image,
                                    const MaskImageLayer& cfg,

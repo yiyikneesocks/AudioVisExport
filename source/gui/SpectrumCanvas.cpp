@@ -112,10 +112,15 @@ void SpectrumCanvas::paint (juce::Graphics& g)
                 const juce::Image im = loadCached (params.maskImage.path);
                 if (im.isValid())
                 {
+                    // v0.5.4 #4：色彩调整后的图（identity 时零开销返回原图；带缓存）
+                    const juce::Image adj = SpectrumMask::adjustedImageCached (im, params.maskImage);
+                    const juce::String adjKey = juce::String::formatted (
+                        "%s|%.4f|%.4f|%.4f", params.maskImage.path.toRawUTF8(),
+                        params.maskImage.brightness, params.maskImage.contrast, params.maskImage.saturation);
                     const juce::Colour stroke = params.maskImage.strokeAutoColor
-                                              ? maskAverageColourCached (im, params.maskImage.path)
+                                              ? maskAverageColourCached (adj, adjKey)
                                               : params.maskImage.strokeColor;
-                    juce::Image masked = SpectrumMask::compose (base, im, params.maskImage, stroke);
+                    juce::Image masked = SpectrumMask::compose (base, adj, params.maskImage, stroke);
                     if (masked.isValid()) specLayer = masked;
                 }
             }

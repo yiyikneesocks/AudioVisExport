@@ -107,6 +107,49 @@ int main()
                      b.x0, b.y0, b.x1, b.y1, (int) ex0, (int) ey0, (int) ex1, (int) ey1);
     }
 
+    // ---- 4) #4 色彩调整：去饱和=灰、亮度减半、对比度 0=中灰；identity 返回原图 ----
+    {
+        juce::Image photo (juce::Image::ARGB, 4, 4, true);
+        { juce::Graphics g (photo); g.fillAll (juce::Colour::fromRGB (200, 100, 50)); }
+
+        const auto id = SpectrumMask::adjustedImage (photo, 1, 1, 1);
+        check (id == photo, "adjustedImage identity returns same image");
+
+        juce::Image dImg = SpectrumMask::adjustedImage (photo, 1, 1, 0);
+        juce::Image::BitmapData bd1 (dImg, juce::Image::BitmapData::readOnly);
+        const juce::PixelARGB desat = *reinterpret_cast<const juce::PixelARGB*> (bd1.getLinePointer (0));
+        const int luma = juce::roundToInt (0.299f * 200 + 0.587f * 100 + 0.114f * 50);
+        check (std::abs ((int) desat.getRed() - luma) <= 2 && desat.getRed() == desat.getGreen()
+               && desat.getGreen() == desat.getBlue(), "saturation=0 → pure grey (luma)");
+
+        juce::Image bImg = SpectrumMask::adjustedImage (photo, 0.5f, 1, 1);
+        juce::Image::BitmapData bd2 (bImg, juce::Image::BitmapData::readOnly);
+        const juce::PixelARGB dark = *reinterpret_cast<const juce::PixelARGB*> (bd2.getLinePointer (0));
+        check (std::abs ((int) dark.getRed() - 100) <= 2 && std::abs ((int) dark.getBlue() - 25) <= 2,
+               "brightness=0.5 halves channels");
+
+        juce::Image cImg = SpectrumMask::adjustedImage (photo, 1, 0, 1);
+        juce::Image::BitmapData bd3 (cImg, juce::Image::BitmapData::readOnly);
+        const juce::PixelARGB flat = *reinterpret_cast<const juce::PixelARGB*> (bd3.getLinePointer (0));
+        check (flat.getRed() == 128 && flat.getGreen() == 128 && flat.getBlue() == 128,
+               "contrast=0 → flat mid grey");
+    }
+
+    // ---- 5) 半透明像素保持预乘一致性（调整后 R'<=A' 恒成立）----
+    {
+        juce::Image half (juce::Image::ARGB, 2, 2, true);
+        {
+            juce::Graphics g (half);
+            g.setColour (juce::Colour (0x80ff8040u));           // alpha=128 的橙色
+            g.fillRect (0, 0, 2, 2);
+        }
+        juce::Image adj = SpectrumMask::adjustedImage (half, 2.0f, 2.0f, 2.0f);
+        juce::Image::BitmapData bd (adj, juce::Image::BitmapData::readOnly);
+        const juce::PixelARGB p = *reinterpret_cast<const juce::PixelARGB*> (bd.getLinePointer (0));
+        check (p.getAlpha() == 128 && p.getRed() <= p.getAlpha() && p.getGreen() <= p.getAlpha()
+               && p.getBlue() <= p.getAlpha(), "premultiplied invariants hold after adjust (no unpremult leak)");
+    }
+
     std::printf (failures ? "FAILURES: %d\n" : "ALL PASS\n", failures);
     return failures ? 1 : 0;
 }

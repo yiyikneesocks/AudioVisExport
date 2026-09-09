@@ -197,10 +197,16 @@ namespace
                     const juce::Image im = loadImageForLayer (p.maskImage.path);
                     if (im.isValid())
                     {
+                        // v0.5.4 #4：色彩调整后的图（identity 时零开销返回原图；带缓存）
+                        const juce::Image adj = SpectrumMask::adjustedImageCached (im, p.maskImage);
+                        const juce::String adjKey = juce::String::formatted (
+                            "%s|%.4f|%.4f|%.4f", p.maskImage.path.toRawUTF8(),
+                            p.maskImage.brightness, p.maskImage.contrast, p.maskImage.saturation);
                         const juce::Colour stroke = p.maskImage.strokeAutoColor
-                                                  ? averageColourCached (im, p.maskImage.path)
+                                                  ? averageColourCached (adj, adjKey)
                                                   : p.maskImage.strokeColor;
-                        juce::Image masked = SpectrumMask::compose (base, im, p.maskImage, stroke);
+                        juce::Image masked = SpectrumMask::compose (
+                            base, adj, p.maskImage, stroke);
                         if (masked.isValid()) layer = masked;
                     }
                 }

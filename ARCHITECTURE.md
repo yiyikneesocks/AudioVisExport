@@ -830,6 +830,9 @@ SpectrumParams.h 默认值
 | maskImage.strokeWidth | `mask.strokeWidth` | 2.0 | "Outline width" 滑块（0.5..12） | 描边宽度（≈内侧环像素宽） |
 | maskImage.strokeAutoColor | `mask.strokeAutoColor` | true | （设 `mask.strokeColor` 自动置 false）| 描边色=图片平均色 |
 | maskImage.strokeColor | `mask.strokeColor` | `#ffffffff` | （CLI `--set`）| 手动描边色（auto 时忽略）|
+| maskImage.brightness | `mask.brightness` | 1.0 | "Brightness" 滑块（0..2）| 蒙版图片亮度，1.0=原图（v0.5.4 #4）|
+| maskImage.contrast | `mask.contrast` | 1.0 | "Contrast" 滑块（0..2）| 蒙版图片对比度，中灰 128 为轴，1.0=原图 |
+| maskImage.saturation | `mask.saturation` | 1.0 | "Saturation" 滑块（0..2）| 蒙版图片饱和度，0=灰度，1.0=原图 |
 
 > 图片随频谱**整体**拖动/缩放/旋转（几何在 base 空间，套用同一 `p.transform`）；「Edit image position」模式给图片**独立手柄**（角=等比、边=单轴拉伸、body=平移、顶圆=旋转，移动可吸附到频谱画框边/中线），点频谱框外自动退出编辑。
 

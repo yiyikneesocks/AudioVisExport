@@ -12,21 +12,30 @@ static int fails = 0;
 
 int main()
 {
-    // 情形 1：未旋转图片 100x50，contain 于 200x100 → scale 2, pos 补偿
+    // 情形 1：未旋转图片 100x50，contain 于 200x100 → scale 2，中心摆到画布中心
+    //（v0.5.4 修正：旧公式 pos=out/2−s·c 在 s≠1 时整体偏移 (1−s)·c，并非"恰好铺满 pos=0"）
     VisTransform t = makeContainTransform (100, 50, 200, 100);
     CHECK (std::abs (t.scaleX - 2.0f) < 1e-5f, "contain scale=2");
-    CHECK (std::abs (t.posX) < 1e-5f && std::abs (t.posY) < 1e-5f, "contain pos=0 (200x100 exactly)");
+    CHECK (std::abs (t.posX - 50.0f) < 1e-5f && std::abs (t.posY - 25.0f) < 1e-5f,
+           "contain pos = out/2 − center (真正居中)");
+    {   // 直接验证四角落位：100x50@2x 应正好铺满 0..200,0..100
+        auto c = visCorners (t, 100.0f, 50.0f);
+        CHECK (std::abs (c[0].getX()) < 1e-4f && std::abs (c[0].getY()) < 1e-4f
+            && std::abs (c[2].getX() - 200.0f) < 1e-4f && std::abs (c[2].getY() - 100.0f) < 1e-4f,
+               "contain corners exactly fill output canvas");
+    }
 
     // 情形 2：拖左下角 → 右下角锚定。起始右下角输出 (200,100)
-    // 用 4:3 画布 contain: elem 100x50 → out 200x100
+    // 用 4:3 画布 contain: elem 100x50 → out 200x100（居中式：pos=out/2−c=(50,25)）
     VisTransform s {};
     s.set = true; s.centerX = 50; s.centerY = 25; s.scaleX = s.scaleY = 2.0f;
+    s.posX = 50; s.posY = 25;
     // anchor = 右下角元素坐标 (100,50)；dragged = 左下角 (0,50)
     juce::Point<float> anchor (100, 50), dragged (0, 50);
     auto aff = buildVisAffine (s);
     auto anchorOut = visTransformPoint (aff, anchor);
-    CHECK (std::abs (anchorOut.getX() - 150.0f) < 1e-4f && std::abs (anchorOut.getY() - 75.0f) < 1e-4f,
-           "anchor starts at (100,100) output");
+    CHECK (std::abs (anchorOut.getX() - 200.0f) < 1e-4f && std::abs (anchorOut.getY() - 100.0f) < 1e-4f,
+           "anchor starts at (200,100) output");
 
     // 鼠标拖到距锚点 1.5 倍处（沿 x 反方向）
     auto startDragged = visTransformPoint (aff, dragged);

@@ -85,6 +85,9 @@ private:
     juce::ToggleButton maskStrokeToggle { "Outline (auto avg color)" };
     juce::ToggleButton maskEditToggle { "Edit image position" };
     juce::Slider* maskStrokeWidthSliderPtr = nullptr;
+    juce::Slider* maskBrightnessPtr = nullptr;
+    juce::Slider* maskContrastPtr = nullptr;
+    juce::Slider* maskSaturationPtr = nullptr;
     juce::ToggleButton snapToggle { "Snapping" };               // v0.5.2 吸附开关
     juce::Slider layerOpacitySlider;                            // v0.5.1 需要引用以刷新
     juce::Slider* layerOpacitySliderPtr = nullptr;

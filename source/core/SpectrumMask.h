@@ -20,6 +20,15 @@ namespace SpectrumMask
     // 计算一张图片的平均色（按其自身 alpha 加权；全透明则返回不透明灰）。
     juce::Colour averageColour (const juce::Image& img);
 
+    // 色彩调整（v0.5.4 #4）：亮度/对比度/饱和度（1.0=原图，范围 0..2）。
+    // 预乘安全：解预乘 → sRGB 空间调整 → 再预乘。全为 1.0 时直接返回原图（零开销）。
+    juce::Image adjustedImage (const juce::Image& img,
+                               float brightness, float contrast, float saturation);
+
+    // 逐帧共用入口：按 cfg.path+三参数 做 LRU-1 缓存的 adjustedImage（滑条拖动只重算一次）。
+    // 调用方应把它的结果同时喂给 compose 与 averageColour（自动描边色随调整同步）。
+    juce::Image adjustedImageCached (const juce::Image& img, const MaskImageLayer& cfg);
+
     // 生成蒙版合成图（输出分辨率 W×H 的 ARGB）：
     //   · 图片定位由 cfg.transform 决定（base/输出坐标系）：
     //       - set=false → 与其他图片图层一致：等比 contain 适配输出画布并居中（v0.5.4 #3）

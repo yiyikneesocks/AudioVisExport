@@ -300,6 +300,19 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     maskStrokeWidthSliderPtr = addSlider ("Outline width", 0.5, 12.0, 0.5, 1.0,
                [this] { return (double) params.maskImage.strokeWidth; },
                [this] (double v) { params.maskImage.strokeWidth = (float) v; notify(); });
+    // v0.5.4 #4：色彩调整（只作用蒙版图片；1.0=原图）
+    maskBrightnessPtr = addSlider ("Brightness", 0.0, 2.0, 0.01, 1.0,
+               [this] { return (double) params.maskImage.brightness; },
+               [this] (double v) { params.maskImage.brightness = (float) v; notify(); });
+    maskContrastPtr = addSlider ("Contrast", 0.0, 2.0, 0.01, 1.0,
+               [this] { return (double) params.maskImage.contrast; },
+               [this] (double v) { params.maskImage.contrast = (float) v; notify(); });
+    maskSaturationPtr = addSlider ("Saturation", 0.0, 2.0, 0.01, 1.0,
+               [this] { return (double) params.maskImage.saturation; },
+               [this] (double v) { params.maskImage.saturation = (float) v; notify(); });
+    for (juce::Slider* sl : { maskBrightnessPtr, maskContrastPtr, maskSaturationPtr })
+        if (sl != nullptr) sl->setTooltip ("Adjusts the mask image only (1.00 = original). "
+                                           "Export uses the same values.");
     addRow ("", &maskEditToggle);
     addAndMakeVisible (maskEditToggle);
     maskEditToggle.setToggleState (false, juce::dontSendNotification);
@@ -477,6 +490,12 @@ void ParamPanel::syncMaskControls()
     maskStrokeToggle.setToggleState(params.maskImage.strokeEnabled, juce::dontSendNotification);
     if (maskStrokeWidthSliderPtr != nullptr)
         maskStrokeWidthSliderPtr->setValue (params.maskImage.strokeWidth, juce::dontSendNotification);
+    if (maskBrightnessPtr != nullptr)
+        maskBrightnessPtr->setValue (params.maskImage.brightness, juce::dontSendNotification);
+    if (maskContrastPtr != nullptr)
+        maskContrastPtr->setValue (params.maskImage.contrast, juce::dontSendNotification);
+    if (maskSaturationPtr != nullptr)
+        maskSaturationPtr->setValue (params.maskImage.saturation, juce::dontSendNotification);
 }
 
 void ParamPanel::setProgressText (const juce::String& s)

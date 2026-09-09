@@ -291,6 +291,9 @@ juce::String SpectrumParams::toJson() const
         s << "    \"strokeEnabled\": " << (mk.strokeEnabled ? "true" : "false") << ",\n";
         s << "    \"strokeWidth\": " << mk.strokeWidth << ",\n";
         s << "    \"strokeAutoColor\": " << (mk.strokeAutoColor ? "true" : "false") << ",\n";
+        s << "    \"brightness\": " << mk.brightness << ",\n";
+        s << "    \"contrast\": " << mk.contrast << ",\n";
+        s << "    \"saturation\": " << mk.saturation << ",\n";
         s << "    \"strokeColor\": \"" << colourHex (mk.strokeColor) << "\"\n";
         s << "  }\n";
     }
@@ -476,6 +479,9 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
         p.maskImage.strokeEnabled   = getBool   (mk, "strokeEnabled", p.maskImage.strokeEnabled);
         p.maskImage.strokeWidth     = getFloat  (mk, "strokeWidth", p.maskImage.strokeWidth);
         p.maskImage.strokeAutoColor = getBool   (mk, "strokeAutoColor", p.maskImage.strokeAutoColor);
+        p.maskImage.brightness      = juce::jlimit (0.0f, 2.0f, getFloat (mk, "brightness", p.maskImage.brightness));
+        p.maskImage.contrast        = juce::jlimit (0.0f, 2.0f, getFloat (mk, "contrast", p.maskImage.contrast));
+        p.maskImage.saturation      = juce::jlimit (0.0f, 2.0f, getFloat (mk, "saturation", p.maskImage.saturation));
         bool cok = false;
         auto sc = parseColour (getStr (mk, "strokeColor", ""), &cok);
         if (cok) p.maskImage.strokeColor = sc;
@@ -605,6 +611,10 @@ bool SpectrumParams::applyOverride (const juce::String& dottedKey,
     if      (key == "mask.strokeWidth")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.strokeWidth=v; return true; }
     if      (key == "mask.strokeAutoColor")  { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); maskImage.strokeAutoColor=v; return true; }
     if      (key == "mask.strokeColor")      { bool ok; auto c=parseColour(val, &ok); if(!ok) return setErr("invalid color"); maskImage.strokeColor=c; maskImage.strokeAutoColor=false; return true; }
+    // mask.brightness / contrast / saturation（v0.5.4 #4）：0..2，1.0=原图
+    if      (key == "mask.brightness")       { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.brightness=juce::jlimit(0.0f,2.0f,v); return true; }
+    if      (key == "mask.contrast")         { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.contrast=juce::jlimit(0.0f,2.0f,v); return true; }
+    if      (key == "mask.saturation")       { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.saturation=juce::jlimit(0.0f,2.0f,v); return true; }
     // 蒙版图片几何（设值即视为已编辑 → set=true；未设则铺满画框，与电平无关）
     if      (key == "mask.reset")            { maskImage.transform=VisTransform{}; return true; }
     if      (key == "mask.centerX")          { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.transform.centerX=v; maskImage.transform.set=true; return true; }
