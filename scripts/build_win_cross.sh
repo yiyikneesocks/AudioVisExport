@@ -141,8 +141,14 @@ if [ "$DEPLOY" = true ]; then
         mkdir -p "$DEST_DIR"
     fi
 
-    cp "$CLI_EXE" "$DEST_DIR/"
-    [ -f "$GUI_EXE" ] && cp "$GUI_EXE" "$DEST_DIR/"
+    cp "$CLI_EXE" "$DEST_DIR/" 2>/dev/null || {
+        echo "  [deploy] AudioVisExport.exe 被占用（用户可能正开着）→ 落地为 AudioVisExport_new.exe"
+        cp "$CLI_EXE" "$DEST_DIR/AudioVisExport_new.exe"; }
+    if [ -f "$GUI_EXE" ]; then
+        cp "$GUI_EXE" "$DEST_DIR/" 2>/dev/null || {
+            echo "  [deploy] AudioVisGUI.exe 被占用（用户可能正开着）→ 落地为 AudioVisGUI_new.exe"
+            cp "$GUI_EXE" "$DEST_DIR/AudioVisGUI_new.exe"; }
+    fi
 
     # Generate .bat launcher
     cat > "$DEST_DIR/Run_AudioVisGUI.bat" <<'EOF'
