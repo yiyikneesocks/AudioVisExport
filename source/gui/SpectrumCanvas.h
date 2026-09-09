@@ -66,11 +66,14 @@ private:
         None, Move, Rotate,
         ScaleTL, ScaleTR, ScaleBR, ScaleBL,   // 四角（等比缩放）
         ScaleT,  ScaleB,  ScaleL,  ScaleR,    // 四边（单轴拉伸）
-        MoveMask                              // v0.5.4：编辑模式下平移蒙版图片
+        MoveMask,                             // v0.5.4：编辑模式下平移蒙版图片
+        BaselineAxis                          // v0.5.4 #4：拖基线轴
     };
     DragMode dragMode = DragMode::None;
     int selectedImage = -1;             // 当前选中元素：-1 = 频谱，>=0 = params.images 下标
     bool editMaskImage = false;         // v0.5.4：蒙版图片编辑模式
+    bool dragBaseline  = false;         // v0.5.4 #4：基线轴拖拽中
+    float baselineScreenY = -1e9f;      // #4：轴线的画布 y（paint 时更新，命中测试用）
     float dragStartOffX = 0.0f, dragStartOffY = 0.0f;   // 拖图起始 offset
 
     // ---- 拖放 HUD / 提权诊断（UIPI）----
@@ -122,6 +125,8 @@ private:
     // v0.5.4: 输出坐标 → base/蒙版图片空间（= 撤销频谱元素变换 P⁻¹；未变换时二者重合）
     juce::Point<float> baseFromOutput (juce::Point<float> out) const;
     void paintSnapGuides (juce::Graphics& g, const juce::AffineTransform& disp);  // v0.5.3 吸附辅助线
+    // v0.5.4 #3: 缩放吸附——手柄点对齐画布/其它元素特征点，命中则修正 t 并推辅助线
+    void applyScaleSnap (VisTransform& t, const juce::Point<float>& mouseOut);
     // 图片图层（v0.5.1 分组渲染：aboveOnly=false=频谱下方组，true=上方组）
     void paintImages (juce::Graphics& g, const juce::AffineTransform& disp, bool aboveOnly);
     void paintImageLayer (juce::Graphics& g, const juce::AffineTransform& disp,

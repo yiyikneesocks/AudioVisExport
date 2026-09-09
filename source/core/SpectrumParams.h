@@ -123,10 +123,19 @@ struct SpectrumParams
     }
     void setBarPitch (float v)
     {
+        // v0.5.4 #1'：pitch 语义 = 目标带宽%（占画布宽）→ 强耦合反推 bandCount（铺满横向）
         barPitchRatio = juce::jlimit (0.05f, 2.5f, v);
         barGapRatio   = juce::jlimit (-2.48f, 2.48f, barPitchRatio - barWidthRatio);
+        bandCount     = juce::jlimit (2, 512, (int) juce::roundToInt (1.0f / juce::jmax (0.004f, barPitchRatio)));
+    }
+    // bandCount ↔ pitch 双向联动（#1'）：改带数回写 pitch 记忆值（= 1/带数）
+    void setBandCount (int n)
+    {
+        bandCount = juce::jlimit (2, 512, n);
+        barPitchRatio = 1.0f / (float) bandCount;
     }
     bool  barParticles  = true;    // bar / bar-line 样式：峰值帽（下落小横线）开关，false = 只留柱体
+    float baselineY     = 0.0f;    // v0.5.4 #4 基线轴：0=底部，0.5=镜像，1=顶部；柱以轴为零点上下按比例生长
     bool  drawGrid        = false;     // 可视化视频默认不画坐标轴（需要时 CLI 开 --draw-grid on）
     bool  drawAxisLabels  = false;     // 同上（--draw-axis-labels on）
 

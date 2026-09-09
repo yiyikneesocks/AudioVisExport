@@ -127,7 +127,9 @@ void CrystalStyle::renderPass (juce::Graphics& g, int pass,
     buildCurvePoints_ (pts, frame, canvas, rp);
 
     const float yTop = (float) inner.getY();
-    const float yBot = (float) inner.getBottom();
+    // v0.5.4 #4：填充闭合底边 = 基线轴（a=0 退化为画布底）
+    const float yBot = (float) inner.getBottom()
+                     - juce::jlimit (0.0f, 1.0f, rp.baselineY) * (float) canvas.getHeight();
 
     // ---- pass 0: 真辉光 bloom（离屏描曲线 → 高斯模糊 → 叠加回主画布）----
     if (pass == 0)

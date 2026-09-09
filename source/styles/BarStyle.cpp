@@ -79,7 +79,7 @@ void BarStyle::render (juce::Graphics& g,
     // 默认 gap=0.28、width=1.0 时与旧版（bar=0.72*slot）视觉完全一致。
     // v0.5.4 #25：三联动布局。slot = 带 pitch（两柱锚点间距）；
     //   间隙 gap = pitch − width（可负=重叠）；柱锚点 x 间距用 pitch。
-    const float slotW = (float) inner.getWidth() / (float) N * juce::jlimit (0.05f, 2.5f, rp.barPitchRatio);
+    const float slotW = (float) inner.getWidth() / (float) N;   // #1': 恒铺满横向（pitch 语义=目标带宽%，驱动 bandCount）
     const float gap   = juce::jlimit (-2.48f, 2.48f, rp.barGapRatio) * (float) inner.getWidth() / (float) N;
     const float barW  = juce::jlimit (0.02f, 2.5f, rp.barWidthRatio) * (float) inner.getWidth() / (float) N;
     const float x0    = (float) inner.getX() + (slotW - barW) * 0.5f;
@@ -92,14 +92,17 @@ void BarStyle::render (juce::Graphics& g,
     const bool useMap = ! cm.isSolid();
 
     // 画柱（solid：底 primary→顶 secondary；colormap：底基色→顶基色淡）
+    // v0.5.4 #4：柱以基线轴为零点上下按比例生长（a=0 退化为原底部生长）。
+    const float a = juce::jlimit (0.0f, 1.0f, rp.baselineY);
     for (int i = 0; i < N; ++i)
     {
         float n = std::clamp (frame.normalized[i], 0.0f, 1.0f);
         if (n < 0.005f) continue;  // 贴底跳过
 
         float x = x0 + (float) i * slotW;
-        float y = normalizedToY_ (n, canvas);
-        float h = yBot - y;
+        float y    = normalizedToY_ (baselineTop    (n, a), canvas);   // 柱顶
+        float yBtm = normalizedToY_ (baselineBottom (n, a), canvas);   // 柱底（轴下臂）
+        float h = yBtm - y;
         if (h < 1.0f) continue;
 
         juce::Colour bottom, top;
@@ -114,7 +117,7 @@ void BarStyle::render (juce::Graphics& g,
             bottom = rp.primary.withAlpha (0.85f);
             top    = rp.secondary.withAlpha (0.35f);
         }
-        juce::ColourGradient grad (bottom, x, yBot, top, x, y, false);
+        juce::ColourGradient grad (bottom, x, yBtm, top, x, y, false);
         g.setGradientFill (grad);
         g.fillRect (x, y, barW, h);
     }
@@ -129,7 +132,7 @@ void BarStyle::render (juce::Graphics& g,
         if (n < 0.005f) continue;
         if (useMap) g.setColour (cm.colourForBand (i, N, n));
         float x = x0 + (float) i * slotW;
-        float y = normalizedToY_ (n, canvas);
+        float y = normalizedToY_ (baselineTop (n, a), canvas);
         g.drawHorizontalLine ((int) std::round (y), x, x + barW);
     }
 

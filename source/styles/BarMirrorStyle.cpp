@@ -28,7 +28,7 @@ void BarMirrorStyle::render (juce::Graphics& g,
     if (inner.getWidth() <= 2 || inner.getHeight() <= 2) return;
 
     // v0.5.4 #25：三联动布局（与 BarStyle 同式）
-    const float slotW = (float) inner.getWidth() / (float) N * juce::jlimit (0.05f, 2.5f, rp.barPitchRatio);
+    const float slotW = (float) inner.getWidth() / (float) N;   // #1': 恒铺满横向（pitch 语义=目标带宽%，驱动 bandCount）
     const float gap   = juce::jlimit (-2.48f, 2.48f, rp.barGapRatio) * (float) inner.getWidth() / (float) N;
     const float barW  = juce::jlimit (0.02f, 2.5f, rp.barWidthRatio) * (float) inner.getWidth() / (float) N;
     const float x0    = (float) inner.getX() + (slotW - barW) * 0.5f;

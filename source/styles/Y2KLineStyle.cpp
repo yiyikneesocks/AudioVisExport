@@ -222,7 +222,9 @@ void Y2KLineStyle::render (juce::Graphics& g,
     }
 
     const float yTop = (float) inner.getY();
-    const float yBot = (float) inner.getBottom();
+    // v0.5.4 #4：填充闭合底边 = 基线轴（a=0 退化为画布底）
+    const float yBot = (float) inner.getBottom()
+                     - juce::jlimit (0.0f, 1.0f, rp.baselineY) * (float) canvas.getHeight();
 
     ColorMap cm;
     cm.configure (rp.colorMap, rp.primary, rp.secondary, rp.peak);

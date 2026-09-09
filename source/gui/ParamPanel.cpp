@@ -64,10 +64,13 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
                   static const char* names[] = { "y2k-line", "bar", "bar-line", "bar-mirror", "polyline", "crystal" };
                   params.style = names[id - 1];
                   notify();
-              });
-    addSlider ("Band count", 16, 512, 1, 1.0,
+              })
+        ->setTooltip ("bar-mirror is deprecated: use bar / bar-line with Baseline = 50%\n"
+                      "for the same mirrored look (plus full axis flexibility).");
+    bandCountSliderPtr = addSlider ("Band count", 16, 512, 1, 1.0,
                [this] { return (double) params.bandCount; },
-               [this] (double v) { params.bandCount = (int) v; notify(); });
+               [this] (double v) { params.setBandCount ((int) v);
+                                  syncBarLayoutSliders(); notify(); });
     // v0.5.4 #25：三联动布局（gap = pitch − width，gap 可为负 = 重叠）
     auto* barWidthSlider = addSlider ("Bar width %", 2, 250, 1, 1.0,
                [this] { return (double) params.barWidthRatio * 100.0; },
@@ -85,10 +88,17 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
                [this] { return (double) params.barPitchRatio * 100.0; },
                [this] (double v) { params.setBarPitch ((float) (v / 100.0));
                                   syncBarLayoutSliders(); notify(); });
-    barPitchSlider->setTooltip ("Pitch = anchor-to-anchor distance between neighbouring bars (x slot).\n"
-                                "Moving this keeps the WIDTH fixed; the gap follows.");
+    barPitchSlider->setTooltip ("Pitch = target band width (x slot). Strongly linked to Band Count:\n"
+                                "moving either one updates the other so bars fill the full width.");
     addToggle ("Peak caps", params.barParticles,
                [this] (bool v) { params.barParticles = v; notify(); });
+    // v0.5.4 #4：基线轴（0=底部；0.5=镜像；画布内可拖 + 吸附）
+    auto* baselineSlider = addSlider ("Baseline %", 0, 100, 1, 1.0,
+               [this] { return (double) params.baselineY * 100.0; },
+               [this] (double v) { params.baselineY = (float) (v / 100.0); notify(); });
+    baselineSlider->setTooltip ("Baseline axis: bars grow from this line, split above/below\n"
+                                "proportionally (50% = mirror look). Also draggable on the canvas\n"
+                                "with snapping (50% hints \"mirror\").");
     barWidthSliderPtr = barWidthSlider;
     barGapSliderPtr = barGapSlider;
     barPitchSliderPtr = barPitchSlider;
@@ -535,6 +545,8 @@ void ParamPanel::syncBarLayoutSliders()
         barGapSliderPtr->setValue (params.barGapRatio * 100.0, juce::dontSendNotification);
     if (barPitchSliderPtr != nullptr)
         barPitchSliderPtr->setValue (params.barPitchRatio * 100.0, juce::dontSendNotification);
+    if (bandCountSliderPtr != nullptr)
+        bandCountSliderPtr->setValue ((double) params.bandCount, juce::dontSendNotification);
 }
 
 void ParamPanel::syncMaskControls()
@@ -642,10 +654,7 @@ void ParamPanel::resized()
     {
         const bool on = (r.tab == currentTab);
         if (r.editor != nullptr)
-        {
             r.editor->setVisible (on);
-            if (! on) continue;
-        }
         if (! r.label.isEmpty())
         {
             auto it = rowLabels.find (r.editor);

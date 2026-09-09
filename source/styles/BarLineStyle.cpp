@@ -33,7 +33,7 @@ void BarLineStyle::render (juce::Graphics& g,
     if (inner.getWidth() <= 2 || inner.getHeight() <= 2) return;
 
     // 布局：与 BarStyle 完全一致（v0.5.4 #25 三联动：pitch / gap / width）
-    const float slotW = (float) inner.getWidth() / (float) N * juce::jlimit (0.05f, 2.5f, rp.barPitchRatio);
+    const float slotW = (float) inner.getWidth() / (float) N;   // #1': 恒铺满横向（pitch 语义=目标带宽%，驱动 bandCount）
     const float gap   = juce::jlimit (-2.48f, 2.48f, rp.barGapRatio) * (float) inner.getWidth() / (float) N;
     const float barW  = juce::jlimit (0.02f, 2.5f, rp.barWidthRatio) * (float) inner.getWidth() / (float) N;
     const float x0    = (float) inner.getX() + (slotW - barW) * 0.5f;
@@ -57,29 +57,33 @@ void BarLineStyle::render (juce::Graphics& g,
     const bool useMap = ! cm.isSolid();
 
     // 画梯形柱（贴底柱跳过；顶点 y 用 canvas 映射与旧版口径一致）
+    // v0.5.4 #4：柱以基线轴为零点上下按比例生长（a=0 退化为原底部生长）。
+    const float a = juce::jlimit (0.0f, 1.0f, rp.baselineY);
     for (int i = 0; i < N; ++i)
     {
         if (n[(size_t) i] < 0.005f) continue;
 
         const float xL    = x0 + (float) i * slotW;
         const float xR    = xL + barW;
-        const float yEdgeL = normalizedToY_ (edge[(size_t) i],     canvas);
-        const float yEdgeR = normalizedToY_ (edge[(size_t) i + 1], canvas);
+        const float yEdgeL = normalizedToY_ (baselineTop    (edge[(size_t) i],     a), canvas);
+        const float yEdgeR = normalizedToY_ (baselineTop    (edge[(size_t) i + 1], a), canvas);
+        const float yBotL  = normalizedToY_ (baselineBottom (edge[(size_t) i],     a), canvas);
+        const float yBotR  = normalizedToY_ (baselineBottom (edge[(size_t) i + 1], a), canvas);
         const float yPeak  = juce::jmin (yEdgeL, yEdgeR);   // 顶边最高点
-        if (yBot - yPeak < 1.0f) continue;
+        if (yBotL - yPeak < 1.0f && yBotR - yPeak < 1.0f) continue;
 
         juce::Path bar;
         bar.startNewSubPath (xL, yEdgeL);
         bar.lineTo          (xR, yEdgeR);
-        bar.lineTo          (xR, yBot);
-        bar.lineTo          (xL, yBot);
+        bar.lineTo          (xR, yBotR);
+        bar.lineTo          (xL, yBotL);
         bar.closeSubPath();
 
         const juce::Colour bottom = useMap ? cm.colourForBand (i, N, n[(size_t) i]).withAlpha (0.85f)
                                            : rp.primary.withAlpha (0.85f);
         const juce::Colour top    = useMap ? cm.colourForBand (i, N, n[(size_t) i]).withAlpha (0.40f)
                                            : rp.secondary.withAlpha (0.35f);
-        juce::ColourGradient grad (bottom, 0.0f, yBot, top, 0.0f, yPeak, false);
+        juce::ColourGradient grad (bottom, 0.0f, (yBotL + yBotR) * 0.5f, top, 0.0f, yPeak, false);
         g.setGradientFill (grad);
         g.fillPath (bar);
 
@@ -162,8 +166,8 @@ void BarLineStyle::render (juce::Graphics& g,
         {
             const float xL = x0 + (float) i * slotW;
             const float xR = xL + barW;
-            capPath.startNewSubPath (xL, normalizedToY_ (capEdgeDraw (i),     canvas));
-            capPath.lineTo          (xR, normalizedToY_ (capEdgeDraw (i + 1), canvas));
+            capPath.startNewSubPath (xL, normalizedToY_ (baselineTop (capEdgeDraw (i),     a), canvas));
+            capPath.lineTo          (xR, normalizedToY_ (baselineTop (capEdgeDraw (i + 1), a), canvas));
         }
         g.setColour (rp.peak.withAlpha (0.9f));
         g.strokePath (capPath, juce::PathStrokeType (

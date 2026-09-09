@@ -249,7 +249,33 @@ void SpectrumCanvas::paintOverlay (juce::Graphics& g)
 
     const auto disp = displayAffine();
 
-    auto cOut = currentCorners();                    // 输出坐标（已按选中元素的尺寸）
+    // v0.5.4 #4：基线轴手柄（仅选中频谱、非蒙版编辑时显示；橙色横线 + 两端把手）
+    if (selectedImage < 0 && params.spectrumPresent && ! editMaskImage)
+    {
+        const float oh = (float) juce::jmax (1, params.height);
+        const auto total = buildVisAffine (params.transform).followedBy (disp);
+        const juce::Point<float> axL = visTransformPoint (total, { 0.0f, params.baselineY * oh });
+        const juce::Point<float> axR = visTransformPoint (total, { (float) params.width, params.baselineY * oh });
+        baselineScreenY = (axL.getY() + axR.getY()) * 0.5f;   // 命中测试用（近似，轴理论上水平）
+
+        const juce::Colour axisCol (0xFFFF7A00);
+        g.setColour (axisCol.withAlpha (0.8f));
+        g.drawLine (axL.getX(), axL.getY(), axR.getX(), axR.getY(), 1.6f);
+        for (const auto& p : { axL, axR })   // 两端方形把手
+        {
+            g.setColour (axisCol);
+            g.fillRect (p.getX() - 5.0f, p.getY() - 5.0f, 10.0f, 10.0f);
+            g.setColour (juce::Colours::white.withAlpha (0.9f));
+            g.drawRect (p.getX() - 5.0f, p.getY() - 5.0f, 10.0f, 10.0f, 1.0f);
+            g.setColour (axisCol);
+        }
+        g.setColour (axisCol.withAlpha (0.9f));
+        g.drawText (juce::String::formatted ("baseline %d%%", (int) std::round (params.baselineY * 100.0f)),
+                    (int) axL.getX() + 8, (int) axL.getY() - 18, 120, 16,
+                    juce::Justification::centredLeft);
+    }
+
+    const auto cOut = currentCorners();                    // 输出坐标（已按选中元素的尺寸）
     // v0.5.4: 编辑蒙版图片时 cOut 是 base 坐标 → 需再套频谱元素变换 P 才到输出，再 disp 到画布
     const auto map = editMaskImage ? buildVisAffine (params.transform).followedBy (disp) : disp;
     // 元素中心 = 四角平均（仿射保持中点；自动跟随选中元素，v0.5.1 修复：
@@ -324,6 +350,99 @@ void SpectrumCanvas::paintOverlay (juce::Graphics& g)
 }
 
 // v0.5.3: CAD 风格吸附辅助线——竖/横虚线 + 两端特征点（中心圆/边中点菱形/角点方框）+ 目标标签
+// v0.5.4 #3: 缩放吸附——被拖手柄点对齐画布/其它图片/频谱的特征点（与移动吸附同目标集）。
+//   做法：先用未吸附鼠标算出的 t 求手柄输出位置 h0 → 找最近特征点 (dx,dy) →
+//   用修正后的鼠标位置重算 t（锚点由 applyAnchorScaled 钉死，吸附不破坏锚定）→ 推辅助线。
+void SpectrumCanvas::applyScaleSnap (VisTransform& t, const juce::Point<float>& mouseOut)
+{
+    activeSnapGuides.clear();
+    if (! params.snapEnabled)
+        return;
+
+    const float dispS = displayScale();
+    const float thresh = (dispS > 1e-3f) ? (8.0f / dispS) : 2.0f;
+
+    const auto h0 = visTransformPoint (buildVisAffine (t), dragHandleElem);
+    const float cw = (float) params.width, ch = (float) params.height;
+
+    struct Feat { juce::Point<float> p; SnapKind k; };
+    auto featOf = [] (const std::array<juce::Point<float>, 4>& c)
+    {
+        auto mid = [] (juce::Point<float> a, juce::Point<float> b)
+        { return juce::Point<float> ((a.getX() + b.getX()) * 0.5f, (a.getY() + b.getY()) * 0.5f); };
+        std::array<Feat, 9> f;
+        f[0] = { c[0], SnapKind::Corner }; f[1] = { c[1], SnapKind::Corner };
+        f[2] = { c[2], SnapKind::Corner }; f[3] = { c[3], SnapKind::Corner };
+        f[4] = { mid (c[0], c[1]), SnapKind::EdgeMid };
+        f[5] = { mid (c[1], c[2]), SnapKind::EdgeMid };
+        f[6] = { mid (c[2], c[3]), SnapKind::EdgeMid };
+        f[7] = { mid (c[3], c[0]), SnapKind::EdgeMid };
+        f[8] = { juce::Point<float> (
+                     (c[0].getX() + c[1].getX() + c[2].getX() + c[3].getX()) * 0.25f,
+                     (c[0].getY() + c[1].getY() + c[2].getY() + c[3].getY()) * 0.25f),
+                 SnapKind::Center };
+        return f;
+    };
+
+    const SnapKind dk = (dragMode >= DragMode::ScaleTL && dragMode <= DragMode::ScaleBR)
+                            ? SnapKind::Corner : SnapKind::EdgeMid;
+
+    struct Cand { float dx, dy; juce::Point<float> dragPt, targetPt;
+                  SnapKind dragKind, targetKind; juce::String label; float dist; };
+    std::vector<Cand> cands;
+
+    auto addTarget = [&] (const std::array<juce::Point<float>, 4>& tc, const juce::String& label)
+    {
+        for (const auto& tf : featOf (tc))
+        {
+            const float dx = tf.p.getX() - h0.getX();
+            const float dy = tf.p.getY() - h0.getY();
+            const float d = std::sqrt (dx * dx + dy * dy);
+            if (d < thresh)
+                cands.push_back ({ dx, dy, h0, tf.p, dk, tf.k, label, d });
+        }
+    };
+
+    addTarget (std::array<juce::Point<float>, 4> { { {0, 0}, {cw, 0}, {cw, ch}, {0, ch} } }, "Canvas");
+
+    const bool draggingImage = (selectedImage >= 0);
+    const int N = (int) params.images.size();
+    for (int i = 0; i < N; ++i)
+    {
+        if (i == selectedImage) continue;
+        const auto& im = params.images[(size_t) i];
+        const juce::Image img = loadCached (im.path);
+        const float iw = img.isValid() ? (float) img.getWidth()  : cw;
+        const float ih = img.isValid() ? (float) img.getHeight() : ch;
+        addTarget (visCorners (im.transform, iw, ih), "Image " + juce::String (i + 1));
+    }
+    if (draggingImage && params.spectrumPresent)
+        addTarget (visCorners (params.transform, cw, ch), "Spectrum");
+
+    const Cand* best = nullptr;
+    for (const auto& c : cands)
+        if (best == nullptr || c.dist < best->dist) best = &c;
+    if (best == nullptr)
+        return;
+
+    const juce::Point<float> mouseFixed = mouseOut + juce::Point<float> (best->dx, best->dy);
+    const VisScaleAxis ax =
+        (dragMode == DragMode::ScaleT || dragMode == DragMode::ScaleB) ? VisScaleAxis::OnlyY
+      : (dragMode == DragMode::ScaleL || dragMode == DragMode::ScaleR) ? VisScaleAxis::OnlyX
+      : VisScaleAxis::Both;
+    t = applyAnchorScaled (startTransform, dragAnchorElem, dragHandleElem,
+                           mouseFixed, dragStartOut, ax);
+
+    // 辅助线：手柄点吸附后的实际位置 ↔ 目标点
+    const juce::Point<float> snappedPt = h0 + juce::Point<float> (best->dx, best->dy);
+    if (std::abs (best->dx) > 0.01f)
+        activeSnapGuides.push_back ({ true, best->targetPt.getX(), snappedPt, best->targetPt,
+                                      dk, best->targetKind, best->label });
+    if (std::abs (best->dy) > 0.01f)
+        activeSnapGuides.push_back ({ false, best->targetPt.getY(), snappedPt, best->targetPt,
+                                      dk, best->targetKind, best->label });
+}
+
 void SpectrumCanvas::paintSnapGuides (juce::Graphics& g, const juce::AffineTransform& disp)
 {
     if (activeSnapGuides.empty())
@@ -607,6 +726,16 @@ void SpectrumCanvas::mouseDown (const juce::MouseEvent& e)
 
     const auto out = toOutput (e.position);
 
+    // v0.5.4 #4：基线轴命中（优先于手柄/元素拾取；仅选中频谱、非蒙版编辑）
+    if (selectedImage < 0 && params.spectrumPresent && ! editMaskImage
+        && std::abs (e.position.getY() - baselineScreenY) <= 8.0f)
+    {
+        dragMode = DragMode::BaselineAxis;
+        beginTransformIfNeeded();
+        repaint();
+        return;
+    }
+
     // v0.5.4: 蒙版图片编辑模式——角/边手柄=独立拉伸图片，body=平移，点输出画框外=退出编辑。
     //   复用与图片/频谱完全相同的手柄 & 对边锚定 & 吸附机制（activeTransform/Size 在编辑态指向蒙版图片）。
     if (editMaskImage)
@@ -771,6 +900,33 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
 
     const auto out = toOutput (e.position);
 
+    // v0.5.4 #4：拖基线轴——鼠标 y 反算回 base 空间 → baselineY，吸附格点；½ 时提示 mirror
+    if (dragMode == DragMode::BaselineAxis)
+    {
+        const auto b = baseFromOutput (out);
+        const float oh = (float) juce::jmax (1, params.height);
+        float a = juce::jlimit (0.0f, 1.0f, b.getY() / oh);
+
+        activeSnapGuides.clear();
+        if (params.snapEnabled)
+        {
+            static constexpr float kStops[] = { 0.0f, 0.25f, 1.0f / 3.0f, 0.5f, 2.0f / 3.0f, 0.75f, 1.0f };
+            const float dispS = displayScale();
+            const float thr = (dispS > 1e-3f) ? (8.0f / dispS) : 2.0f;
+            for (float st : kStops)
+                if (std::abs (a - st) * oh * dispS <= 8.0f)
+                { a = st; break; }
+        }
+        // ½ 吸附提示：mirror（复用吸附辅助线画一条横线 + 文本由 paintOverlay 的百分比标签表达）
+        params.baselineY = a;
+        if (params.snapEnabled && std::abs (a - 0.5f) < 1e-4f)
+            activeSnapGuides.push_back ({ false, b.getY(),
+                                          { 0.0f, b.getY() }, { (float) params.width, b.getY() },
+                                          SnapKind::EdgeMid, SnapKind::EdgeMid, "mirror" });
+        repaint();
+        return;
+    }
+
     // v0.5.4: 编辑蒙版图片时，位移/缩放在 base 坐标里算（与 activeTransform=mask 一致）
     if (editMaskImage && dragMode != DragMode::None)
     {
@@ -839,7 +995,46 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
                 (dragMode == DragMode::ScaleT || dragMode == DragMode::ScaleB) ? VisScaleAxis::OnlyY
               : (dragMode == DragMode::ScaleL || dragMode == DragMode::ScaleR) ? VisScaleAxis::OnlyX
               : VisScaleAxis::Both;
+            // #3（v0.5.4）：缩放时被拖手柄点吸附到频谱画框特征线（base 空间 0/中/满）。
+            //   先按未吸附鼠标算一次 → 取手柄输出位置 → 找最近目标线 → 修正鼠标重算
+            //   （锚点仍被 applyAnchorScaled 钉死，缩放吸附不破坏锚定）。
             mt = applyAnchorScaled (startTransform, dragAnchorElem, dragHandleElem, b, dragStartOut, ax);
+            activeSnapGuides.clear();
+            if (params.snapEnabled)
+            {
+                const auto h0 = visTransformPoint (buildVisAffine (mt), dragHandleElem);
+                const float ow = (float) juce::jmax (1, params.width);
+                const float oh = (float) juce::jmax (1, params.height);
+                const float s  = displayScale();
+                const float thr = (s > 1e-3f) ? (8.0f / s) : 2.0f;
+
+                const float fx[3] = { 0.0f, ow * 0.5f, ow };
+                const float fy[3] = { 0.0f, oh * 0.5f, oh };
+                float bestPx = thr + 1.0f, bestPy = thr + 1.0f;
+                bool hitX = false, hitY = false;
+                float snapX = 0.0f, snapY = 0.0f;
+                for (float tx : fx)
+                { const float d = std::abs (h0.getX() - tx); if (d < bestPx) { bestPx = d; snapX = tx; hitX = true; } }
+                for (float ty : fy)
+                { const float d = std::abs (h0.getY() - ty); if (d < bestPy) { bestPy = d; snapY = ty; hitY = true; } }
+
+                if (hitX || hitY)
+                {
+                    juce::Point<float> bFixed = b;
+                    if (hitX) bFixed.x += (snapX - h0.getX());
+                    if (hitY) bFixed.y += (snapY - h0.getY());
+                    mt = applyAnchorScaled (startTransform, dragAnchorElem, dragHandleElem,
+                                            bFixed, dragStartOut, ax);
+                }
+                if (hitX)
+                    activeSnapGuides.push_back ({ true, snapX, h0,
+                                                  { snapX, h0.getY() }, SnapKind::Corner, SnapKind::EdgeMid,
+                                                  "Frame" });
+                if (hitY)
+                    activeSnapGuides.push_back ({ false, snapY, h0,
+                                                  { hitX ? snapX : h0.getX(), snapY }, SnapKind::Corner, SnapKind::EdgeMid,
+                                                  "Frame" });
+            }
             repaint();
             return;
         }
@@ -992,6 +1187,7 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
         // P2: 对边锚定等比缩放——对角固定不动
         t = applyAnchorScaled (startTransform, dragAnchorElem, dragHandleElem, out, dragStartOut,
                                VisScaleAxis::Both);
+        applyScaleSnap (t, out);
         break;
     }
 
@@ -1001,6 +1197,7 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
         // P2: 对边锚定单轴拉伸——对边中点固定不动（仅单轴缩放）
         const bool vertical = (dragMode == DragMode::ScaleT || dragMode == DragMode::ScaleB);
         t = applyAnchorScaled (startTransform, dragAnchorElem, dragHandleElem, out, dragStartOut, vertical ? VisScaleAxis::OnlyY : VisScaleAxis::OnlyX);
+        applyScaleSnap (t, out);
         break;
     }
 

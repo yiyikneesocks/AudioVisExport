@@ -117,6 +117,7 @@ private:
     juce::Slider* barWidthSliderPtr = nullptr;    // v0.5.4 #25 三联动
     juce::Slider* barGapSliderPtr = nullptr;
     juce::Slider* barPitchSliderPtr = nullptr;
+    juce::Slider* bandCountSliderPtr = nullptr;
     void syncBarLayoutSliders();                  // #25: 联动回填另两条滑条
     juce::ToggleButton snapToggle { "Snapping" };               // v0.5.2 吸附开关
     juce::Slider layerOpacitySlider;                            // v0.5.1 需要引用以刷新

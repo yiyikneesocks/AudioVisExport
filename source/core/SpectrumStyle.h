@@ -45,6 +45,7 @@ public:
         float barGapRatio   = 0.28f;  // 柱间空隙比例（可负 = 重叠）
         float barWidthRatio = 0.72f;  // 柱宽（×slot）
         float fps           = 30.0f;  // #2 峰帽动画用（下落/拉拽按帧积分）
+        float baselineY = 0.0f;         // v0.5.4 #4 基线轴（0=底, 0.5=镜像）
         float peakDecayDbPerSec        = 12.0f;  // #2: 峰帽下落速度（dB/s，与 core 同源）
         float peakDecayAccelDbPerSec2  = 0.0f;   // #2: 峰帽下落加速度（dB/s²）
         bool  barParticles  = true;   // bar / bar-line：峰值帽（缓慢下落的小横线）开关
@@ -60,6 +61,13 @@ public:
         // colorMap 名（若 style 想按强度上色）
         juce::String colorMap = "solid";
     };
+
+    // ---- v0.5.4 #4 基线轴 ----
+    // 值 n（0..1）在轴位 a（0=底,1=顶）下的显示区间（归一化画布高）：
+    //   柱以轴为零点上下按比例生长：上臂 n×(1−a)，下臂 n×a；
+    //   n=1 恒跨满 [0,1]（"上到100下到0"）；a=0.5 即镜像；n=0 高度 0（贴轴不可见）。
+    inline float baselineTop    (float n, float a) noexcept { return a + (1.0f - a) * n; }
+    inline float baselineBottom (float n, float a) noexcept { return a * (1.0f - n); }
 
     virtual ~SpectrumStyle() = default;
 

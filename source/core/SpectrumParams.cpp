@@ -213,6 +213,7 @@ juce::String SpectrumParams::toJson() const
     s << "    \"barGapRatio\": " << barGapRatio << ",\n";
     s << "    \"barWidthRatio\": " << barWidthRatio << ",\n";
     s << "    \"barParticles\": " << (barParticles ? "true" : "false") << ",\n";
+    s << "    \"baselineY\": " << baselineY << ",\n";
     s << "    \"lineWidth\": " << lineWidth << ",\n";
     s << "    \"opacity\": " << opacity << ",\n";
     s << "    \"drawGrid\": " << (drawGrid ? "true" : "false") << ",\n";
@@ -359,7 +360,8 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
     if (auto* o = freq.getDynamicObject()) {
         p.minHz     = getFloat (freq, "minHz", p.minHz);
         p.maxHz     = getFloat (freq, "maxHz", p.maxHz);
-        p.bandCount = getInt (freq, "bandCount", p.bandCount);
+        p.bandCount = juce::jlimit (2, 512, getInt (freq, "bandCount", p.bandCount));
+        p.barPitchRatio = 1.0f / (float) p.bandCount;   // #1': bandCount 与 pitch 记忆值强同步
         bool fok = false;
         auto fv = parseFreqScale (getStr (freq, "freqScale", ""), &fok);
         if (fok) p.freqScale = fv;
@@ -406,6 +408,7 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
             p.setBarWidth ((1.0f - juce::jlimit (0.0f, 1.0f, gOld)) * wOld);
         }
         p.barParticles  = getBool (vis, "barParticles", p.barParticles);
+        p.baselineY     = juce::jlimit (0.0f, 1.0f, getFloat (vis, "baselineY", p.baselineY));
         p.lineWidth     = getFloat (vis, "lineWidth", p.lineWidth);
         p.opacity       = getFloat (vis, "opacity", p.opacity);
         p.drawGrid      = getBool (vis, "drawGrid", p.drawGrid);
@@ -593,6 +596,7 @@ bool SpectrumParams::applyOverride (const juce::String& dottedKey,
     if      (key == "visual.barGapRatio")    { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); setBarGap(v); return true; }
     if      (key == "visual.barWidthRatio")  { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); setBarWidth(v); return true; }
     if      (key == "visual.barPitchRatio")  { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); setBarPitch(v); return true; }
+    if      (key == "visual.baselineY")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); baselineY=juce::jlimit(0.0f,1.0f,v); return true; }
     if      (key == "visual.barParticles")   { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); barParticles=v; return true; }
     if      (key == "visual.drawGrid")       { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); drawGrid=v; return true; }
     if      (key == "visual.drawAxisLabels") { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); drawAxisLabels=v; return true; }
