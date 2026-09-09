@@ -46,6 +46,9 @@ private:
                            bool closeToBottom, float yBot, float yTop) const;
 
     // 采样点 → 像素坐标（供三个 pass 共用）
+    static std::vector<juce::Point<float>> buildMirrorPoints_ (const std::vector<juce::Point<float>>& up,
+                                                                float a, const juce::Rectangle<int>& canvas,
+                                                                const RenderParams& rp);
     void buildCurvePoints_ (std::vector<juce::Point<float>>& pts,
                             const BandFrame& frame,
                             const juce::Rectangle<int>& canvas,

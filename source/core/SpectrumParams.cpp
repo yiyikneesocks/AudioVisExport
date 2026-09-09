@@ -214,6 +214,7 @@ juce::String SpectrumParams::toJson() const
     s << "    \"barWidthRatio\": " << barWidthRatio << ",\n";
     s << "    \"barParticles\": " << (barParticles ? "true" : "false") << ",\n";
     s << "    \"baselineY\": " << baselineY << ",\n";
+    s << "    \"capPull\": " << capPull << ",\n";
     s << "    \"lineWidth\": " << lineWidth << ",\n";
     s << "    \"opacity\": " << opacity << ",\n";
     s << "    \"drawGrid\": " << (drawGrid ? "true" : "false") << ",\n";
@@ -409,6 +410,7 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
         }
         p.barParticles  = getBool (vis, "barParticles", p.barParticles);
         p.baselineY     = juce::jlimit (0.0f, 1.0f, getFloat (vis, "baselineY", p.baselineY));
+        p.capPull       = juce::jlimit (0.0f, 1.0f, getFloat (vis, "capPull", p.capPull));
         p.lineWidth     = getFloat (vis, "lineWidth", p.lineWidth);
         p.opacity       = getFloat (vis, "opacity", p.opacity);
         p.drawGrid      = getBool (vis, "drawGrid", p.drawGrid);
@@ -597,6 +599,7 @@ bool SpectrumParams::applyOverride (const juce::String& dottedKey,
     if      (key == "visual.barWidthRatio")  { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); setBarWidth(v); return true; }
     if      (key == "visual.barPitchRatio")  { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); setBarPitch(v); return true; }
     if      (key == "visual.baselineY")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); baselineY=juce::jlimit(0.0f,1.0f,v); return true; }
+    if      (key == "visual.capPull")        { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); capPull=juce::jlimit(0.0f,1.0f,v); return true; }
     if      (key == "visual.barParticles")   { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); barParticles=v; return true; }
     if      (key == "visual.drawGrid")       { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); drawGrid=v; return true; }
     if      (key == "visual.drawAxisLabels") { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); drawAxisLabels=v; return true; }

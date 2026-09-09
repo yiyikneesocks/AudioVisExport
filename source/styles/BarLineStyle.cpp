@@ -33,7 +33,9 @@ void BarLineStyle::render (juce::Graphics& g,
     if (inner.getWidth() <= 2 || inner.getHeight() <= 2) return;
 
     // 布局：与 BarStyle 完全一致（v0.5.4 #25 三联动：pitch / gap / width）
-    const float slotW = (float) inner.getWidth() / (float) N;   // #1': 恒铺满横向（pitch 语义=目标带宽%，驱动 bandCount）
+    // #3''（用户新模型）：pitch = 目标带宽比（相对画布宽）→ 柱系按 pitch 铺、floor 留白；
+    //   渲染不再用 innerW/N，而是 slotW = pitch × innerW（bandCount 由 pitch 推得，两量自洽）。
+    const float slotW = juce::jlimit (0.001f, 1.0f, rp.barPitchRatio) * (float) inner.getWidth();
     const float gap   = juce::jlimit (-2.48f, 2.48f, rp.barGapRatio) * (float) inner.getWidth() / (float) N;
     const float barW  = juce::jlimit (0.02f, 2.5f, rp.barWidthRatio) * (float) inner.getWidth() / (float) N;
     const float x0    = (float) inner.getX() + (slotW - barW) * 0.5f;
@@ -50,7 +52,8 @@ void BarLineStyle::render (juce::Graphics& g,
     edge[0] = n[0];
     for (int k = 1; k < N; ++k)
         edge[(size_t) k] = 0.5f * (n[(size_t) k - 1] + n[(size_t) k]);
-    edge[(size_t) N] = n[(size_t) N - 1];
+    // #5（v0.5.4）：末柱外缘至少抬到邻带的 1/2 —— 高频静音（n≈0）时末柱坡度不再扎到 0
+    edge[(size_t) N] = juce::jmax (n[(size_t) N - 1], 0.5f * n[(size_t) N - 2]);
 
     ColorMap cm;
     cm.configure (rp.colorMap, rp.primary, rp.secondary, rp.peak);
@@ -132,7 +135,8 @@ void BarLineStyle::render (juce::Graphics& g,
             capN_[k] = std::clamp (c, 0.0f, 1.0f);
         }
 
-        // 2) 邻域拉拽（两轮轻扩散 → 平直化趋势），随后再 clamp ≥ 柱顶
+        // 2) 邻域拉拽（#2峰帽：capPull=0 → 跳过，斜面可拉得很长=原版峰值帽逻辑）
+        if (rp.capPull > 0.001f)
         for (int pass = 0; pass < 2; ++pass)
         {
             std::vector<float> tmp (nU);
@@ -142,7 +146,7 @@ void BarLineStyle::render (juce::Graphics& g,
                 const float l = capN_[k > 0 ? k - 1 : k];
                 const float r = capN_[k < nU - 1 ? k + 1 : k];
                 const float nb = 0.5f * (l + r);
-                tmp[k] = capN_[k] + 0.35f * (nb - capN_[k]);
+                tmp[k] = capN_[k] + rp.capPull * (nb - capN_[k]);
             }
             capN_ = tmp;
             for (int i = 0; i < N; ++i)
@@ -174,6 +178,33 @@ void BarLineStyle::render (juce::Graphics& g,
             juce::jmax (1.2f, rp.lineWidth * 0.9f),
             juce::PathStrokeType::curved,
             juce::PathStrokeType::rounded));
+
+        // #3(1)（v0.5.4）：基线轴 a>0 时柱有下臂 → 下侧画镜像峰帽（同一 capN 状态，
+        //   用 baselineBottom 映射；端点同样做"至少邻带 1/2"的末柱抬升）。
+        if (a > 0.001f)
+        {
+            auto capEdgeBot = [&] (int k) -> float
+            {
+                float c;
+                if (k <= 0)      c = capN_[0];
+                else if (k >= N) c = capN_[(size_t) N - 1];
+                else             c = 0.5f * (capN_[(size_t) k - 1] + capN_[(size_t) k]);
+                if (k >= N) c = juce::jmax (c, 0.5f * capN_[(size_t) N - 2]);
+                return juce::jmax (c, edge[(size_t) juce::jlimit (0, N, k)]);
+            };
+            juce::Path capB;
+            for (int i = 0; i < N; ++i)
+            {
+                const float xL = x0 + (float) i * slotW;
+                const float xR = xL + barW;
+                capB.startNewSubPath (xL, normalizedToY_ (baselineBottom (capEdgeBot (i),     a), canvas));
+                capB.lineTo          (xR, normalizedToY_ (baselineBottom (capEdgeBot (i + 1), a), canvas));
+            }
+            g.strokePath (capB, juce::PathStrokeType (
+                juce::jmax (1.2f, rp.lineWidth * 0.9f),
+                juce::PathStrokeType::curved,
+                juce::PathStrokeType::rounded));
+        }
         g.setColour (juce::Colours::white);
     }
 }

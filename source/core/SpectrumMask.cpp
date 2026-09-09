@@ -28,9 +28,20 @@ juce::Colour SpectrumMask::averageColour (const juce::Image& img)
 
     // JPEG/BMP 等可能被 load 成 RGB（3 字节/像素）：直接按 PixelARGB（4 字节）读会越界崩溃。
     // 先统一转成 ARGB 再逐像素访问（调用方均有缓存，只转一次）。
-    const juce::Image src = (img.getFormat() == juce::Image::ARGB)
+    // 大图（>16MP）先缩小：均色为统计量，缩略图与全图等价，且避免大额分配（Windows 崩溃防御）。
+    juce::Image srcFull = (img.getFormat() == juce::Image::ARGB)
                                 ? img
                                 : img.convertedToFormat (juce::Image::ARGB);
+    const int64_t px = (int64_t) srcFull.getWidth() * (int64_t) srcFull.getHeight();
+    juce::Image src = srcFull;
+    if (px > 16 * 1024 * 1024)
+    {
+        const int w = srcFull.getWidth(), h = srcFull.getHeight();
+        const double k = std::sqrt (16.0 * 1024.0 * 1024.0 / (double) px);
+        src = srcFull.rescaled (juce::jmax (1, (int) (w * k)),
+                                  juce::jmax (1, (int) (h * k)),
+                                  juce::Graphics::mediumResamplingQuality);
+    }
 
     const int w = src.getWidth(), h = src.getHeight();
     juce::Image::BitmapData bd (src, juce::Image::BitmapData::readOnly);

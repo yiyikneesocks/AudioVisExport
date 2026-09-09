@@ -62,6 +62,7 @@ namespace
         rp.opacity        = p.opacity;
         rp.barPitchRatio  = p.barPitchRatio;
         rp.baselineY      = p.baselineY;
+        rp.capPull        = p.capPull;
         rp.fps            = p.fps;
         rp.peakDecayDbPerSec       = p.peakDecayDbPerSec;
         rp.peakDecayAccelDbPerSec2 = p.peakDecayAccelDbPerSec2;
@@ -205,6 +206,7 @@ namespace
                 {
                     const juce::Image im = loadImageForLayer (p.maskImage.path);
                     if (im.isValid())
+                    try
                     {
                         // v0.5.4 #4：色彩调整后的图（identity 时零开销返回原图；带缓存）
                         const juce::Image adj = SpectrumMask::adjustedImageCached (im, p.maskImage);
@@ -218,6 +220,7 @@ namespace
                             base, adj, p.maskImage, stroke);
                         if (masked.isValid()) layer = masked;
                     }
+                    catch (...) { }   // #2 防御：异常 → 回退裸频谱
                 }
 
                 if (p.transform.set)

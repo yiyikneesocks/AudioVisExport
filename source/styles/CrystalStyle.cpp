@@ -78,6 +78,24 @@ void CrystalStyle::buildSmoothPath_ (juce::Path& path,
     }
 }
 
+std::vector<juce::Point<float>> CrystalStyle::buildMirrorPoints_ (
+        const std::vector<juce::Point<float>>& up, float a,
+        const juce::Rectangle<int>& canvas, const RenderParams& rp)
+{
+    // 下臂点 = baselineBottom(nv)：由上臂点 y 反推 nv（同一像素映射），再映射下臂
+    auto inner = canvas.reduced (2);
+    const float bottom = (float) inner.getBottom();
+    const float H = (float) canvas.getHeight();
+    const float span = juce::jmax (1.0f, rp.maxDb - rp.minDb);
+    std::vector<juce::Point<float>> dn (up.size());
+    for (size_t i = 0; i < up.size(); ++i)
+    {
+        const float nrm = juce::jlimit (0.0f, 1.0f, (bottom - up[i].getY()) / H / juce::jmax (0.001f, 1.0f - a));
+        dn[i] = juce::Point<float> (up[i].getX(), bottom - SpectrumStyle::baselineBottom (nrm, a) * H);
+    }
+    return dn;
+}
+
 void CrystalStyle::buildCurvePoints_ (std::vector<juce::Point<float>>& pts,
                                        const BandFrame& frame,
                                        const juce::Rectangle<int>& canvas,
@@ -89,10 +107,17 @@ void CrystalStyle::buildCurvePoints_ (std::vector<juce::Point<float>>& pts,
     const float x0   = (float) inner.getX();
     const float xLen = (float) inner.getWidth();
     const float invN = 1.0f / (float) juce::jmax (1, N - 1);
+    // v0.5.4 #3(2)：a>0 时曲线按基线轴重映射（轴零点向上臂生长）；a=0 原版
+    const float aC = juce::jlimit (0.0f, 1.0f, rp.baselineY);
     for (int i = 0; i < N; ++i)
     {
         const float x = x0 + (float) i * invN * xLen;
-        const float y = dbToY_ (frame.db[i], canvas, rp.minDb, rp.maxDb);
+        float y = dbToY_ (frame.db[i], canvas, rp.minDb, rp.maxDb);
+        if (aC > 0.001f)
+        {
+            const float nrm = juce::jlimit (0.0f, 1.0f, (frame.db[i] - rp.minDb) / (rp.maxDb - rp.minDb));
+            y = (float) inner.getBottom() - SpectrumStyle::baselineTop (nrm, aC) * (float) canvas.getHeight();
+        }
         pts[(size_t) i] = { x, y };
     }
 }
@@ -153,6 +178,16 @@ void CrystalStyle::renderPass (juce::Graphics& g, int pass,
             juce::Path curvePath;
             buildSmoothPath_ (curvePath, pts, false, yBot, yTop);
             gg.strokePath (curvePath, juce::PathStrokeType (juce::jmax (3.0f, rp.lineWidth * 2.0f)));
+            // #3(2)：a>0 时下臂曲线同样辉光
+            const float aG = juce::jlimit (0.0f, 1.0f, rp.baselineY);
+            if (aG > 0.001f)
+            {
+                auto dnPts = buildMirrorPoints_ (pts, aG, canvas, rp);
+                juce::Path dnPath;
+                dnPath.startNewSubPath (dnPts[0]);
+                for (size_t i = 1; i < dnPts.size(); ++i) dnPath.lineTo (dnPts[i]);
+                gg.strokePath (dnPath, juce::PathStrokeType (juce::jmax (3.0f, rp.lineWidth * 2.0f)));
+            }
             auto pd = glow.getPixelData();
             if (pd != nullptr)
                 pd->applyGaussianBlurEffect (radius);
@@ -180,6 +215,20 @@ void CrystalStyle::renderPass (juce::Graphics& g, int pass,
         grad.point2 = juce::Point<float> ((float) inner.getX(), yTop);
         g.setGradientFill (grad);
         g.fillPath (fillPath);
+        // #3(2)：a>0 时下臂玻璃体填充
+        const float aF = juce::jlimit (0.0f, 1.0f, rp.baselineY);
+        if (aF > 0.001f)
+        {
+            auto dnPts = buildMirrorPoints_ (pts, aF, canvas, rp);
+            juce::Path fillDn;
+            fillDn.startNewSubPath (dnPts[0].getX(), yBot);
+            fillDn.lineTo (dnPts[0]);
+            for (size_t i = 1; i < dnPts.size(); ++i) fillDn.lineTo (dnPts[i]);
+            fillDn.lineTo (dnPts.back().getX(), yBot);
+            fillDn.closeSubPath();
+            g.setGradientFill (grad);
+            g.fillPath (fillDn);
+        }
         g.setColour (juce::Colours::white);  // 清除 gradient
 
         // 主曲线双层描边（colormap 时沿频率横向取色）

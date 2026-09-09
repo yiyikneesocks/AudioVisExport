@@ -222,32 +222,78 @@ void Y2KLineStyle::render (juce::Graphics& g,
     }
 
     const float yTop = (float) inner.getY();
-    // v0.5.4 #4：填充闭合底边 = 基线轴（a=0 退化为画布底）
+    // v0.5.4 #4/#3(2)：基线轴 a —— 柱/线同构的"轴零点生长"：
+    //   显示值 = baselineTop(n) = a + (1−a)·n（上臂），baselineBottom(n) = a·(1−n)（下臂）。
+    //   a=0 退化为原版（曲线全量程、填充到画布底）。
+    const float a    = juce::jlimit (0.0f, 1.0f, rp.baselineY);
     const float yBot = (float) inner.getBottom()
-                     - juce::jlimit (0.0f, 1.0f, rp.baselineY) * (float) canvas.getHeight();
-
+                     - a * (float) canvas.getHeight();
     ColorMap cm;
     cm.configure (rp.colorMap, rp.primary, rp.secondary, rp.peak);
     const bool useMap  = ! cm.isSolid();
     const float xRight = x0 + xLen;
 
-    // 3) 填充区域（从底部到曲线的半透明 tint；colormap 时沿频率横向取色）
-    juce::Path fillPath;
-    buildSmoothPath_ (fillPath, curvePts, /*closeToBottom*/ true, yBot, yTop);
-    if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 0.25f));
-    else        g.setColour (rp.secondary.withAlpha (0.25f));
-    g.fillPath (fillPath);
+    // 归一化值表（曲线语义：db → 0..1）
+    std::vector<float> nv ((size_t) N);
+    for (int i = 0; i < N; ++i)
+        nv[(size_t) i] = juce::jlimit (0.0f, 1.0f, (frame.db[i] - rp.minDb) / (rp.maxDb - rp.minDb));
 
-    // 4) 主曲线双层描边（外粗半透明 + 内细不透明，视觉厚度）
-    juce::Path curvePath;
-    buildSmoothPath_ (curvePath, curvePts, /*closeToBottom*/ false, yBot, yTop);
-    if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 0.35f));
-    else        g.setColour (rp.primary.withAlpha (0.35f));
-    g.strokePath (curvePath, juce::PathStrokeType (3.0f));
-    if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 1.0f));
-    else        g.setColour (rp.primary);
-    g.strokePath (curvePath, juce::PathStrokeType (rp.lineWidth));
-    g.setColour (juce::Colours::white);   // 清渐变
+    // 3) 填充区域：a>0 → **双线**：上臂（a..1 区间内扩）+ 下臂（a..0 镜像扩）
+    //    （下臂曲线点 = baselineBottom(nv)；填充 = 上臂曲线→轴、下臂曲线→轴 两大块）
+    if (a > 0.001f)
+    {
+        std::vector<juce::Point<float>> up ((size_t) N), dn ((size_t) N);
+        for (int i = 0; i < N; ++i)
+        {
+            const float x = x0 + (float) i * invMax * xLen;
+            up[(size_t) i] = { x, (float) inner.getBottom() - baselineTop    (nv[(size_t) i], a) * (float) canvas.getHeight() };
+            dn[(size_t) i] = { x, (float) inner.getBottom() - baselineBottom (nv[(size_t) i], a) * (float) canvas.getHeight() };
+        }
+        // 上臂：平滑（yBot=轴 在点集下方 → closeToBottom 剪枝安全）
+        juce::Path fillUp;
+        buildSmoothPath_ (fillUp, up, /*closeToBottom*/ true, yBot, yTop);
+        if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 0.25f));
+        else        g.setColour (rp.secondary.withAlpha (0.25f));
+        g.fillPath (fillUp);
+        juce::Path curveUp;
+        buildSmoothPath_ (curveUp, up, false, yBot, yTop);
+        if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 1.0f));
+        else        g.setColour (rp.primary);
+        g.strokePath (curveUp, juce::PathStrokeType (rp.lineWidth));
+        // 下臂：点在轴下方，buildSmoothPath_ 的贴底剪枝会把它们砍平 → 手构折线（与 polyline 下臂同法）
+        juce::Path fillDn;
+        fillDn.startNewSubPath (dn[0].getX(), yBot);
+        fillDn.lineTo (dn[0]);
+        for (int i = 1; i < N; ++i) fillDn.lineTo (dn[(size_t) i]);
+        fillDn.lineTo (dn[(size_t) N - 1].getX(), yBot);
+        fillDn.closeSubPath();
+        g.fillPath (fillDn);
+        juce::Path curveDn;
+        curveDn.startNewSubPath (dn[0]);
+        for (int i = 1; i < N; ++i) curveDn.lineTo (dn[(size_t) i]);
+        g.strokePath (curveDn, juce::PathStrokeType (rp.lineWidth));
+        g.setColour (juce::Colours::white);
+    }
+    else
+    {
+        // 3) 填充区域（从底部到曲线的半透明 tint；colormap 时沿频率横向取色）
+        juce::Path fillPath;
+        buildSmoothPath_ (fillPath, curvePts, /*closeToBottom*/ true, yBot, yTop);
+        if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 0.25f));
+        else        g.setColour (rp.secondary.withAlpha (0.25f));
+        g.fillPath (fillPath);
+
+        // 4) 主曲线双层描边（外粗半透明 + 内细不透明，视觉厚度）
+        juce::Path curvePath;
+        buildSmoothPath_ (curvePath, curvePts, /*closeToBottom*/ false, yBot, yTop);
+        if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 0.35f));
+        else        g.setColour (rp.primary.withAlpha (0.35f));
+        g.strokePath (curvePath, juce::PathStrokeType (3.0f));
+        if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 1.0f));
+        else        g.setColour (rp.primary);
+        g.strokePath (curvePath, juce::PathStrokeType (rp.lineWidth));
+        g.setColour (juce::Colours::white);   // 清渐变
+    }
 
     // 5) 峰值保持虚线（同样 Catmull-Rom 平滑后 createDashedStroke）
     std::vector<juce::Point<float>> peakPts ((size_t) N);

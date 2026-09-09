@@ -110,32 +110,33 @@ struct SpectrumParams
     float barWidthRatio = 0.72f;   // 柱宽（×slot），0.02..2.5（默认 0.72 = 旧默认外观 (1-0.28)×1.0）
     float barGapRatio   = 0.28f;   // 间隙（×slot，派生值，可为负）；默认 0.28 保持旧观感
 
+    // v0.5.4 #3''（用户新模型）：pitch = 目标带宽占画布宽的比例；bandCount = floor(1/pitch)，
+    //   **允许末尾留白**（pitch×N ≤ 画布宽）；width/gap 相对 slot（=pitch）：
+    //   不变式 gap = 1 − width（slot 单位）。改 pitch → N=floor(1/pitch)；改 bandCount → pitch=1/N（恰好铺满）。
     void setBarWidth (float v)
     {
         barWidthRatio = juce::jlimit (0.02f, 2.5f, v);
-        barGapRatio   = juce::jlimit (-2.48f, 2.48f, barPitchRatio - barWidthRatio);
+        barGapRatio   = juce::jlimit (-1.48f, 0.98f, 1.0f - barWidthRatio);
     }
     void setBarGap (float v)
     {
-        barGapRatio   = juce::jlimit (-2.48f, 2.48f, v);
-        barWidthRatio = juce::jlimit (0.02f, 2.5f, barPitchRatio - barGapRatio);
-        barGapRatio   = barPitchRatio - barWidthRatio;   // width 被夹住时回推 gap，保不变式
+        barGapRatio   = juce::jlimit (-1.48f, 0.98f, v);
+        barWidthRatio = juce::jlimit (0.02f, 2.5f, 1.0f - barGapRatio);
+        barGapRatio   = 1.0f - barWidthRatio;   // width 被夹住时回推 gap，保不变式
     }
     void setBarPitch (float v)
     {
-        // v0.5.4 #1'：pitch 语义 = 目标带宽%（占画布宽）→ 强耦合反推 bandCount（铺满横向）
-        barPitchRatio = juce::jlimit (0.05f, 2.5f, v);
-        barGapRatio   = juce::jlimit (-2.48f, 2.48f, barPitchRatio - barWidthRatio);
-        bandCount     = juce::jlimit (2, 512, (int) juce::roundToInt (1.0f / juce::jmax (0.004f, barPitchRatio)));
+        barPitchRatio = juce::jlimit (0.001f, 0.5f, v);
+        bandCount     = juce::jlimit (2, 512, juce::jmax (2, (int) std::floor (1.0f / barPitchRatio)));
     }
-    // bandCount ↔ pitch 双向联动（#1'）：改带数回写 pitch 记忆值（= 1/带数）
     void setBandCount (int n)
     {
         bandCount = juce::jlimit (2, 512, n);
-        barPitchRatio = 1.0f / (float) bandCount;
+        barPitchRatio = 1.0f / (float) bandCount;   // 从带数侧进入 = 恰好铺满
     }
     bool  barParticles  = true;    // bar / bar-line 样式：峰值帽（下落小横线）开关，false = 只留柱体
     float baselineY     = 0.0f;    // v0.5.4 #4 基线轴：0=底部，0.5=镜像，1=顶部；柱以轴为零点上下按比例生长
+    float capPull       = 0.35f;   // v0.5.4 #2峰帽：帽顶点邻域拉扯强度 0..1；0=关闭拉扯（斜面可拉得很长）
     bool  drawGrid        = false;     // 可视化视频默认不画坐标轴（需要时 CLI 开 --draw-grid on）
     bool  drawAxisLabels  = false;     // 同上（--draw-axis-labels on）
 

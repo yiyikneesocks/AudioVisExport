@@ -79,7 +79,8 @@ void BarStyle::render (juce::Graphics& g,
     // 默认 gap=0.28、width=1.0 时与旧版（bar=0.72*slot）视觉完全一致。
     // v0.5.4 #25：三联动布局。slot = 带 pitch（两柱锚点间距）；
     //   间隙 gap = pitch − width（可负=重叠）；柱锚点 x 间距用 pitch。
-    const float slotW = (float) inner.getWidth() / (float) N;   // #1': 恒铺满横向（pitch 语义=目标带宽%，驱动 bandCount）
+    // #3''：slotW = pitch × 画布宽（floor 模型，允许末尾留白）
+    const float slotW = juce::jlimit (0.001f, 1.0f, rp.barPitchRatio) * (float) inner.getWidth();
     const float gap   = juce::jlimit (-2.48f, 2.48f, rp.barGapRatio) * (float) inner.getWidth() / (float) N;
     const float barW  = juce::jlimit (0.02f, 2.5f, rp.barWidthRatio) * (float) inner.getWidth() / (float) N;
     const float x0    = (float) inner.getX() + (slotW - barW) * 0.5f;
@@ -132,8 +133,11 @@ void BarStyle::render (juce::Graphics& g,
         if (n < 0.005f) continue;
         if (useMap) g.setColour (cm.colourForBand (i, N, n));
         float x = x0 + (float) i * slotW;
-        float y = normalizedToY_ (baselineTop (n, a), canvas);
+        float y  = normalizedToY_ (baselineTop    (n, a), canvas);
+        float yB = normalizedToY_ (baselineBottom (n, a), canvas);
         g.drawHorizontalLine ((int) std::round (y), x, x + barW);
+        if (a > 0.001f)   // #3(1)：轴上时有下臂 → 底缘同样描边
+            g.drawHorizontalLine ((int) std::round (yB), x, x + barW);
     }
 
     // 峰值帽（可选）：peakDb → normalized 近似 → Y 位置，画 2px 水平线

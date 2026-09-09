@@ -106,11 +106,13 @@ void SpectrumCanvas::paint (juce::Graphics& g)
         if (params.spectrumPresent)
         {
             // 频谱蒙版：图片填轮廓（+可选描边），取代裸频谱填充层（与导出同源）
+            // #2 防御：mask 路径任何异常（分配失败/未知格式）→ 回退裸频谱，绝不闪退
             juce::Image specLayer = base;
             if (params.maskImage.enabled && ! params.maskImage.path.isEmpty())
             {
                 const juce::Image im = loadCached (params.maskImage.path);
                 if (im.isValid())
+                try
                 {
                     // v0.5.4 #4：色彩调整后的图（identity 时零开销返回原图；带缓存）
                     const juce::Image adj = SpectrumMask::adjustedImageCached (im, params.maskImage);
@@ -123,6 +125,7 @@ void SpectrumCanvas::paint (juce::Graphics& g)
                     juce::Image masked = SpectrumMask::compose (base, adj, params.maskImage, stroke);
                     if (masked.isValid()) specLayer = masked;
                 }
+                catch (...) { }   // #2 防御：异常 → specLayer 保持 base（无蒙版回退）
             }
 
             const auto total = buildVisAffine (params.transform).followedBy (disp);
@@ -270,8 +273,9 @@ void SpectrumCanvas::paintOverlay (juce::Graphics& g)
             g.setColour (axisCol);
         }
         g.setColour (axisCol.withAlpha (0.9f));
+        // #3：百分比标签与轴线齐平（垂直居中于线）
         g.drawText (juce::String::formatted ("baseline %d%%", (int) std::round (params.baselineY * 100.0f)),
-                    (int) axL.getX() + 8, (int) axL.getY() - 18, 120, 16,
+                    (int) axL.getX() + 10, (int) axL.getY() - 8, 130, 16,
                     juce::Justification::centredLeft);
     }
 

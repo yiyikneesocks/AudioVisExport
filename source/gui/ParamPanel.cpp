@@ -84,15 +84,22 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
                                   syncBarLayoutSliders(); notify(); });
     barGapSlider->setTooltip ("Bar gap = pitch - width. Can be NEGATIVE (bars overlap).\n"
                               "Moving this keeps the pitch fixed and changes width.");
-    auto* barPitchSlider = addSlider ("Bar pitch %", 5, 250, 1, 1.0,
+    // #3''：pitch = 目标带宽占画布宽 %；bandCount = floor(100/pitch%)，允许末尾留白
+    auto* barPitchSlider = addSlider ("Bar pitch %", 0.2, 50, 0.1, 0.3,
                [this] { return (double) params.barPitchRatio * 100.0; },
                [this] (double v) { params.setBarPitch ((float) (v / 100.0));
                                   syncBarLayoutSliders(); notify(); });
-    barPitchSlider->setTooltip ("Pitch = target band width (x slot). Strongly linked to Band Count:\n"
-                                "moving either one updates the other so bars fill the full width.");
+    barPitchSlider->setTooltip ("Pitch = target band width as % of canvas width.\n"
+                                "Band count = floor(100 / pitch) — a small remainder may\n"
+                                "stay at the right edge. Moving Band count sets pitch = 100/N.");
     addToggle ("Peak caps", params.barParticles,
                [this] (bool v) { params.barParticles = v; notify(); });
     // v0.5.4 #4：基线轴（0=底部；0.5=镜像；画布内可拖 + 吸附）
+    auto* capPullSlider = addSlider ("Cap pull", 0, 100, 1, 1.0,
+               [this] { return (double) params.capPull * 100.0; },
+               [this] (double v) { params.capPull = (float) (v / 100.0); notify(); });
+    capPullSlider->setTooltip ("Peak-cap mutual pull strength (0..100). 0 = no pulling:\n"
+                               "caps fall per-band with the legacy long-slope behaviour.");
     auto* baselineSlider = addSlider ("Baseline %", 0, 100, 1, 1.0,
                [this] { return (double) params.baselineY * 100.0; },
                [this] (double v) { params.baselineY = (float) (v / 100.0); notify(); });
