@@ -3,6 +3,7 @@
 // =============================================================================
 #include "MainComponent.h"
 #include "WinDragCompat.h"
+#include "../core/SpectrumMask.h"
 #include <cmath>
 
 // ---------------------------------------------------------------------------
@@ -58,8 +59,17 @@ MainComponent::MainComponent() : canvas (params), panel (params)
         const auto ext = f.getFileExtension().toLowerCase();
         if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp"
             || ext == ".gif" || ext == ".webp")
-            addImageLayer (f);
-        else if (ext == ".wav" || ext == ".aif" || ext == ".aiff")
+        {
+            // #6: 落在面板区域且停在 Mask 页 → 设为蒙版图；否则按原样加图片图层
+            const auto mouse = juce::Desktop::getInstance().getMousePosition();
+            if (panelViewport.getScreenBounds().contains (mouse)
+                && panel.activeTab() == ParamPanel::Tab::Mask)
+                requestMaskImageFile (f);
+            else
+                addImageLayer (f);
+        }
+        else if (ext == ".wav" || ext == ".aif" || ext == ".aiff"
+                 || ext == ".mp3" || ext == ".flac" || ext == ".ogg" || ext == ".wma")
             loadFile (f);
         else
             juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
@@ -77,7 +87,20 @@ MainComponent::MainComponent() : canvas (params), panel (params)
     panel.onSelectSpectrumClicked = [this] { canvas.selectSpectrum(); canvas.repaint(); };
     // v0.5.4: 频谱蒙版图片
     panel.onChooseMaskImage = [this] { chooseMaskImageFile(); };
+    panel.onMaskFileDropped = [this] (const juce::File& f) { requestMaskImageFile (f); };   // #6
     panel.onToggleMaskEdit  = [this] (bool b) { canvas.setEditMaskImage (b); canvas.repaint(); };
+    panel.onUseMaskAvgColour = [this]
+    {
+        // #7：把描边色固定为当前图片平均色
+        const juce::Image im = juce::ImageCache::getFromFile (juce::File (params.maskImage.path));
+        if (im.isValid())
+        {
+            params.maskImage.strokeColor     = SpectrumMask::averageColour (im);
+            params.maskImage.strokeAutoColor = false;
+            panel.syncMaskControls();
+            canvas.repaint();
+        }
+    };
     // v0.5.4 #6: 选中图片图层的色彩调整（只影响选中层）+ 页签高度变化重排
     panel.onReadImageAdjust = [this] (int ch) -> double
     {
@@ -285,6 +308,7 @@ void MainComponent::timerCallback()
         const int selNow = canvas.selectedImageIndex();
         {
             const bool imgSel = (selNow >= 0 && selNow < (int) params.images.size());
+            panel.refreshStyleDependentControls();   // #3: 样式切换/配置加载后置灰
             panel.refreshLayerControls (imgSel,
                                         imgSel ? params.images[(size_t) selNow].opacity * 100.0
                                                : 100.0,
@@ -395,7 +419,7 @@ void MainComponent::loadFileInternal (const juce::File& f)
         juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
                                                 "Load failed",
                                                 "Could not read that audio file. "
-                                                "Supported formats: WAV, AIFF.");
+                                                "Supported formats: WAV / AIFF / FLAC / OGG; MP3 & WMA on Windows.");
         hasAudio = false;
         canvas.hasAudio = false;
         nowPlayingLabel.setText ("No audio loaded", juce::dontSendNotification);
@@ -432,7 +456,7 @@ void MainComponent::loadFileInternal (const juce::File& f)
 
 void MainComponent::chooseAudioFile()
 {
-    fileChooser = std::make_unique<juce::FileChooser> ("选择音频文件", lastDir, "*.wav;*.aif;*.aiff");
+    fileChooser = std::make_unique<juce::FileChooser> ("选择音频文件", lastDir, "*.wav;*.aif;*.aiff;*.mp3;*.flac;*.ogg;*.wma");
     fileChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
                               [this] (const juce::FileChooser& fc)
                               {
@@ -671,7 +695,10 @@ void MainComponent::filesDropped (const juce::StringArray& files, int x, int y)
     auto isAudio = [] (const juce::String& p)
     {
         auto ext = juce::File (p).getFileExtension().toLowerCase();
-        return ext == ".wav" || ext == ".aif" || ext == ".aiff";
+        return ext == ".wav" || ext == ".aif" || ext == ".aiff"
+            || ext == ".mp3" || ext == ".flac" || ext == ".ogg" || ext == ".wma"
+            || ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp"
+            || ext == ".gif" || ext == ".webp";
     };
 
     for (auto& f : files)
@@ -865,21 +892,26 @@ void MainComponent::chooseMaskImageFile()
                                   if (f == juce::File())
                                       return;
                                   // #7：一个频谱只允许一张蒙版图——已有则弹提示确认替换
-                                  if (! params.maskImage.path.isEmpty())
-                                  {
-                                      juce::AlertWindow::showOkCancelBox (
-                                          juce::MessageBoxIconType::InfoIcon,
-                                          "Mask image already set",
-                                          "This spectrum already has a mask image:\n  "
-                                              + juce::File (params.maskImage.path).getFileName()
-                                              + "\n\nThe new image will REPLACE it (one mask image per spectrum).",
-                                          "Replace", "Cancel", this,
-                                          juce::ModalCallbackFunction::create (
-                                              [this, f] (int ok) { if (ok) applyMaskImageFile (f); }));
-                                      return;
-                                  }
-                                  applyMaskImageFile (f);
+                                  requestMaskImageFile (f);   // #6: 统一入口（含替换确认）
                               });
+}
+
+// #6/#7：统一入口（选择器/画布外拖放共用）——已有蒙版图则先弹替换确认
+void MainComponent::requestMaskImageFile (const juce::File& f)
+{
+    if (! params.maskImage.path.isEmpty())
+    {
+        juce::AlertWindow::showOkCancelBox (
+            juce::MessageBoxIconType::InfoIcon, "Mask image already set",
+            "This spectrum already has a mask image:\n  "
+                + juce::File (params.maskImage.path).getFileName()
+                + "\n\nThe new image will REPLACE it (one mask image per spectrum).",
+            "Replace", "Cancel", this,
+            juce::ModalCallbackFunction::create (
+                [this, f] (int ok) { if (ok) applyMaskImageFile (f); }));
+        return;
+    }
+    applyMaskImageFile (f);
 }
 
 // #7：蒙版图片单槽位的实际应用（chooseMaskImageFile 的确认回调）
@@ -887,6 +919,12 @@ void MainComponent::applyMaskImageFile (const juce::File& f)
 {
     params.maskImage.path    = f.getFullPathName();
     params.maskImage.enabled = true;
+    // #7：新图加载即计算平均色作为描边色显示（auto 开，随图动态）
+    if (const juce::Image im = juce::ImageCache::getFromFile (f); im.isValid())
+    {
+        params.maskImage.strokeColor     = SpectrumMask::averageColour (im);
+        params.maskImage.strokeAutoColor = true;
+    }
     params.maskImage.transform = VisTransform {};   // set=false = 等比 contain 居中（#3）
     lastDir = f.getParentDirectory();
     panel.syncMaskControls();   // 反映"启用"勾选

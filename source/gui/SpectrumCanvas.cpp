@@ -257,8 +257,8 @@ void SpectrumCanvas::paintOverlay (juce::Graphics& g)
     {
         const float oh = (float) juce::jmax (1, params.height);
         const auto total = buildVisAffine (params.transform).followedBy (disp);
-        const juce::Point<float> axL = visTransformPoint (total, { 0.0f, params.baselineY * oh });
-        const juce::Point<float> axR = visTransformPoint (total, { (float) params.width, params.baselineY * oh });
+        const juce::Point<float> axL = visTransformPoint (total, { 0.0f, (1.0f - params.baselineY) * oh });   // #4: 0=底部（画布 y 反）
+        const juce::Point<float> axR = visTransformPoint (total, { (float) params.width, (1.0f - params.baselineY) * oh });
         baselineScreenY = (axL.getY() + axR.getY()) * 0.5f;   // 命中测试用（近似，轴理论上水平）
 
         const juce::Colour axisCol (0xFFFF7A00);
@@ -909,7 +909,7 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
     {
         const auto b = baseFromOutput (out);
         const float oh = (float) juce::jmax (1, params.height);
-        float a = juce::jlimit (0.0f, 1.0f, b.getY() / oh);
+        float a = juce::jlimit (0.0f, 1.0f, 1.0f - b.getY() / oh);   // #4: 自底向上
 
         activeSnapGuides.clear();
         if (params.snapEnabled)

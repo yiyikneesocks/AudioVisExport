@@ -133,11 +133,8 @@ void BarStyle::render (juce::Graphics& g,
         if (n < 0.005f) continue;
         if (useMap) g.setColour (cm.colourForBand (i, N, n));
         float x = x0 + (float) i * slotW;
-        float y  = normalizedToY_ (baselineTop    (n, a), canvas);
-        float yB = normalizedToY_ (baselineBottom (n, a), canvas);
-        g.drawHorizontalLine ((int) std::round (y), x, x + barW);
-        if (a > 0.001f)   // #3(1)：轴上时有下臂 → 底缘同样描边
-            g.drawHorizontalLine ((int) std::round (yB), x, x + barW);
+        float y = normalizedToY_ (baselineTop (n, a), canvas);
+        g.drawHorizontalLine ((int) std::round (y), x, x + barW);   // #2：恢复原样（仅顶缘）
     }
 
     // 峰值帽（可选）：peakDb → normalized 近似 → Y 位置，画 2px 水平线

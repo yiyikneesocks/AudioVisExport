@@ -2,7 +2,7 @@
 // PcmSource.cpp — 离线音频文件读取实现（wav/aiff → 立体声交错 PCM）
 //
 // 关键点：
-//   · AudioFormatManager 只注册 Wav + Aiff，保证构建最小（不用注册 mp3/flac
+//   · AudioFormatManager 注册 basic formats（Wav/Aiff/Flac/Vorbis；Win 下含 mp3/wma
 //     等解码器的格式库，避免外部依赖或 JUCE 商业授权触发）。
 //   · 用 AudioFormatReader::read(AudioBuffer<float>*) 重载：该方法会自动把
 //     读取器的定点/浮点样本格式归一化为 AudioBuffer 的 float 格式
@@ -26,8 +26,9 @@ juce::AudioFormatManager& sharedFormatManager()
     static std::once_flag flag;
     std::call_once (flag, []
     {
-        manager.registerFormat (new juce::WavAudioFormat(), true);
-        manager.registerFormat (new juce::AiffAudioFormat(), false);
+        // v0.5.4 #8：全平台 basic formats（wav/aiff + flac/vorbis 按编译开关；
+        //   Windows 额外 WindowsMediaAudioFormat → mp3/wma 可读）
+        manager.registerBasicFormats();
     });
     return manager;
 }

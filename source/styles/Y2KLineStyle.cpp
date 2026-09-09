@@ -309,7 +309,13 @@ void Y2KLineStyle::render (juce::Graphics& g,
     for (int i = 0; i < N; ++i)
     {
         const float x = x0 + (float) i * invMax * xLen;
-        const float y = dbToY_ (frame.peakDb[i], canvas, rp.minDb, rp.maxDb);
+        // #5：基线轴模式下峰线跟随上臂映射（与曲线同构）
+        float y = dbToY_ (frame.peakDb[i], canvas, rp.minDb, rp.maxDb);
+        if (a > 0.001f)
+        {
+            const float pn = std::clamp ((frame.peakDb[i] - rp.minDb) / (rp.maxDb - rp.minDb), 0.0f, 1.0f);
+            y = (float) inner.getBottom() - baselineTop (pn, a) * (float) canvas.getHeight();
+        }
         peakPts[(size_t) i] = { x, y };
     }
     juce::Path peakPath;

@@ -63,6 +63,7 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
               {
                   static const char* names[] = { "y2k-line", "bar", "bar-line", "bar-mirror", "polyline", "crystal" };
                   params.style = names[id - 1];
+                  refreshStyleDependentControls();   // #3
                   notify();
               })
         ->setTooltip ("bar-mirror is deprecated: use bar / bar-line with Baseline = 50%\n"
@@ -92,12 +93,13 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     barPitchSlider->setTooltip ("Pitch = target band width as % of canvas width.\n"
                                 "Band count = floor(100 / pitch) — a small remainder may\n"
                                 "stay at the right edge. Moving Band count sets pitch = 100/N.");
-    addToggle ("Peak caps", params.barParticles,
+    peakCapsTogglePtr = addToggle ("Peak caps", params.barParticles,
                [this] (bool v) { params.barParticles = v; notify(); });
     // v0.5.4 #4：基线轴（0=底部；0.5=镜像；画布内可拖 + 吸附）
     auto* capPullSlider = addSlider ("Cap pull", 0, 100, 1, 1.0,
                [this] { return (double) params.capPull * 100.0; },
                [this] (double v) { params.capPull = (float) (v / 100.0); notify(); });
+    capPullSliderPtr = capPullSlider;
     capPullSlider->setTooltip ("Peak-cap mutual pull strength (0..100). 0 = no pulling:\n"
                                "caps fall per-band with the legacy long-slope behaviour.");
     auto* baselineSlider = addSlider ("Baseline %", 0, 100, 1, 1.0,
@@ -107,9 +109,9 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
                                 "proportionally (50% = mirror look). Also draggable on the canvas\n"
                                 "with snapping (50% hints \"mirror\").");
     // v0.5.4 #6：line 系只画线
-    addToggle ("Line only (no fill)", params.lineOnly,
-               [this] (bool v) { params.lineOnly = v; notify(); })
-        ->setTooltip ("Line styles (y2k / polyline / crystal): draw the curve only,\n"
+    lineOnlyTogglePtr = addToggle ("Line only (no fill)", params.lineOnly,
+               [this] (bool v) { params.lineOnly = v; notify(); });
+    lineOnlyTogglePtr->setTooltip ("Line styles (y2k / polyline / crystal): draw the curve only,\n"
                       "skip the inner tint / glass-body fill.");
     barWidthSliderPtr = barWidthSlider;
     barGapSliderPtr = barGapSlider;
@@ -341,9 +343,24 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     addRow ("", &maskOnToggle);
     addRow ("", &maskChooseBtn);
     addRow ("", &maskStrokeToggle);
+    addRow ("", &maskColorBtn);          // #7: 描边色按钮行（两按钮平铺）
     addAndMakeVisible (maskOnToggle);
     addAndMakeVisible (maskChooseBtn);
     addAndMakeVisible (maskStrokeToggle);
+    addAndMakeVisible (maskColorBtn);
+    addAndMakeVisible (maskAvgBtn);
+    maskColorBtn.onClick = [this]
+    {
+        openColourPicker (maskColorBtn, params.maskImage.strokeColor, [this] (juce::Colour c)
+        {
+            params.maskImage.strokeColor    = c;
+            params.maskImage.strokeAutoColor = false;   // 手动色
+            notify();
+        });
+    };
+    maskAvgBtn.onClick = [this] { if (onUseMaskAvgColour) onUseMaskAvgColour(); };
+    maskColorBtn.setTooltip ("Outline colour: pick manually.");
+    maskAvgBtn.setTooltip ("Outline colour: fix to the mask image's average colour.");
     maskOnToggle.setToggleState    (params.maskImage.enabled, juce::dontSendNotification);
     maskStrokeToggle.setToggleState(params.maskImage.strokeEnabled, juce::dontSendNotification);
     maskOnToggle.onClick = [this]
@@ -565,6 +582,13 @@ void ParamPanel::syncMaskControls()
 {
     maskOnToggle.setToggleState    (params.maskImage.enabled, juce::dontSendNotification);
     maskStrokeToggle.setToggleState(params.maskImage.strokeEnabled, juce::dontSendNotification);
+    const auto sc = params.maskImage.strokeColor;
+    for (juce::TextButton* b : { &maskColorBtn, &maskAvgBtn })
+    {
+        b->setColour (juce::TextButton::buttonColourId, sc);
+        b->setColour (juce::TextButton::textColourOffId,
+                      sc.getBrightness() > 0.5f ? juce::Colours::black : juce::Colours::white);
+    }
     if (maskStrokeWidthSliderPtr != nullptr)
         maskStrokeWidthSliderPtr->setValue (params.maskImage.strokeWidth, juce::dontSendNotification);
     if (maskBrightnessPtr != nullptr)
@@ -678,6 +702,14 @@ void ParamPanel::resized()
         auto rowBounds = area.removeFromTop (r.height);
         area.removeFromTop (4);
 
+        // v0.5.4 #7: 描边色两按钮平铺
+        if (r.editor == &maskColorBtn)
+        {
+            auto w = rowBounds.getWidth() / 2;
+            maskColorBtn.setBounds (rowBounds.removeFromLeft (w).reduced (2));
+            maskAvgBtn.setBounds  (rowBounds.reduced (2));
+            continue;
+        }
         // Special: color row — 4 tiled buttons (v0.5.0: added BG)
         if (r.editor == &primaryBtn)
         {
@@ -749,4 +781,52 @@ void ParamPanel::resized()
     exportVideoBtn.setBounds (videoLine.reduced (2));
     outputDirLabel.setBounds (exp.removeFromTop (26));
     progressLabel.setBounds (exp.removeFromTop (24));
+}
+
+// v0.5.4 #3：样式专属控件置灰
+void ParamPanel::refreshStyleDependentControls()
+{
+    const juce::String st = params.style;
+    const bool barFam   = (st == "bar" || st == "bar-line" || st == "bar-mirror");
+    const bool lineFam  = (st == "y2k-line" || st == "polyline" || st == "crystal");
+    if (barWidthSliderPtr != nullptr)  { barWidthSliderPtr->setEnabled (barFam);
+                                          if (auto* l = rowLabels[barWidthSliderPtr].get()) l->setEnabled (barFam); }
+    if (barGapSliderPtr != nullptr)    { barGapSliderPtr->setEnabled (barFam);
+                                          if (auto* l = rowLabels[barGapSliderPtr].get()) l->setEnabled (barFam); }
+    if (barPitchSliderPtr != nullptr)  { barPitchSliderPtr->setEnabled (barFam);
+                                          if (auto* l = rowLabels[barPitchSliderPtr].get()) l->setEnabled (barFam); }
+    if (peakCapsTogglePtr != nullptr)   peakCapsTogglePtr->setEnabled (barFam);
+    if (capPullSliderPtr != nullptr)   { capPullSliderPtr->setEnabled (st == "bar-line");
+                                          if (auto* l = rowLabels[capPullSliderPtr].get()) l->setEnabled (st == "bar-line"); }
+    if (lineOnlyTogglePtr != nullptr)   lineOnlyTogglePtr->setEnabled (lineFam);
+}
+
+// v0.5.4 #6：Mask 页拖放蒙版图（区别于画布拖放=普通图片图层）
+bool ParamPanel::isInterestedInFileDrag (const juce::StringArray& files)
+{
+    if (currentTab != (int) Tab::Mask)
+        return false;
+    for (const auto& f : files)
+    {
+        const auto ext = juce::File (f).getFileExtension().toLowerCase();
+        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif"
+            || ext == ".bmp" || ext == ".webp")
+            return true;
+    }
+    return false;
+}
+
+void ParamPanel::filesDropped (const juce::StringArray& files, int, int)
+{
+    for (const auto& f : files)
+    {
+        const juce::File file (f);
+        const auto ext = file.getFileExtension().toLowerCase();
+        if ((ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif"
+             || ext == ".bmp" || ext == ".webp") && onMaskFileDropped)
+        {
+            onMaskFileDropped (file);
+            return;
+        }
+    }
 }

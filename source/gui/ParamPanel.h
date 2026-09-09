@@ -14,7 +14,7 @@
 #include <map>
 #include <memory>
 
-class ParamPanel : public juce::Component
+class ParamPanel : public juce::Component, public juce::FileDragAndDropTarget
 {
 public:
     explicit ParamPanel (SpectrumParams& paramsRef);
@@ -49,9 +49,12 @@ public:
     // v0.5.4: 频谱蒙版图片
     std::function<void ()>     onChooseMaskImage;      // 弹文件框选蒙版图
     std::function<void (bool)> onToggleMaskEdit;       // 切换"编辑图片位置"模式
+    std::function<void ()>     onUseMaskAvgColour;     // v0.5.4 #7：描边色固定为平均色
     // v0.5.4 #6: 选中图片图层的色彩调整（ch: 0=B 1=C 2=S；只影响选中图层）
     std::function<double (int)>    onReadImageAdjust;
     std::function<void (int, double)> onWriteImageAdjust;
+    // v0.5.4 #6: 拖图片到 Mask 页签 → 设为蒙版图（区别于画布拖放=图片图层）
+    std::function<void (const juce::File&)> onMaskFileDropped;
     // v0.5.4 #6: 页签切换后高度变化 → MainComponent 重排 viewport
     std::function<void ()>     onPanelHeightChanged;
 
@@ -108,7 +111,9 @@ private:
     // v0.5.4: 频谱蒙版图片控件
     juce::TextButton maskChooseBtn{ "Choose mask image..." };
     juce::ToggleButton maskOnToggle { "Use spectrum mask" };
-    juce::ToggleButton maskStrokeToggle { "Outline (auto avg color)" };
+    juce::ToggleButton maskStrokeToggle { "Outline (avg color)" };
+    // v0.5.4 #7：描边色两按钮——手动选色 / 用图片平均色（固定为已算值）
+    juce::TextButton maskColorBtn { "Border colour" }, maskAvgBtn { "Use average" };
     juce::ToggleButton maskEditToggle { "Edit image position" };
     juce::Slider* maskStrokeWidthSliderPtr = nullptr;
     juce::Slider* maskBrightnessPtr = nullptr;
@@ -118,6 +123,11 @@ private:
     juce::Slider* barGapSliderPtr = nullptr;
     juce::Slider* barPitchSliderPtr = nullptr;
     juce::Slider* bandCountSliderPtr = nullptr;
+    juce::ToggleButton* peakCapsTogglePtr = nullptr;   // #3: bar 系样式才有效
+    juce::ToggleButton* lineOnlyTogglePtr = nullptr;  // #3: line 系样式才有效
+    juce::Slider* capPullSliderPtr = nullptr;         // #3: 仅 bar-line
+public:
+    void refreshStyleDependentControls();   // #3: 依当前样式置灰不适用控件
     void syncBarLayoutSliders();                  // #25: 联动回填另两条滑条
     juce::ToggleButton snapToggle { "Snapping" };               // v0.5.2 吸附开关
     juce::Slider layerOpacitySlider;                            // v0.5.1 需要引用以刷新
@@ -148,6 +158,12 @@ private:
     void notify();
     void openColourPicker (juce::TextButton& btn, juce::Colour current,
                            std::function<void (juce::Colour)> apply);
+
+    // #6: 仅 Mask 页 + 图片文件才响应
+    bool isInterestedInFileDrag (const juce::StringArray& files) override;
+    void fileDragEnter (const juce::StringArray&, int, int) override {}
+    void fileDragExit (const juce::StringArray&) override {}
+    void filesDropped (const juce::StringArray& files, int, int) override;
 
     JUCE_DECLARE_NON_COPYABLE (ParamPanel)
 };

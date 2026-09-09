@@ -174,13 +174,20 @@ void PolylineStyle::render (juce::Graphics& g,
     }
 
     // 3) 峰值折线虚线
+    // #5：基线轴模式下峰线跟随上臂映射
+    auto peakY = [&] (float db) -> float
+    {
+        const float y0 = dbToY_ (db, canvas, rp.minDb, rp.maxDb);
+        if (a <= 0.001f) return y0;
+        const float pn = std::clamp ((db - rp.minDb) / (rp.maxDb - rp.minDb), 0.0f, 1.0f);
+        return (float) inner.getBottom() - baselineTop (pn, a) * (float) canvas.getHeight();
+    };
     juce::Path peakPath;
-    peakPath.startNewSubPath (x0, dbToY_ (frame.peakDb[0], canvas, rp.minDb, rp.maxDb));
+    peakPath.startNewSubPath (x0, peakY (frame.peakDb[0]));
     for (int i = 1; i < N; ++i)
     {
         const float x = x0 + (float) i * invN * xLen;
-        const float y = dbToY_ (frame.peakDb[i], canvas, rp.minDb, rp.maxDb);
-        peakPath.lineTo (x, y);
+        peakPath.lineTo (x, peakY (frame.peakDb[i]));
     }
     juce::Path dashedPeak;
     const float dashes[] = { 3.0f, 3.0f };

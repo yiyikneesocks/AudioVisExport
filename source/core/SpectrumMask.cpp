@@ -220,6 +220,8 @@ juce::Image SpectrumMask::compose (const juce::Image& base,
     //               替代旧"拉伸铺满频谱画框"）；
     //   set=true  → 按 buildVisAffine 映射图片本地矩形（可独立缩放/拉伸/旋转/平移）
     juce::Image out (juce::Image::ARGB, W, H, true);   // true = 清空（全透明）
+    if (! out.isValid())
+        return {};   // 内存不足：JUCE new 返回 NULL（Win），不检查会在稍后写空指针
     {
         juce::Graphics go (out);
         go.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
@@ -259,8 +261,17 @@ juce::Image SpectrumMask::compose (const juce::Image& base,
     if (cfg.strokeEnabled && cfg.strokeWidth > 0.01f)
     {
         const int r = juce::jlimit (1, 32, (int) std::lround (cfg.strokeWidth));
-        std::vector<int> tmp ((size_t) W * H);
-        std::vector<int> er  ((size_t) W * H);
+        // v0.5.4 #1 修复：scratch 复用，不再每帧分配 2×W×H×int（4K≈70MB/帧、8K≈268MB/帧 →
+        //   Windows JUCE new 失败返回 NULL → vector::data()=NULL → 描边循环读 NULL 崩溃）。
+        //   thread_local：GUI 消息线程与导出线程各自持有，无数据竞争。
+        static thread_local std::vector<int> tmp, er;
+        if (tmp.size() < (size_t) W * H)
+        {
+            tmp.resize ((size_t) W * H);
+            er.resize ((size_t) W * H);
+        }
+        if (tmp.data() == nullptr || er.data() == nullptr)
+            return {};
 
         // 水平 min（半径 r）
         for (int y = 0; y < H; ++y)

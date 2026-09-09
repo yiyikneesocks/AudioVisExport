@@ -98,6 +98,7 @@ private:
     void chooseImageFile();
     void chooseMaskImageFile();          // v0.5.4: 选频谱蒙版图片
     void applyMaskImageFile (const juce::File& f);   // v0.5.4 #7: 单槽位应用（替换确认后）
+    void requestMaskImageFile (const juce::File& f); // v0.5.4 #6: 选择器/拖放统一入口
     void loadFileInternal (const juce::File& f);     // v0.5.4 #7: 实际加载（替换确认后）
     void addImageLayer (const juce::File& f);   // 拖入/选择图片 → 新建图片图层并选中
     void moveSelectedLayer (int delta);         // +1 = 上移一层，-1 = 下移一层（统一 z 序）
