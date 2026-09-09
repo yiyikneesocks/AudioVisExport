@@ -141,19 +141,30 @@ if [ "$DEPLOY" = true ]; then
         mkdir -p "$DEST_DIR"
     fi
 
-    cp "$CLI_EXE" "$DEST_DIR/" 2>/dev/null || {
-        echo "  [deploy] AudioVisExport.exe 被占用（用户可能正开着）→ 落地为 AudioVisExport_new.exe"
-        cp "$CLI_EXE" "$DEST_DIR/AudioVisExport_new.exe"; }
+    # v0.5.4 #1''（用户方案）：时间戳部署——每次落 AudioVisGUI_MMDDHHmm.exe，
+    # 并尝试清理旧版本（被 Windows 写锁占用则下次再删）；启动 bat 指向最新时间戳。
+    TS=$(date +%m%d%H%M)
+
+    # 尝试删除旧的时间戳 exe 与占用失败遗留的 _new.exe（占用就跳过，下次部署再清）
+    for old in "$DEST_DIR"/AudioVisGUI_[0-9]*.exe "$DEST_DIR"/AudioVisExport_[0-9]*.exe \
+               "$DEST_DIR"/AudioVisGUI_new.exe "$DEST_DIR"/AudioVisExport_new.exe \
+               "$DEST_DIR"/AudioVisGUI.exe "$DEST_DIR"/AudioVisExport.exe; do
+        [ -e "$old" ] || continue
+        rm -f "$old" 2>/dev/null || echo "  [deploy] ${old##*/} 被占用，跳过（下次部署再删）"
+    done
+
+    cp "$CLI_EXE" "$DEST_DIR/AudioVisExport_$TS.exe"
     if [ -f "$GUI_EXE" ]; then
-        cp "$GUI_EXE" "$DEST_DIR/" 2>/dev/null || {
-            echo "  [deploy] AudioVisGUI.exe 被占用（用户可能正开着）→ 落地为 AudioVisGUI_new.exe"
-            cp "$GUI_EXE" "$DEST_DIR/AudioVisGUI_new.exe"; }
+        cp "$GUI_EXE" "$DEST_DIR/AudioVisGUI_$TS.exe"
     fi
 
-    # Generate .bat launcher
-    cat > "$DEST_DIR/Run_AudioVisGUI.bat" <<'EOF'
+    # Generate .bat launcher（启动最新时间戳的 GUI）
+    cat > "$DEST_DIR/Run_AudioVisGUI.bat" <<EOF
 @echo off
-start "" "%~dp0AudioVisGUI.exe"
+setlocal enabledelayedexpansion
+set "LATEST="
+for /f "delims=" %%F in ('dir /b /o:n "%~dp0AudioVisGUI_*.exe" 2^>nul') do set "LATEST=%%F"
+if defined LATEST (start "" "%~dp0!LATEST!") else (echo No AudioVisGUI_*.exe found & pause)
 EOF
 
     echo "  Deployed to: $DEST_DIR"
