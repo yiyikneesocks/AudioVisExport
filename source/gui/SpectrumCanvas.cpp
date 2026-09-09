@@ -199,9 +199,13 @@ void SpectrumCanvas::paintImageLayer (juce::Graphics& g,
                                       const juce::AffineTransform& disp,
                                       const ImageLayer& layer)
 {
-    const juce::Image img = loadCached (layer.path);
-    if (! img.isValid())
+    const juce::Image raw = loadCached (layer.path);
+    if (! raw.isValid())
         return;
+    // v0.5.4 #6：图层自身色彩调整（identity 零开销；有界缓存共享）
+    const juce::Image img = SpectrumMask::adjustedImageCached (raw, layer.path,
+                                                               layer.brightness, layer.contrast,
+                                                               layer.saturation);
     const float ew = (float) img.getWidth();
     const float eh = (float) img.getHeight();
     const VisTransform tf = layer.transform.set

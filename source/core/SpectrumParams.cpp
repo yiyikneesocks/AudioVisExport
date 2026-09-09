@@ -262,7 +262,10 @@ juce::String SpectrumParams::toJson() const
               << ", \"posY\": " << im.transform.posY
               << ", \"opacity\": " << im.opacity
               << ", \"aboveSpectrum\": " << (above ? "true" : "false")
-              << ", \"visible\": " << (im.visible ? "true" : "false") << " }"
+              << ", \"visible\": " << (im.visible ? "true" : "false")
+              << ", \"brightness\": " << im.brightness
+              << ", \"contrast\": " << im.contrast
+              << ", \"saturation\": " << im.saturation << " }"
               << (i + 1 < images.size() ? "," : "") << "\n";
         }
         s << "  ],\n";
@@ -454,6 +457,9 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
             L.transform.set        = true;
             L.opacity              = (float) (double) item.getProperty ("opacity", juce::var (1.0));
             L.visible              = (bool) (bool) item.getProperty ("visible", juce::var (true));
+            L.brightness           = juce::jlimit (0.0f, 2.0f, (float) (double) item.getProperty ("brightness", juce::var (1.0)));
+            L.contrast             = juce::jlimit (0.0f, 2.0f, (float) (double) item.getProperty ("contrast",   juce::var (1.0)));
+            L.saturation           = juce::jlimit (0.0f, 2.0f, (float) (double) item.getProperty ("saturation", juce::var (1.0)));
             p.images.push_back (L);
         }
     }
@@ -615,6 +621,10 @@ bool SpectrumParams::applyOverride (const juce::String& dottedKey,
     if      (key == "mask.brightness")       { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.brightness=juce::jlimit(0.0f,2.0f,v); return true; }
     if      (key == "mask.contrast")         { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.contrast=juce::jlimit(0.0f,2.0f,v); return true; }
     if      (key == "mask.saturation")       { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.saturation=juce::jlimit(0.0f,2.0f,v); return true; }
+    // image.brightness / contrast / saturation（v0.5.4 #6）：作用于全部图片图层（GUI 里则仅选中层）
+    if      (key == "image.brightness")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); for (auto& L : images) L.brightness=juce::jlimit(0.0f,2.0f,v); return true; }
+    if      (key == "image.contrast")        { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); for (auto& L : images) L.contrast=juce::jlimit(0.0f,2.0f,v); return true; }
+    if      (key == "image.saturation")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); for (auto& L : images) L.saturation=juce::jlimit(0.0f,2.0f,v); return true; }
     // 蒙版图片几何（设值即视为已编辑 → set=true；未设则铺满画框，与电平无关）
     if      (key == "mask.reset")            { maskImage.transform=VisTransform{}; return true; }
     if      (key == "mask.centerX")          { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.transform.centerX=v; maskImage.transform.set=true; return true; }

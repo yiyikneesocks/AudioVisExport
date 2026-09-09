@@ -24,6 +24,10 @@ struct ImageLayer
     float opacity = 1.0f;          // 0..1
     bool  aboveSpectrum = false;   // false = 频谱下方（背景），true = 频谱上方（前景）
     bool  visible = true;
+    // 色彩调整（v0.5.4 #6，只影响本图层；1.0=原图，范围 0..2，复用 SpectrumMask::adjustedImage）
+    float brightness = 1.0f;
+    float contrast   = 1.0f;
+    float saturation = 1.0f;
 };
 
 // 频谱蒙版图片（v0.5.4）：图片只在"频谱轮廓"覆盖到的区域可见——

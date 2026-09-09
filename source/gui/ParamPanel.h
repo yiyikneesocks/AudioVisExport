@@ -21,7 +21,14 @@ public:
 
     void resized() override;
 
-    int getPreferredHeight() const noexcept { return contentHeight + exportAreaHeight; }
+    int getPreferredHeight() const noexcept { return 30 + activeTabHeight() + exportAreaHeight; }
+
+    // ---- v0.5.4 #6：选项卡 ----
+    enum class Tab { Spectrum = 0, Image, Mask, Export };
+    void setActiveTab (Tab t);          // 切页（含 MainComponent 选中联动入口）
+    Tab  activeTab() const noexcept { return static_cast<Tab> (currentTab); }
+    // #6: 画布选中变化时跟随（仅状态翻转时跳页；手动点过页签后停止跟随直到下次选中变化）
+    void syncSelectionTab (bool imageSelected);
 
     // 回调（MainComponent 设置）
     std::function<void ()> onParamsChanged;
@@ -42,6 +49,11 @@ public:
     // v0.5.4: 频谱蒙版图片
     std::function<void ()>     onChooseMaskImage;      // 弹文件框选蒙版图
     std::function<void (bool)> onToggleMaskEdit;       // 切换"编辑图片位置"模式
+    // v0.5.4 #6: 选中图片图层的色彩调整（ch: 0=B 1=C 2=S；只影响选中图层）
+    std::function<double (int)>    onReadImageAdjust;
+    std::function<void (int, double)> onWriteImageAdjust;
+    // v0.5.4 #6: 页签切换后高度变化 → MainComponent 重排 viewport
+    std::function<void ()>     onPanelHeightChanged;
 
     void setProgressText (const juce::String& s);
     void setOutputDirText (const juce::String& s);
@@ -61,9 +73,23 @@ public:
 private:
     SpectrumParams& params;
 
-    struct Row { juce::String label; juce::Component* editor; int height; };
+    // ---- v0.5.4 #6：选项卡布局 ----
+    // 每个 Row 归属一页；Export 页的 4 个固定控件不进 rows，resized 里单独排。
+    struct Row { juce::String label; juce::Component* editor; int height; int tab = 0; };
     std::vector<Row> rows;
-    juce::OwnedArray<juce::Component> widgets;                 // 统一持有所有动态控件
+    std::vector<int> tabHeights { 0, 0, 0, 0 };      // 与 Tab 枚举序一致
+    int currentTab = 0;
+    int activeTabHeight() const noexcept
+    { return (currentTab >= 0 && currentTab < (int) tabHeights.size()) ? tabHeights[(size_t) currentTab] : 0; }
+    juce::TextButton tabSpectrumBtn{ "Spectrum" }, tabImageBtn{ "Image" },
+                     tabMaskBtn{ "Mask" }, tabExportBtn{ "Export" };
+    void styleTabButton (juce::TextButton& b);
+    void showTab (Tab t, bool pinned);               // 内部：切页 + 高亮 + 回调
+    bool lastImageSelected_ = false;                 // #6: 选中状态翻转检测
+    bool selectionPinned_ = false;                   // #6: 手动点过页签→暂停跟随
+
+    std::vector<juce::Component*> widgetOrder;                // 仅布局顺序参考
+    juce::OwnedArray<juce::Component> widgets;                // 统一持有所有动态控件
     std::map<juce::Component*, std::unique_ptr<juce::Label>> rowLabels;
     int contentHeight = 0;
     int exportAreaHeight = 152;
@@ -99,6 +125,8 @@ private:
     // 布局辅助
     void addHeader (const juce::String& text);
     void addRow (const juce::String& label, juce::Component* editor, int h = 26);
+    void setBuildingTab (int t) noexcept { buildingTab = t; }   // #6: 之后 add* 的行归此页
+    int  buildingTab = 0;
     juce::Slider* addSlider (const juce::String& label,
                              double minValue, double maxValue, double step,
                              double skew,

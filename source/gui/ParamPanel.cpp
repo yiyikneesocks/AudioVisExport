@@ -45,7 +45,18 @@ namespace
 
 ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
 {
-    // ---- Style ----
+    // ---- v0.5.4 #6：页签行（Spectrum / Image / Mask / Export）----
+    for (juce::TextButton* b : { &tabSpectrumBtn, &tabImageBtn, &tabMaskBtn, &tabExportBtn })
+    {
+        styleTabButton (*b);
+        addAndMakeVisible (b);
+    }
+    tabSpectrumBtn.onClick = [this] { setActiveTab (Tab::Spectrum); };
+    tabImageBtn.onClick    = [this] { setActiveTab (Tab::Image); };
+    tabMaskBtn.onClick     = [this] { setActiveTab (Tab::Mask); };
+    tabExportBtn.onClick   = [this] { setActiveTab (Tab::Export); };
+
+    // ---- Style（Spectrum 页）----
     addHeader ("Style");
     addCombo ("Render style", { "y2k-line", "bar", "bar-line", "bar-mirror", "polyline", "crystal" }, 1,
               [this] (int id)
@@ -236,7 +247,8 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     addToggle ("Checkerboard BG", true,
                [this] (bool) { notify(); });
 
-    // ---- Layers ----
+    // ---- Layers（Image 页，v0.5.4 #6）----
+    setBuildingTab (1);
     addHeader ("Layers");
     addRow ("Add image", &addImageBtn);
     addRow ("Move up",   &layerUpBtn);
@@ -263,6 +275,17 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
                [this] (double v) { if (onWriteLayerOpacity) onWriteLayerOpacity (v); });
     layerOpacitySliderPtr = opacitySlider;
 
+    // v0.5.4 #6：选中图片图层的色彩调整（只影响该图层）
+    const char* adjNames[] = { "Brightness", "Contrast", "Saturation" };
+    for (int ch = 0; ch < 3; ++ch)
+    {
+        auto* sl = addSlider (adjNames[ch], 0.0, 2.0, 0.01, 1.0,
+                   [this, ch] { return onReadImageAdjust ? onReadImageAdjust (ch) : 1.0; },
+                   [this, ch] (double v) { if (onWriteImageAdjust) onWriteImageAdjust (ch, v); });
+        sl->setTooltip (juce::String ("Adjusts the SELECTED image layer only (1.00 = original).\n")
+                          + "No layer selected = no effect.");
+    }
+
     // v0.5.2: 吸附开关
     addRow ("", &snapToggle);
     addAndMakeVisible (snapToggle);
@@ -273,7 +296,8 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
         notify();
     };
 
-    // ---- Spectrum Mask（频谱蒙版图片，v0.5.4）----
+    // ---- Spectrum Mask（Mask 页，v0.5.4 #6）----
+    setBuildingTab (2);
     addHeader ("Spectrum Mask");
     addRow ("", &maskOnToggle);
     addRow ("", &maskChooseBtn);
@@ -324,7 +348,8 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
                                "corners/edges to stretch (snaps to the spectrum frame). Spectrum scaling "
                                "still drives the whole unit. Click outside the spectrum frame to stop editing.");
 
-    // ---- Export ----
+    // ---- Export（Export 页，v0.5.4 #6）----
+    setBuildingTab (3);
     addHeader ("Export");
     widthEditor.setInputFilter (new IntInputFilter(), true);
     heightEditor.setInputFilter (new IntInputFilter(), true);
@@ -388,14 +413,14 @@ void ParamPanel::addHeader (const juce::String& text)
     l->setJustificationType (juce::Justification::centredLeft);
     widgets.add (l);
     addAndMakeVisible (l);
-    rows.push_back ({ text, l, 24 });
-    contentHeight += 24 + 4;
+    rows.push_back ({ text, l, 24, buildingTab });
+    tabHeights[(size_t) buildingTab] += 24 + 4;
 }
 
 void ParamPanel::addRow (const juce::String& label, juce::Component* editor, int h)
 {
-    rows.push_back ({ label, editor, h });
-    contentHeight += h + 4;
+    rows.push_back ({ label, editor, h, buildingTab });
+    tabHeights[(size_t) buildingTab] += h + 4;
 }
 
 juce::Slider* ParamPanel::addSlider (const juce::String& label,
@@ -440,8 +465,8 @@ juce::ToggleButton* ParamPanel::addToggle (const juce::String& label, bool curre
     t->onClick = [apply, t] { apply (t->getToggleState()); };
     widgets.add (t);
     addAndMakeVisible (t);
-    rows.push_back ({ "", t, 24 });
-    contentHeight += 24 + 4;
+    rows.push_back ({ "", t, 24, buildingTab });
+    tabHeights[(size_t) buildingTab] += 24 + 4;
     return t;
 }
 
@@ -452,8 +477,8 @@ juce::TextButton* ParamPanel::addButton (const juce::String& text,
     b->onClick = std::move (onClick);
     widgets.add (b);
     addAndMakeVisible (b);
-    rows.push_back ({ juce::String(), b, 26 });
-    contentHeight += 26 + 4;
+    rows.push_back ({ juce::String(), b, 26, buildingTab });
+    tabHeights[(size_t) buildingTab] += 26 + 4;
     return b;
 }
 
@@ -526,14 +551,81 @@ void ParamPanel::refreshLayerControls (bool imageSelected, double opacityPct,
     selectSpectrumBtn.setEnabled (spectrumPresent);
     // Remove 按钮：有选中元素或频谱在场时可用
     layerRemoveBtn.setEnabled (imageSelected || spectrumPresent);
+
+    // v0.5.4 #6：选中变化 → 跟随跳页（Image↔Spectrum；手动点过页签后仍以新选中为准）
+    syncSelectionTab (imageSelected);
+}
+
+// =============================================================================
+// v0.5.4 #6：选项卡机制
+// =============================================================================
+void ParamPanel::styleTabButton (juce::TextButton& b)
+{
+    b.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff2a2a33));
+    b.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xffbe185d));
+    b.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
+    b.setClickingTogglesState (false);
+}
+
+void ParamPanel::showTab (Tab t, bool pinned)
+{
+    const int nt = (int) t;
+    if (nt == currentTab && ! pinned)
+        return;                        // 同页跟随跳过（避免每 tick 重排）
+    currentTab = nt;
+    selectionPinned_ = pinned;
+    // 高亮当前页签
+    for (juce::TextButton* b : { &tabSpectrumBtn, &tabImageBtn, &tabMaskBtn, &tabExportBtn })
+        b->setColour (juce::TextButton::buttonColourId,
+                      (b == &tabSpectrumBtn && nt == 0) || (b == &tabImageBtn && nt == 1)
+                   || (b == &tabMaskBtn && nt == 2)   || (b == &tabExportBtn && nt == 3)
+                          ? juce::Colour (0xffbe185d) : juce::Colour (0xff2a2a33));
+    resized();
+    if (onPanelHeightChanged)
+        onPanelHeightChanged();
+}
+
+void ParamPanel::setActiveTab (Tab t)       { showTab (t, true); }   // 显式切换=钉住
+
+void ParamPanel::syncSelectionTab (bool imageSelected)
+{
+    if (imageSelected != lastImageSelected_)
+    {
+        lastImageSelected_ = imageSelected;
+        showTab (imageSelected ? Tab::Image : Tab::Spectrum, false);
+    }
 }
 
 void ParamPanel::resized()
 {
     auto area = getLocalBounds().reduced (8, 4);
 
+    // ---- 页签行 ----
+    auto tabRow = area.removeFromTop (26);
+    const int tw = tabRow.getWidth() / 4;
+    tabSpectrumBtn.setBounds (tabRow.removeFromLeft (tw).reduced (2));
+    tabImageBtn.setBounds    (tabRow.removeFromLeft (tw).reduced (2));
+    tabMaskBtn.setBounds     (tabRow.removeFromLeft (tw).reduced (2));
+    tabExportBtn.setBounds   (tabRow.reduced (2));
+    area.removeFromTop (4);
+
+    // ---- 只布局当前页的 rows（其余页隐藏，防误触 + 防绘制穿透）----
     for (auto& r : rows)
     {
+        const bool on = (r.tab == currentTab);
+        if (r.editor != nullptr)
+        {
+            r.editor->setVisible (on);
+            if (! on) continue;
+        }
+        if (! r.label.isEmpty())
+        {
+            auto it = rowLabels.find (r.editor);
+            if (it != rowLabels.end())
+                it->second->setVisible (on);
+        }
+        if (! on) continue;
+
         auto rowBounds = area.removeFromTop (r.height);
         area.removeFromTop (4);
 
@@ -599,8 +691,8 @@ void ParamPanel::resized()
         }
     }
 
-    // Export section
-    auto exp = area.removeFromTop (exportAreaHeight);
+    // Export 固定条（所有页可见：一键导出不隔页）
+    auto exp = area.removeFromBottom (exportAreaHeight);
     auto line1 = exp.removeFromTop (30);
     browseBtn.setBounds (line1.removeFromLeft (90).reduced (2));
     exportBtn.setBounds (line1.reduced (2));

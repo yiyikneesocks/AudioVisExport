@@ -78,6 +78,31 @@ MainComponent::MainComponent() : canvas (params), panel (params)
     // v0.5.4: 频谱蒙版图片
     panel.onChooseMaskImage = [this] { chooseMaskImageFile(); };
     panel.onToggleMaskEdit  = [this] (bool b) { canvas.setEditMaskImage (b); canvas.repaint(); };
+    // v0.5.4 #6: 选中图片图层的色彩调整（只影响选中层）+ 页签高度变化重排
+    panel.onReadImageAdjust = [this] (int ch) -> double
+    {
+        const int sel = canvas.selectedImageIndex();
+        if (sel < 0 || sel >= (int) params.images.size())
+            return 1.0;
+        const auto& L = params.images[(size_t) sel];
+        return (double) (ch == 0 ? L.brightness : ch == 1 ? L.contrast : L.saturation);
+    };
+    panel.onWriteImageAdjust = [this] (int ch, double v)
+    {
+        const int sel = canvas.selectedImageIndex();
+        if (sel < 0 || sel >= (int) params.images.size())
+            return;
+        auto& L = params.images[(size_t) sel];
+        if      (ch == 0) L.brightness = (float) v;
+        else if (ch == 1) L.contrast   = (float) v;
+        else              L.saturation = (float) v;
+        canvas.repaint();
+    };
+    panel.onPanelHeightChanged = [this]
+    {
+        panel.setSize (panelViewport.getWidth() - panelViewport.getScrollBarThickness(),
+                       panel.getPreferredHeight());
+    };
     panel.onReadLayerOpacity = [this]() -> double
     {
         const int sel = canvas.selectedImageIndex();

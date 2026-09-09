@@ -25,9 +25,14 @@ namespace SpectrumMask
     juce::Image adjustedImage (const juce::Image& img,
                                float brightness, float contrast, float saturation);
 
-    // 逐帧共用入口：按 cfg.path+三参数 做 LRU-1 缓存的 adjustedImage（滑条拖动只重算一次）。
-    // 调用方应把它的结果同时喂给 compose 与 averageColour（自动描边色随调整同步）。
+    // 逐帧共用入口：按 path+三参数 做 LRU-1 缓存的 adjustedImage（滑条拖动只重算一次）。
+    // GUI/导出线程共用（双检查锁）。调用方应把结果同时喂给 compose 与 averageColour。
     juce::Image adjustedImageCached (const juce::Image& img, const MaskImageLayer& cfg);
+
+    // 通用键控版（v0.5.4 #6：普通图片图层也用同一套调整/缓存）
+    juce::Image adjustedImageCached (const juce::Image& img,
+                                     const juce::String& pathKey,
+                                     float brightness, float contrast, float saturation);
 
     // 生成蒙版合成图（输出分辨率 W×H 的 ARGB）：
     //   · 图片定位由 cfg.transform 决定（base/输出坐标系）：

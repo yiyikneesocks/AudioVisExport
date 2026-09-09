@@ -2,6 +2,7 @@
 // SpectrumMask.cpp — 频谱蒙版图片实现（像素级，预乘 alpha 安全）
 // =============================================================================
 #include "SpectrumMask.h"
+#include <map>
 #include <vector>
 #include <cmath>
 #include <cstdint>
@@ -118,26 +119,46 @@ juce::Image SpectrumMask::adjustedImage (const juce::Image& img,
     return out;
 }
 
-juce::Image SpectrumMask::adjustedImageCached (const juce::Image& img, const MaskImageLayer& cfg)
+juce::Image SpectrumMask::adjustedImageCached (const juce::Image& img,
+                                               const juce::String& pathKey,
+                                               float brightness, float contrast, float saturation)
 {
     const juce::String key = juce::String::formatted ("%s|%.4f|%.4f|%.4f",
-                                                      cfg.path.toRawUTF8(),
-                                                      cfg.brightness, cfg.contrast, cfg.saturation);
-    // GUI 绘制线程与导出线程共享此缓存：查表加锁，慢计算放锁外（幂等，最坏各算一次）。
-    struct Entry { juce::CriticalSection lock; juce::String key; juce::Image img; };
-    static Entry e;
+                                                      pathKey.toRawUTF8(), brightness, contrast, saturation);
+    // 有界缓存（8 条）：GUI 绘制线程与导出线程共用；查表加锁，慢计算放锁外（幂等）。
+    // 多图层逐帧轮流访问，LRU-1 会持续打爆，故用小 map。
+    struct Store
     {
-        const juce::ScopedLock sl (e.lock);
-        if (e.key == key && e.img.isValid())
-            return e.img;
-    }
-    juce::Image out = adjustedImage (img, cfg.brightness, cfg.contrast, cfg.saturation);
-    {
-        const juce::ScopedLock sl (e.lock);
-        e.key = key;
-        e.img = out;
-    }
+        juce::CriticalSection lock;
+        std::map<juce::String, juce::Image> m;
+        void put (const juce::String& k, const juce::Image& v)
+        {
+            const juce::ScopedLock sl (lock);
+            m[k] = v;
+            while (m.size() > 8)
+                m.erase (m.begin());     // map 有序，删最旧（近似 LRU：键含参数，重算代价可接受）
+        }
+        juce::Image get (const juce::String& k)
+        {
+            const juce::ScopedLock sl (lock);
+            auto it = m.find (k);
+            return (it != m.end()) ? it->second : juce::Image();
+        }
+    };
+    static Store store;
+
+    if (juce::Image hit = store.get (key); hit.isValid())
+        return hit;
+
+    juce::Image out = adjustedImage (img, brightness, contrast, saturation);
+    if (out.isValid())
+        store.put (key, out);
     return out;
+}
+
+juce::Image SpectrumMask::adjustedImageCached (const juce::Image& img, const MaskImageLayer& cfg)
+{
+    return adjustedImageCached (img, cfg.path, cfg.brightness, cfg.contrast, cfg.saturation);
 }
 
 juce::Image SpectrumMask::compose (const juce::Image& base,

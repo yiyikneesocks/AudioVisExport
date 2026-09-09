@@ -122,8 +122,12 @@ namespace
     static void drawImageLayer (juce::Graphics& g, const ImageLayer& layer, int w, int h)
     {
         if (! layer.visible || layer.path.isEmpty()) return;
-        const juce::Image im = loadImageForLayer (layer.path);
-        if (im.isNull()) return;
+        const juce::Image raw = loadImageForLayer (layer.path);
+        if (raw.isNull()) return;
+        // v0.5.4 #6：图层自身色彩调整（identity 零开销；有界缓存共享）
+        const juce::Image im = SpectrumMask::adjustedImageCached (raw, layer.path,
+                                                                  layer.brightness, layer.contrast,
+                                                                  layer.saturation);
 
         // 图片元素基础矩形 = 图片自然尺寸（与 GUI SpectrumCanvas 完全同源）。
         // identity 变换（set=false）= 等比 contain 居中（v0.5.1 起替代旧"强制拉伸铺满"）。
