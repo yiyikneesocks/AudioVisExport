@@ -340,6 +340,26 @@ void MainComponent::ejectAudio()
 
 void MainComponent::loadFile (const juce::File& f)
 {
+    // #7：同一时间只允许一首音乐——已有音频再加载时弹提示（架构本就单音频槽，
+    // 这里按用户要求把"将被替换"显式说出来；不同文件才提示，重载同一首不打扰）
+    if (hasAudio && audioFile != f)
+    {
+        juce::AlertWindow::showOkCancelBox (
+            juce::MessageBoxIconType::InfoIcon,
+            "Audio already loaded",
+            "An audio file is already loaded:\n  " + audioFile.getFileName()
+                + "\n\nThe new file will REPLACE it (one audio at a time).",
+            "Replace", "Cancel", this,
+            juce::ModalCallbackFunction::create (
+                [this, f] (int ok) { if (ok) loadFileInternal (f); }));
+        return;
+    }
+    loadFileInternal (f);
+}
+
+// #7：实际加载（loadFile 的确认回调；也供无音频时直呼）
+void MainComponent::loadFileInternal (const juce::File& f)
+{
     transport.stop();
     playBtn.setButtonText ("Play");
     transport.setSource (nullptr);
@@ -805,14 +825,34 @@ void MainComponent::chooseMaskImageFile()
                                   const auto f = fc.getResult();
                                   if (f == juce::File())
                                       return;
-                                  params.maskImage.path    = f.getFullPathName();
-                                  params.maskImage.enabled = true;
-                                  params.maskImage.transform = VisTransform {};   // set=false = 铺满画框
-                                  lastDir = f.getParentDirectory();
-                                  panel.syncMaskControls();   // 反映"启用"勾选
-                                  canvas.setEditMaskImage (false);
-                                  canvas.repaint();
+                                  // #7：一个频谱只允许一张蒙版图——已有则弹提示确认替换
+                                  if (! params.maskImage.path.isEmpty())
+                                  {
+                                      juce::AlertWindow::showOkCancelBox (
+                                          juce::MessageBoxIconType::InfoIcon,
+                                          "Mask image already set",
+                                          "This spectrum already has a mask image:\n  "
+                                              + juce::File (params.maskImage.path).getFileName()
+                                              + "\n\nThe new image will REPLACE it (one mask image per spectrum).",
+                                          "Replace", "Cancel", this,
+                                          juce::ModalCallbackFunction::create (
+                                              [this, f] (int ok) { if (ok) applyMaskImageFile (f); }));
+                                      return;
+                                  }
+                                  applyMaskImageFile (f);
                               });
+}
+
+// #7：蒙版图片单槽位的实际应用（chooseMaskImageFile 的确认回调）
+void MainComponent::applyMaskImageFile (const juce::File& f)
+{
+    params.maskImage.path    = f.getFullPathName();
+    params.maskImage.enabled = true;
+    params.maskImage.transform = VisTransform {};   // set=false = 等比 contain 居中（#3）
+    lastDir = f.getParentDirectory();
+    panel.syncMaskControls();   // 反映"启用"勾选
+    canvas.setEditMaskImage (false);
+    canvas.repaint();
 }
 
 // ---------------------------------------------------------------------------
