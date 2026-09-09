@@ -175,6 +175,8 @@ juce_add_gui_app(AudioVisGUI
     PRODUCT_NAME "AudioVisGUI"
     VERSION "0.5.3"
     COMPANY_NAME "AudioVisExport"
+    ICON_BIG   "${CMAKE_SOURCE_DIR}/assets/icon.png"   # v0.5.4 #1: exe 图标
+    ICON_SMALL "${CMAKE_SOURCE_DIR}/assets/icon.png"   # 注意：juceaide winicon 只认 png 输入（ico 会静默失败）
 )
 
 target_sources(AudioVisGUI PRIVATE

@@ -95,55 +95,81 @@ void BarLineStyle::render (juce::Graphics& g,
     }
     g.setColour (juce::Colours::white);
 
-    // 峰值帽（可选，斜面状态机 v2）：
-    //   · 仅峰值刷新（peakDb 上升 = 顶到新峰）时捕获形状 = 当时柱顶斜率
-    //   · 持平/下落 → 冻结形状，位置随 y(peakDb) 移动（保持期悬停可见、下落期刚性下落）
-    //   · x 范围伸出柱两侧各 gap/4，端点 y 沿捕获斜率线性外推
+    // 峰值帽 v3（v0.5.4 #2，受 rp.barParticles 开关控制）——"柱顶的惯性延迟版"：
+    //   · 每带一个帽顶点状态 capN[i]（归一化），几何与柱顶边完全同构：
+    //     帽线段横跨柱宽 [xL,xR]，左端=(cap[i-1]+cap[i])/2、右端=(cap[i]+cap[i+1])/2
+    //     → 相邻帽自然共享端点高度（"尾部 = 下一帽的头部"），gap 处不画（与柱一致）；
+    //   · 第一原则：帽任何位置不得低于柱顶 → 顶点被 max 链 clamp 在 n[i] 上方，
+    //     柱顶上升立即把帽顶上去并改变帽形（顶点值变化 → 斜率自然变形）；
+    //   · 下落按帧积分：core 的 peakDb（含 hold/decay/accel 语义）提供下落下界，
+    //     显示层再叠加"高处落得快"（+accel×当前高度）；
+    //   · 邻域拉拽：向邻带均值靠拢（平直化趋势）→ 下坠可被邻带拽慢/提前/反向上升；
+    //     拉拽后重新 clamp ≥ 柱顶（约束最高优先）。
     if (rp.barParticles)
     {
         const size_t nU = (size_t) N;
-        if (lastPeakDb_.size() != nU)
-        {
-            lastPeakDb_.assign (nU, -1.0e9f);   // 首帧/带数变化：视为峰值刷新 → 捕获
-            capOffL_.assign (nU, 0.0f);
-            capOffR_.assign (nU, 0.0f);
-        }
+        if (capN_.size() != nU)
+            capN_.assign (nU, 0.0f);   // 首帧/带数变化：从柱顶重新生长
 
-        g.setColour (rp.peak.withAlpha (0.85f));
+        const float dbSpan = juce::jmax (1.0f, rp.maxDb - rp.minDb);
+        const float dt = 1.0f / juce::jmax (1.0f, rp.fps);
+
+        // 1) 状态推进：下落（高处快）+ 两个硬下界（core 峰值语义 / 柱顶）
         for (int i = 0; i < N; ++i)
         {
             const size_t k = (size_t) i;
-            const float pn = std::clamp ((frame.peakDb[i] - rp.minDb)
-                                           / (rp.maxDb - rp.minDb), 0.0f, 1.0f);
-            const float yCentre = normalizedToY_ (pn, canvas);
-            const float yEdgeL  = normalizedToY_ (edge[k],     canvas);
-            const float yEdgeR  = normalizedToY_ (edge[k + 1], canvas);
-
-            // 峰值刷新检测：peakDb 上升 = 新峰顶到 → 重新捕获帽形状（含当时斜率）
-            if (frame.peakDb[i] > lastPeakDb_[k] + 1.0e-4f)
-            {
-                capOffL_[k] = yEdgeL - yCentre;
-                capOffR_[k] = yEdgeR - yCentre;
-            }
-            lastPeakDb_[k] = frame.peakDb[i];
-
-            if (pn < 0.01f) continue;
-
-            // x 伸出柱两侧 gap/4（旧版可见性），y 沿斜率外推
-            const float xL    = x0 + (float) i * slotW;
-            const float xR    = xL + barW;
-            const float slope = (barW > 0.5f) ? (capOffR_[k] - capOffL_[k]) / barW : 0.0f;
-            const float capLx = xL - gap * 0.25f;
-            const float capRx = xR + gap * 0.25f;
-            const float capLy = yCentre + capOffL_[k] - slope * (gap * 0.25f);
-            const float capRy = yCentre + capOffR_[k] + slope * (gap * 0.25f);
-
-            juce::Path cap;
-            cap.startNewSubPath (capLx, capLy);
-            cap.lineTo          (capRx, capRy);
-            g.strokePath (cap, juce::PathStrokeType (1.2f,
-                                                     juce::PathStrokeType::curved,
-                                                     juce::PathStrokeType::rounded));
+            const float peakN  = std::clamp ((frame.peakDb[i] - rp.minDb) / dbSpan, 0.0f, 1.0f);
+            const float barTop = n[k];
+            const float fall   = (rp.peakDecayDbPerSec
+                                  + rp.peakDecayAccelDbPerSec2 * capN_[k]) / dbSpan;   // 归一化/秒
+            float c = capN_[k] - fall * dt;
+            c = juce::jmax (c, peakN);      // core hold/decay 语义（悬停期不落）
+            c = juce::jmax (c, barTop);     // 第一原则：不低于柱顶（柱上来=顶上去）
+            capN_[k] = std::clamp (c, 0.0f, 1.0f);
         }
+
+        // 2) 邻域拉拽（两轮轻扩散 → 平直化趋势），随后再 clamp ≥ 柱顶
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            std::vector<float> tmp (nU);
+            for (int i = 0; i < N; ++i)
+            {
+                const size_t k = (size_t) i;
+                const float l = capN_[k > 0 ? k - 1 : k];
+                const float r = capN_[k < nU - 1 ? k + 1 : k];
+                const float nb = 0.5f * (l + r);
+                tmp[k] = capN_[k] + 0.35f * (nb - capN_[k]);
+            }
+            capN_ = tmp;
+            for (int i = 0; i < N; ++i)
+                capN_[(size_t) i] = juce::jmax (capN_[(size_t) i], n[(size_t) i]);
+        }
+
+        // 3) 绘制：与柱顶边完全同构的帽线段——横跨柱宽 [xL,xR]（gap 处断开不连），
+        //    端点高 = 帽折线在缘位置 k 的插值（与柱 edge 同式：内点取邻带均值，端带用自身），
+        //    再与柱顶 edge[k] 取 max —— 斜面端点也严守"帽不低于柱顶"第一原则；
+        //    edge[] 是两柱共享的 → 相邻帽端点值仍相等（"尾部 = 下一帽的头部"）。
+        auto capEdgeDraw = [&] (int k) -> float
+        {
+            float c;
+            if (k <= 0)     c = capN_[0];
+            else if (k >= N) c = capN_[(size_t) N - 1];
+            else            c = 0.5f * (capN_[(size_t) k - 1] + capN_[(size_t) k]);
+            return juce::jmax (c, edge[(size_t) juce::jlimit (0, N, k)]);
+        };
+        juce::Path capPath;
+        for (int i = 0; i < N; ++i)
+        {
+            const float xL = x0 + (float) i * slotW;
+            const float xR = xL + barW;
+            capPath.startNewSubPath (xL, normalizedToY_ (capEdgeDraw (i),     canvas));
+            capPath.lineTo          (xR, normalizedToY_ (capEdgeDraw (i + 1), canvas));
+        }
+        g.setColour (rp.peak.withAlpha (0.9f));
+        g.strokePath (capPath, juce::PathStrokeType (
+            juce::jmax (1.2f, rp.lineWidth * 0.9f),
+            juce::PathStrokeType::curved,
+            juce::PathStrokeType::rounded));
+        g.setColour (juce::Colours::white);
     }
 }

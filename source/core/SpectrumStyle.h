@@ -44,6 +44,9 @@ public:
         float barPitchRatio = 1.0f;   // v0.5.4 #25: 两柱锚点间距（×slot）；gap = pitch − width
         float barGapRatio   = 0.28f;  // 柱间空隙比例（可负 = 重叠）
         float barWidthRatio = 0.72f;  // 柱宽（×slot）
+        float fps           = 30.0f;  // #2 峰帽动画用（下落/拉拽按帧积分）
+        float peakDecayDbPerSec        = 12.0f;  // #2: 峰帽下落速度（dB/s，与 core 同源）
+        float peakDecayAccelDbPerSec2  = 0.0f;   // #2: 峰帽下落加速度（dB/s²）
         bool  barParticles  = true;   // bar / bar-line：峰值帽（缓慢下落的小横线）开关
 
         // 元素开关

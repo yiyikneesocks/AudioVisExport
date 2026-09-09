@@ -49,6 +49,12 @@
 > - `docs/PLAN_v0.5.0.md` 为历史计划快照，原样保留
 > - `docs/inbox/` = **收件箱三件套**（异步对话，防读写抢占；**本地专用，已 gitignore 不分发，缺失时按 WORKLOG 头部模板重建**）：`INBOX.md`（用户输入·首行「状态 0/1」闸门：1=编辑中 AI 完全只读，0=空闲 AI 仅可精确删「已完成且已备份」的编号行）、`INBOX_WORKLOG.md`（AI 台账/备份+每轮流程）、`INBOX_REPLY.md`（AI 给用户）。完整协议见 `docs/PLAN.md`「文档更新触发点」下的说明。
 
+> **外部目录使用约定（2026-09-10，#3）**：
+> - `~/CodingProgram/AudioVisualizer/`（工程上一级）= 授权根（opencode `external_directory` 已放行），隔壁 `Y2Kmeter` 工程也在其中；
+> - `assets/testmedia/` = **测试素材放这里**（tone.wav / noise.wav / 测试 png，随 git 复用），不再用 /tmp；
+> - `/mnt/c/Users/yiyikneesocks/Desktop/AudioVisExport_test/` = Windows 部署目录（deploy 脚本专用）；
+> - `/tmp/opencode/` = 遗留临时目录（仍可用，但新素材一律进 assets/testmedia/）。
+
 ---
 
 ## 1. 项目概述

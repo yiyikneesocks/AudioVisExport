@@ -61,6 +61,9 @@ namespace
         rp.lineWidth      = p.lineWidth;
         rp.opacity        = p.opacity;
         rp.barPitchRatio  = p.barPitchRatio;
+        rp.fps            = p.fps;
+        rp.peakDecayDbPerSec       = p.peakDecayDbPerSec;
+        rp.peakDecayAccelDbPerSec2 = p.peakDecayAccelDbPerSec2;
         rp.barGapRatio    = p.barGapRatio;
         rp.barWidthRatio  = p.barWidthRatio;
         rp.drawGrid       = p.drawGrid;
