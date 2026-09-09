@@ -63,7 +63,8 @@ juce::Colour SpectrumMask::averageColour (const juce::Image& img)
 juce::Image SpectrumMask::compose (const juce::Image& base,
                                    const juce::Image& image,
                                    const MaskImageLayer& cfg,
-                                   juce::Colour resolvedStroke)
+                                   juce::Colour resolvedStroke,
+                                   const juce::Rectangle<float>& frameRect)
 {
     if (! base.isValid() || ! image.isValid())
         return {};
@@ -103,22 +104,26 @@ juce::Image SpectrumMask::compose (const juce::Image& base,
     if (maxX < minX || maxY < minY)
         return {};   // 无有效轮廓
 
-    // ---- 2. 以 cover 方式把图片铺进 bbox（含 scale/offset），画进 out ----
-    const float bw = (float) (maxX - minX + 1);
-    const float bh = (float) (maxY - minY + 1);
-    const float ew = (float) image.getWidth();
-    const float eh = (float) image.getHeight();
-    const float s  = juce::jmax (bw / ew, bh / eh) * juce::jmax (0.01f, cfg.scale);
-    const float dw = ew * s, dh = eh * s;
-    const float ccx = ((float) minX + (float) maxX) * 0.5f + cfg.offsetX;
-    const float ccy = ((float) minY + (float) maxY) * 0.5f + cfg.offsetY;
-    const juce::Rectangle<float> dest (ccx - dw * 0.5f, ccy - dh * 0.5f, dw, dh);
-
+    // ---- 2. 画图片进 out：几何与电平无关（用固定 frameRect 或用户 transform）----
+    //   set=false → 铺满 frameRect（fill）；set=true → 按 buildVisAffine 映射图片本地矩形
     juce::Image out (juce::Image::ARGB, W, H, true);   // true = 清空（全透明）
     {
         juce::Graphics go (out);
         go.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-        go.drawImage (image, dest);
+        if (cfg.transform.set)
+        {
+            go.saveState();
+            go.addTransform (buildVisAffine (cfg.transform));
+            go.drawImageAt (image, 0, 0);
+            go.restoreState();
+        }
+        else
+        {
+            juce::Rectangle<float> fr = frameRect;
+            if (fr.getWidth() <= 0.0f || fr.getHeight() <= 0.0f)
+                fr = juce::Rectangle<float> (0.0f, 0.0f, (float) W, (float) H);
+            go.drawImage (image, fr);   // fill = 拉伸铺满画框
+        }
     }
 
     // ---- 3. 用轮廓 alpha 裁剪 out（预乘：整体乘 m/255）----

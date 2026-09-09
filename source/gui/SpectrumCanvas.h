@@ -52,7 +52,7 @@ public:
     // ---- 频谱蒙版图片编辑模式（v0.5.4）----
     //   开启后：在频谱范围内拖动 = 平移蒙版图片（maskImage.offset），不移动频谱；
     //   点击频谱范围外 = 自动退出编辑模式。关闭时：图片随频谱作为整体一起拖动。
-    void setEditMaskImage (bool on) { editMaskImage = on; repaint(); }
+    void setEditMaskImage (bool on);          // 定义在 cpp：进入时烘焙默认变换，手柄即刻对齐
     bool editMaskImageMode() const noexcept { return editMaskImage; }
 
     void paint (juce::Graphics& g) override;
@@ -115,6 +115,12 @@ private:
     void beginTransformIfNeeded();
     void updateHoverCursor (juce::Point<float> out);
     void paintOverlay (juce::Graphics& g);
+    // v0.5.4: 频谱画框（padding 内绘制区，输出/base 坐标）——蒙版图片 fill 基准 + 编辑手柄/吸附共用
+    juce::Rectangle<float> frameRectOut() const;
+    // v0.5.4: 进入"编辑蒙版图片"时，若图片尚未 set 变换，则烘焙一个"铺满画框"的等价 transform
+    void ensureMaskTransformInit();
+    // v0.5.4: 输出坐标 → base/蒙版图片空间（= 撤销频谱元素变换 P⁻¹；未变换时二者重合）
+    juce::Point<float> baseFromOutput (juce::Point<float> out) const;
     void paintSnapGuides (juce::Graphics& g, const juce::AffineTransform& disp);  // v0.5.3 吸附辅助线
     // 图片图层（v0.5.1 分组渲染：aboveOnly=false=频谱下方组，true=上方组）
     void paintImages (juce::Graphics& g, const juce::AffineTransform& disp, bool aboveOnly);

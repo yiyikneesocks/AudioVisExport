@@ -146,16 +146,18 @@ namespace
                                     const SpectrumStyle::RenderParams& rp,
                                     bool checkerboard)
     {
+        // 频谱画框（padding 内）——渲染基础层 + 蒙版图片 fill 基准共用
+        const auto canvas = juce::Rectangle<int> (
+            (int) rp.paddingLeft,
+            (int) rp.paddingTop,
+            p.width  - (int)(rp.paddingLeft + rp.paddingRight),
+            p.height - (int)(rp.paddingTop  + rp.paddingBottom));
+
         // —— 基础层 ——
         juce::Image base (juce::Image::ARGB, p.width, p.height, true);   // true = 清空（全透明）
         {
             juce::Graphics gb (base);
             gb.setOpacity (rp.opacity);
-            auto canvas = juce::Rectangle<int> (
-                (int) rp.paddingLeft,
-                (int) rp.paddingTop,
-                p.width  - (int)(rp.paddingLeft + rp.paddingRight),
-                p.height - (int)(rp.paddingTop  + rp.paddingBottom));
 
             BandFrame bandFrame;
             core.getBandFrame (bandFrame);
@@ -198,7 +200,9 @@ namespace
                         const juce::Colour stroke = p.maskImage.strokeAutoColor
                                                   ? averageColourCached (im, p.maskImage.path)
                                                   : p.maskImage.strokeColor;
-                        juce::Image masked = SpectrumMask::compose (base, im, p.maskImage, stroke);
+                        juce::Image masked = SpectrumMask::compose (
+                            base, im, p.maskImage, stroke,
+                            juce::Rectangle<float> (canvas.toFloat()));
                         if (masked.isValid()) layer = masked;
                     }
                 }

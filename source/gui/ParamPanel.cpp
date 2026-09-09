@@ -307,8 +307,9 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     {
         if (onToggleMaskEdit) onToggleMaskEdit (maskEditToggle.getToggleState());
     };
-    maskEditToggle.setTooltip ("When on: drag the picture inside the outline to reposition it; "
-                               "click outside the outline to stop editing. When off: picture moves with the spectrum.");
+    maskEditToggle.setTooltip ("When on: the mask image gets its OWN handles — drag body to move, "
+                               "corners/edges to stretch (snaps to the spectrum frame). Spectrum scaling "
+                               "still drives the whole unit. Click outside the spectrum frame to stop editing.");
 
     // ---- Export ----
     addHeader ("Export");

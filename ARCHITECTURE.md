@@ -814,15 +814,13 @@ SpectrumParams.h 默认值
 |---|---|---|---|---|
 | maskImage.enabled | `mask.enabled` | false | "Use spectrum mask" toggle | 蒙版总开关（空 path 时开关无效果） |
 | maskImage.path | `mask.path` | "" | "Choose mask image..." 按钮 | 蒙版图片路径（设非空自动置 enabled=true） |
-| maskImage.offsetX | `mask.offsetX` | 0 | 「编辑图片位置」模式内画布拖拽 | 图片相对轮廓 bbox 中心的额外平移（输出 px） |
-| maskImage.offsetY | `mask.offsetY` | 0 | 同上 | |
-| maskImage.scale | `mask.scale` | 1.0 | （CLI 预留） | 相对"cover 铺满 bbox"的额外缩放 |
+| maskImage.transform | `mask.{centerX,centerY,scaleX,scaleY,rotationDeg,posX,posY}` / `mask.reset` | set=false | 「Edit image position」模式内画布手柄 | 图片在 base 坐标的独立变换；`set=false`=铺满频谱画框（**与电平无关，恒定不漂移**），设任一 key 即置 true。`mask.reset` 恢复铺满 |
 | maskImage.strokeEnabled | `mask.strokeEnabled` | false | "Outline (auto avg color)" toggle | 沿轮廓内侧勾边开关（选项 C） |
 | maskImage.strokeWidth | `mask.strokeWidth` | 2.0 | "Outline width" 滑块（0.5..12） | 描边宽度（≈内侧环像素宽） |
 | maskImage.strokeAutoColor | `mask.strokeAutoColor` | true | （设 `mask.strokeColor` 自动置 false）| 描边色=图片平均色 |
 | maskImage.strokeColor | `mask.strokeColor` | `#ffffffff` | （CLI `--set`）| 手动描边色（auto 时忽略）|
 
-> 图片随频谱**整体**拖动/缩放/旋转（蒙版取自 base，套用同一 `p.transform`）；GUI「编辑图片位置」开启后可在轮廓内单独平移 `offsetX/Y`，点轮廓外自动退出编辑。
+> 图片随频谱**整体**拖动/缩放/旋转（几何在 base 空间，套用同一 `p.transform`）；「Edit image position」模式给图片**独立手柄**（角=等比、边=单轴拉伸、body=平移、顶圆=旋转，移动可吸附到频谱画框边/中线），点频谱框外自动退出编辑。
 
 ### 8.6 输出组（点前缀：`output.`，GUI 部分有控件）
 

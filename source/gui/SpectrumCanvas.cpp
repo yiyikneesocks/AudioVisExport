@@ -115,7 +115,8 @@ void SpectrumCanvas::paint (juce::Graphics& g)
                     const juce::Colour stroke = params.maskImage.strokeAutoColor
                                               ? maskAverageColourCached (im, params.maskImage.path)
                                               : params.maskImage.strokeColor;
-                    juce::Image masked = SpectrumMask::compose (base, im, params.maskImage, stroke);
+                    juce::Image masked = SpectrumMask::compose (
+                        base, im, params.maskImage, stroke, frameRectOut());
                     if (masked.isValid()) specLayer = masked;
                 }
             }
@@ -241,6 +242,8 @@ void SpectrumCanvas::paintOverlay (juce::Graphics& g)
     const auto disp = displayAffine();
 
     auto cOut = currentCorners();                    // 输出坐标（已按选中元素的尺寸）
+    // v0.5.4: 编辑蒙版图片时 cOut 是 base 坐标 → 需再套频谱元素变换 P 才到输出，再 disp 到画布
+    const auto map = editMaskImage ? buildVisAffine (params.transform).followedBy (disp) : disp;
     // 元素中心 = 四角平均（仿射保持中点；自动跟随选中元素，v0.5.1 修复：
     // 原实现固定用频谱变换的画布中心，选中图片时旋转柄方向错误）
     const auto centerOut = juce::Point<float> (
@@ -249,8 +252,8 @@ void SpectrumCanvas::paintOverlay (juce::Graphics& g)
 
     // 映射到画布坐标
     juce::Point<float> cp[4];
-    for (int i = 0; i < 4; ++i) cp[i] = visTransformPoint (disp, cOut[i]);
-    const auto cCenter = visTransformPoint (disp, centerOut);
+    for (int i = 0; i < 4; ++i) cp[i] = visTransformPoint (map, cOut[i]);
+    const auto cCenter = visTransformPoint (map, centerOut);
 
     const auto mid = [] (juce::Point<float> a, juce::Point<float> b)
     {
@@ -302,7 +305,7 @@ void SpectrumCanvas::paintOverlay (juce::Graphics& g)
     }
 
     // v0.5.3: 吸附辅助线 + 对齐点标记（画在手柄之上、提示文字之下）
-    paintSnapGuides (g, disp);
+    paintSnapGuides (g, map);
 
     // 操作提示
     g.setColour (juce::Colours::white.withAlpha (0.45f));
@@ -407,15 +410,70 @@ juce::Rectangle<float> SpectrumCanvas::outputDisplayRect() const
     const int ow = juce::jmax (1, params.width);
     const int oh = juce::jmax (1, params.height);
     const float s = displayScale();
-    const auto b = getLocalBounds();
+    auto b = getLocalBounds();
     return { (b.getWidth()  - ow * s) * 0.5f,
              (b.getHeight() - oh * s) * 0.5f,
              ow * s, oh * s };
 }
 
+// v0.5.4: 频谱画框（padding 内绘制区，输出/base 坐标）。与 paint 里渲染 base 用的 canvasRect 同口径。
+juce::Rectangle<float> SpectrumCanvas::frameRectOut() const
+{
+    const float ow = (float) juce::jmax (1, params.width);
+    const float oh = (float) juce::jmax (1, params.height);
+    return { rp.paddingLeft, rp.paddingTop,
+             juce::jmax (1.0f, ow - (rp.paddingLeft + rp.paddingRight)),
+             juce::jmax (1.0f, oh - (rp.paddingTop  + rp.paddingBottom)) };
+}
+
+// 进入编辑模式时把"铺满画框"默认态烘焙成显式 VisTransform，好让手柄/四角与渲染完全对齐。
+void SpectrumCanvas::ensureMaskTransformInit()
+{
+    if (params.maskImage.transform.set)
+        return;
+    const juce::Image im = loadCached (params.maskImage.path);
+    const float iw = im.isValid() ? (float) im.getWidth()  : frameRectOut().getWidth();
+    const float ih = im.isValid() ? (float) im.getHeight() : frameRectOut().getHeight();
+    const auto fr  = frameRectOut();
+    VisTransform& t = params.maskImage.transform;
+    t.set         = true;
+    t.scaleX      = fr.getWidth()  / juce::jmax (1.0f, iw);
+    t.scaleY      = fr.getHeight() / juce::jmax (1.0f, ih);
+    t.centerX     = iw * 0.5f;
+    t.centerY     = ih * 0.5f;
+    t.rotationDeg = 0.0f;
+    t.posX        = fr.getX() + fr.getWidth()  * 0.5f - t.scaleX * t.centerX;
+    t.posY        = fr.getY() + fr.getHeight() * 0.5f - t.scaleY * t.centerY;
+}
+
+// 输出坐标 → base/蒙版图片空间（撤销频谱元素变换；未变换时 identity）
+juce::Point<float> SpectrumCanvas::baseFromOutput (juce::Point<float> out) const
+{
+    if (! params.transform.set)
+        return out;
+    return visTransformPoint (buildVisAffine (params.transform).inverted(), out);
+}
+
+// v0.5.4: 进入编辑模式即烘焙"铺满画框"变换，使手柄/四角在首次点击前就与渲染对齐。
+void SpectrumCanvas::setEditMaskImage (bool on)
+{
+    editMaskImage = on;
+    if (on && params.maskImage.enabled && ! params.maskImage.path.isEmpty())
+        ensureMaskTransformInit();
+    repaint();
+}
+
 // 当前选中元素的基础尺寸（输出坐标）：频谱 = 输出画布；图片 = 图片自然尺寸
 std::pair<float, float> SpectrumCanvas::activeElementSize() const
 {
+    if (editMaskImage)                       // v0.5.4：编辑蒙版图片 → 图片自然尺寸
+    {
+        const juce::Image img = loadCached (params.maskImage.path);
+        if (img.isValid())
+            return { (float) img.getWidth(), (float) img.getHeight() };
+        const auto fr = frameRectOut();
+        return { fr.getWidth(), fr.getHeight() };
+    }
     if (selectedImage >= 0 && selectedImage < (int) params.images.size())
     {
         const juce::Image img = loadCached (params.images[(size_t) selectedImage].path);
@@ -428,6 +486,8 @@ std::pair<float, float> SpectrumCanvas::activeElementSize() const
 std::array<juce::Point<float>, 4> SpectrumCanvas::currentCorners() const
 {
     const auto [w, h] = activeElementSize();
+    if (editMaskImage)                        // v0.5.4：编辑蒙版图片
+        return visCorners (params.maskImage.transform, w, h);
     if (selectedImage >= 0 && selectedImage < (int) params.images.size())
         return visCorners (params.images[(size_t) selectedImage].transform, w, h);
     return visCorners (params.transform, w, h);
@@ -506,6 +566,14 @@ SpectrumCanvas::DragMode SpectrumCanvas::hitHandleForCorners (
 
 SpectrumCanvas::DragMode SpectrumCanvas::hitHandle (juce::Point<float> out) const
 {
+    // v0.5.4: 编辑蒙版图片 → 命中测试针对该图片
+    if (editMaskImage)
+    {
+        const auto [w, h] = activeElementSize();
+        const auto c = visCorners (params.maskImage.transform, w, h);
+        return hitHandleForCorners (c, w, h, out);
+    }
+
     // 选中的是图片 → 命中测试针对该图片
     if (selectedImage >= 0 && selectedImage < (int) params.images.size())
     {
@@ -537,24 +605,58 @@ void SpectrumCanvas::mouseDown (const juce::MouseEvent& e)
 
     const auto out = toOutput (e.position);
 
-    // v0.5.4: 蒙版图片编辑模式——范围内拖动=平移图片 offset；点范围外=退出编辑
+    // v0.5.4: 蒙版图片编辑模式——角/边手柄=独立拉伸图片，body=平移，点输出画框外=退出编辑。
+    //   复用与图片/频谱完全相同的手柄 & 对边锚定 & 吸附机制（activeTransform/Size 在编辑态指向蒙版图片）。
     if (editMaskImage)
     {
-        const bool inside = params.maskImage.enabled
-                         && out.getX() >= 0.0f && out.getY() >= 0.0f
-                         && out.getX() <= (float) juce::jmax (1, params.width)
-                         && out.getY() <= (float) juce::jmax (1, params.height);
-        if (! inside)
+        if (! params.maskImage.enabled || params.maskImage.path.isEmpty())
         {
-            editMaskImage = false;          // 点频谱外 → 停止编辑
+            editMaskImage = false;
             dragMode = DragMode::None;
             repaint();
             return;
         }
-        dragMode      = DragMode::MoveMask;
-        dragStartOut  = out;
-        dragStartOffX = params.maskImage.offsetX;
-        dragStartOffY = params.maskImage.offsetY;
+        ensureMaskTransformInit();
+        const auto [iw, ih] = activeElementSize();
+        const auto corners = visCorners (params.maskImage.transform, iw, ih);   // base 坐标
+        const auto b       = baseFromOutput (out);                              // 鼠标 → base
+
+        const auto hh      = hitHandle (b);
+        const bool bodyHit = visContains (corners, b);
+        // "频谱范围" = 频谱元素框（输出坐标，默认 = 整画布）；点其外 → 退出编辑
+        const auto specFrame = visCorners (params.transform,
+                                           (float) juce::jmax (1, params.width),
+                                           (float) juce::jmax (1, params.height));
+        const bool inSpectrum = visContains (specFrame, out);
+
+        if (hh == DragMode::None && ! bodyHit)
+        {
+            if (! inSpectrum)
+                editMaskImage = false;               // 点频谱框外 → 停止编辑
+            dragMode = DragMode::None;
+            repaint();
+            return;
+        }
+
+        dragMode       = (hh != DragMode::None) ? hh : DragMode::Move;
+        dragStartOut   = b;
+        startTransform = params.maskImage.transform;
+
+        if (dragMode >= DragMode::ScaleTL && dragMode <= DragMode::ScaleR)
+        {
+            switch (dragMode)
+            {
+                case DragMode::ScaleTL: dragAnchorElem = { iw, ih };      dragHandleElem = { 0,  0 };  break;
+                case DragMode::ScaleTR: dragAnchorElem = { 0,  ih };      dragHandleElem = { iw, 0 };  break;
+                case DragMode::ScaleBR: dragAnchorElem = { 0,  0 };       dragHandleElem = { iw, ih }; break;
+                case DragMode::ScaleBL: dragAnchorElem = { iw, 0 };       dragHandleElem = { 0,  ih }; break;
+                case DragMode::ScaleT:  dragAnchorElem = { iw*0.5f, ih }; dragHandleElem = { iw*0.5f, 0 };  break;
+                case DragMode::ScaleB:  dragAnchorElem = { iw*0.5f, 0 };  dragHandleElem = { iw*0.5f, ih }; break;
+                case DragMode::ScaleL:  dragAnchorElem = { iw, ih*0.5f }; dragHandleElem = { 0, ih*0.5f }; break;
+                case DragMode::ScaleR:  dragAnchorElem = { 0, ih*0.5f };  dragHandleElem = { iw, ih*0.5f }; break;
+                default: break;
+            }
+        }
         repaint();
         return;
     }
@@ -667,13 +769,78 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
 
     const auto out = toOutput (e.position);
 
-    // v0.5.4: 蒙版图片编辑模式——只平移图片 offset，不动频谱变换
-    if (dragMode == DragMode::MoveMask)
+    // v0.5.4: 编辑蒙版图片时，位移/缩放在 base 坐标里算（与 activeTransform=mask 一致）
+    if (editMaskImage && dragMode != DragMode::None)
     {
-        params.maskImage.offsetX = dragStartOffX + (out.getX() - dragStartOut.getX());
-        params.maskImage.offsetY = dragStartOffY + (out.getY() - dragStartOut.getY());
-        repaint();
-        return;
+        const auto b  = baseFromOutput (out);
+        auto& mt = activeTransform();
+
+        if (dragMode == DragMode::Move)
+        {
+            const float ow = (float) juce::jmax (1, params.width);
+            const float oh = (float) juce::jmax (1, params.height);
+            const float s  = displayScale();
+            const float thr = (s > 1e-3f) ? (8.0f / s) : 2.0f;
+
+            float px = startTransform.posX + (b.getX() - dragStartOut.getX());
+            float py = startTransform.posY + (b.getY() - dragStartOut.getY());
+
+            if (params.snapEnabled)
+            {
+                const auto [iw, ih] = activeElementSize();
+                const auto cc = visCorners (VisTransform { true, startTransform.centerX, startTransform.centerY,
+                                              startTransform.scaleX, startTransform.scaleY,
+                                              startTransform.rotationDeg, px, py }, iw, ih);
+                auto mid = [] (juce::Point<float> a, juce::Point<float> c)
+                { return juce::Point<float> ((a.getX()+c.getX())*0.5f,(a.getY()+c.getY())*0.5f); };
+                const float fx[3] = { 0.0f, ow*0.5f, ow };          // base 频谱框：左/中/右
+                const float fy[3] = { 0.0f, oh*0.5f, oh };
+                float bestDx = 0.0f, bestPx = thr + 1.0f;
+                float bestDy = 0.0f, bestPy = thr + 1.0f;
+                const juce::Point<float> ptsX[6] = { cc[0], cc[3], mid(cc[0],cc[1]), mid(cc[1],cc[2]),
+                                                     mid(cc[2],cc[3]), mid(cc[3],cc[0]) };
+                for (auto& pt : ptsX)
+                    for (float tx : fx)
+                    { const float d = std::abs (pt.getX()-tx); if (d<bestPx){bestPx=d; bestDx=tx-pt.getX();} }
+                const juce::Point<float> ptsY[6] = { cc[0], cc[1], mid(cc[0],cc[1]), mid(cc[1],cc[2]),
+                                                     mid(cc[2],cc[3]), mid(cc[3],cc[0]) };
+                for (auto& pt : ptsY)
+                    for (float ty : fy)
+                    { const float d = std::abs (pt.getY()-ty); if (d<bestPy){bestPy=d; bestDy=ty-pt.getY();} }
+                px += bestDx;
+                py += bestDy;
+            }
+
+            mt.posX = px;
+            mt.posY = py;
+            repaint();
+            return;
+        }
+
+        if (dragMode == DragMode::Rotate)
+        {
+            const auto [iw, ih] = activeElementSize();
+            const auto cc = visTransformPoint (buildVisAffine (startTransform),
+                                               juce::Point<float> (iw * 0.5f, ih * 0.5f));
+            const float a0 = std::atan2 (dragStartOut.getY() - cc.getY(),
+                                         dragStartOut.getX() - cc.getX());
+            const float a1 = std::atan2 (b.getY() - cc.getY(), b.getX() - cc.getX());
+            mt.rotationDeg = startTransform.rotationDeg + juce::radiansToDegrees (a1 - a0);
+            repaint();
+            return;
+        }
+
+        // 角/边拉伸（对边锚定，base 坐标）
+        if (dragMode >= DragMode::ScaleTL && dragMode <= DragMode::ScaleR)
+        {
+            const VisScaleAxis ax =
+                (dragMode == DragMode::ScaleT || dragMode == DragMode::ScaleB) ? VisScaleAxis::OnlyY
+              : (dragMode == DragMode::ScaleL || dragMode == DragMode::ScaleR) ? VisScaleAxis::OnlyX
+              : VisScaleAxis::Both;
+            mt = applyAnchorScaled (startTransform, dragAnchorElem, dragHandleElem, b, dragStartOut, ax);
+            repaint();
+            return;
+        }
     }
 
     auto& t = activeTransform();
@@ -965,6 +1132,8 @@ void SpectrumCanvas::filesDropped (const juce::StringArray& files, int, int)
 // =============================================================================
 const VisTransform& SpectrumCanvas::activeTransform() const
 {
+    if (editMaskImage)                       // v0.5.4
+        return params.maskImage.transform;
     if (selectedImage >= 0 && selectedImage < (int) params.images.size())
         return params.images[(size_t) selectedImage].transform;
     return params.transform;
@@ -972,6 +1141,11 @@ const VisTransform& SpectrumCanvas::activeTransform() const
 
 VisTransform& SpectrumCanvas::activeTransform()
 {
+    if (editMaskImage)                        // v0.5.4：编辑蒙版图片
+    {
+        ensureMaskTransformInit();
+        return params.maskImage.transform;
+    }
     if (selectedImage >= 0 && selectedImage < (int) params.images.size())
     {
         auto& t = params.images[(size_t) selectedImage].transform;

@@ -28,15 +28,16 @@ struct ImageLayer
 
 // 频谱蒙版图片（v0.5.4）：图片只在"频谱轮廓"覆盖到的区域可见——
 //   频谱填充区变成一扇"窗口"，图片从窗口里透出来；频谱自身退为可选描边。
-//   与频谱元素绑定（跟随 p.transform 一起拖动/缩放/旋转）；offset/scale 是
-//   图片在轮廓 bbox 内的相对微调（GUI"编辑图片"模式下拖动改这两个）。
+//   几何用**独立 VisTransform**（base/输出坐标系）：
+//     · set=false → 铺满频谱画框（canvas 区域，与当前帧电平无关 → 图片恒定不动）；
+//     · 电平只通过 base alpha 决定"露出多少"，绝不改变图片位置/大小；
+//   整套变换再随频谱元素 p.transform 一起拖动/缩放/旋转（绑定为整体）。
+//   GUI「编辑图片位置」模式给这张图独立的手柄（移动/角缩放/边拉伸 + 吸附）。
 struct MaskImageLayer
 {
     bool  enabled = false;
     juce::String path;
-    float offsetX = 0.0f;          // 相对频谱 bbox 中心额外平移（输出像素）
-    float offsetY = 0.0f;
-    float scale   = 1.0f;          // 相对"铺满 bbox(cover)"的额外缩放
+    VisTransform transform;        // 图片在 base/输出坐标的定位；set=false = 铺满画框
     // 描边（沿轮廓内侧勾边）
     bool  strokeEnabled   = false;
     float strokeWidth     = 2.0f;

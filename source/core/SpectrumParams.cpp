@@ -274,12 +274,20 @@ juce::String SpectrumParams::toJson() const
     // maskImage：频谱蒙版图片（v0.5.4）
     {
         const auto& mk = maskImage;
+        const auto& mt = mk.transform;
         s << "  \"maskImage\": {\n";
         s << "    \"enabled\": " << (mk.enabled ? "true" : "false") << ",\n";
         s << "    \"path\": \"" << escJson (mk.path) << "\",\n";
-        s << "    \"offsetX\": " << mk.offsetX << ",\n";
-        s << "    \"offsetY\": " << mk.offsetY << ",\n";
-        s << "    \"scale\": " << mk.scale << ",\n";
+        s << "    \"transform\": {\n";
+        s << "      \"set\": " << (mt.set ? "true" : "false") << ",\n";
+        s << "      \"centerX\": " << mt.centerX << ",\n";
+        s << "      \"centerY\": " << mt.centerY << ",\n";
+        s << "      \"scaleX\": " << mt.scaleX << ",\n";
+        s << "      \"scaleY\": " << mt.scaleY << ",\n";
+        s << "      \"rotationDeg\": " << mt.rotationDeg << ",\n";
+        s << "      \"posX\": " << mt.posX << ",\n";
+        s << "      \"posY\": " << mt.posY << "\n";
+        s << "    },\n";
         s << "    \"strokeEnabled\": " << (mk.strokeEnabled ? "true" : "false") << ",\n";
         s << "    \"strokeWidth\": " << mk.strokeWidth << ",\n";
         s << "    \"strokeAutoColor\": " << (mk.strokeAutoColor ? "true" : "false") << ",\n";
@@ -465,15 +473,24 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
     {
         p.maskImage.enabled         = getBool   (mk, "enabled", p.maskImage.enabled);
         p.maskImage.path            = getStr    (mk, "path", p.maskImage.path);
-        p.maskImage.offsetX         = getFloat  (mk, "offsetX", p.maskImage.offsetX);
-        p.maskImage.offsetY         = getFloat  (mk, "offsetY", p.maskImage.offsetY);
-        p.maskImage.scale           = getFloat  (mk, "scale", p.maskImage.scale);
         p.maskImage.strokeEnabled   = getBool   (mk, "strokeEnabled", p.maskImage.strokeEnabled);
         p.maskImage.strokeWidth     = getFloat  (mk, "strokeWidth", p.maskImage.strokeWidth);
         p.maskImage.strokeAutoColor = getBool   (mk, "strokeAutoColor", p.maskImage.strokeAutoColor);
         bool cok = false;
         auto sc = parseColour (getStr (mk, "strokeColor", ""), &cok);
         if (cok) p.maskImage.strokeColor = sc;
+        auto mt = mk.getProperty ("transform", juce::var());
+        if (auto* to = mt.getDynamicObject())
+        {
+            p.maskImage.transform.set         = getBool  (mt, "set", p.maskImage.transform.set);
+            p.maskImage.transform.centerX     = getFloat (mt, "centerX", p.maskImage.transform.centerX);
+            p.maskImage.transform.centerY     = getFloat (mt, "centerY", p.maskImage.transform.centerY);
+            p.maskImage.transform.scaleX      = getFloat (mt, "scaleX", p.maskImage.transform.scaleX);
+            p.maskImage.transform.scaleY      = getFloat (mt, "scaleY", p.maskImage.transform.scaleY);
+            p.maskImage.transform.rotationDeg = getFloat (mt, "rotationDeg", p.maskImage.transform.rotationDeg);
+            p.maskImage.transform.posX        = getFloat (mt, "posX", p.maskImage.transform.posX);
+            p.maskImage.transform.posY        = getFloat (mt, "posY", p.maskImage.transform.posY);
+        }
     }
     errorMessage.clear();
     return p;
@@ -584,13 +601,19 @@ bool SpectrumParams::applyOverride (const juce::String& dottedKey,
     // mask.*（频谱蒙版图片，v0.5.4）
     if      (key == "mask.enabled")          { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); maskImage.enabled=v; return true; }
     if      (key == "mask.path")             { maskImage.path=val; if (!val.isEmpty()) maskImage.enabled=true; return true; }
-    if      (key == "mask.offsetX")          { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.offsetX=v; return true; }
-    if      (key == "mask.offsetY")          { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.offsetY=v; return true; }
-    if      (key == "mask.scale")            { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.scale=v; return true; }
     if      (key == "mask.strokeEnabled")    { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); maskImage.strokeEnabled=v; return true; }
     if      (key == "mask.strokeWidth")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.strokeWidth=v; return true; }
     if      (key == "mask.strokeAutoColor")  { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); maskImage.strokeAutoColor=v; return true; }
     if      (key == "mask.strokeColor")      { bool ok; auto c=parseColour(val, &ok); if(!ok) return setErr("invalid color"); maskImage.strokeColor=c; maskImage.strokeAutoColor=false; return true; }
+    // 蒙版图片几何（设值即视为已编辑 → set=true；未设则铺满画框，与电平无关）
+    if      (key == "mask.reset")            { maskImage.transform=VisTransform{}; return true; }
+    if      (key == "mask.centerX")          { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.transform.centerX=v; maskImage.transform.set=true; return true; }
+    if      (key == "mask.centerY")          { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.transform.centerY=v; maskImage.transform.set=true; return true; }
+    if      (key == "mask.scaleX")           { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.transform.scaleX=v; maskImage.transform.set=true; return true; }
+    if      (key == "mask.scaleY")           { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.transform.scaleY=v; maskImage.transform.set=true; return true; }
+    if      (key == "mask.rotationDeg")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.transform.rotationDeg=v; maskImage.transform.set=true; return true; }
+    if      (key == "mask.posX")             { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.transform.posX=v; maskImage.transform.set=true; return true; }
+    if      (key == "mask.posY")             { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.transform.posY=v; maskImage.transform.set=true; return true; }
 
     errorMessage = "unknown key: " + key;
     return false;

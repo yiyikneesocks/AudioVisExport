@@ -807,8 +807,7 @@ void MainComponent::chooseMaskImageFile()
                                       return;
                                   params.maskImage.path    = f.getFullPathName();
                                   params.maskImage.enabled = true;
-                                  params.maskImage.offsetX = 0.0f;
-                                  params.maskImage.offsetY = 0.0f;
+                                  params.maskImage.transform = VisTransform {};   // set=false = 铺满画框
                                   lastDir = f.getParentDirectory();
                                   panel.syncMaskControls();   // 反映"启用"勾选
                                   canvas.setEditMaskImage (false);
