@@ -47,7 +47,7 @@
 > - `docs/PLAN.md` = **当前迭代下一步计划**（滚动文件，发版后清空重写）
 > - 另有 `docs/RELEASE_NOTES.md`（用户视角发版公告）、`docs/GUI_GUIDE.md`（GUI 使用指南）
 > - `docs/PLAN_v0.5.0.md` 为历史计划快照，原样保留
-> - `docs/inbox/` = **收件箱三件套**（异步对话，防读写抢占）：`INBOX.md`（用户输入·AI 只读）、`INBOX_WORKLOG.md`（AI 台账/备份）、`INBOX_REPLY.md`（AI 给用户）。协议见 `docs/PLAN.md`「文档更新触发点」下的说明。
+> - `docs/inbox/` = **收件箱三件套**（异步对话，防读写抢占；**本地专用，已 gitignore 不分发，缺失时按 WORKLOG 头部模板重建**）：`INBOX.md`（用户输入·首行「状态 0/1」闸门：1=编辑中 AI 完全只读，0=空闲 AI 仅可精确删「已完成且已备份」的编号行）、`INBOX_WORKLOG.md`（AI 台账/备份+每轮流程）、`INBOX_REPLY.md`（AI 给用户）。完整协议见 `docs/PLAN.md`「文档更新触发点」下的说明。
 
 ---
 

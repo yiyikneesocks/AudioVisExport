@@ -25,8 +25,14 @@ juce::Colour SpectrumMask::averageColour (const juce::Image& img)
     if (! img.isValid())
         return juce::Colour (0xff808080);
 
-    const int w = img.getWidth(), h = img.getHeight();
-    juce::Image::BitmapData bd (img, juce::Image::BitmapData::readOnly);
+    // JPEG/BMP 等可能被 load 成 RGB（3 字节/像素）：直接按 PixelARGB（4 字节）读会越界崩溃。
+    // 先统一转成 ARGB 再逐像素访问（调用方均有缓存，只转一次）。
+    const juce::Image src = (img.getFormat() == juce::Image::ARGB)
+                                ? img
+                                : img.convertedToFormat (juce::Image::ARGB);
+
+    const int w = src.getWidth(), h = src.getHeight();
+    juce::Image::BitmapData bd (src, juce::Image::BitmapData::readOnly);
 
     // 每隔若干像素采样，控制在 ~64k 样本内（大图提速，均色视觉无差）
     const int stepX = juce::jmax (1, w / 256);
