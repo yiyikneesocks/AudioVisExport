@@ -12,6 +12,7 @@
 // 未来可改为真多 Image 合成以支持 blend mode / blur filter。
 // =============================================================================
 #include "CrystalStyle.h"
+#include "../core/ColorMap.h"
 #include <cmath>
 #include <algorithm>
 
@@ -128,24 +129,36 @@ void CrystalStyle::renderPass (juce::Graphics& g, int pass,
     const float yTop = (float) inner.getY();
     const float yBot = (float) inner.getBottom();
 
-    // ---- pass 0: 辉光 glow ----
+    // ---- pass 0: 真辉光 bloom（离屏描曲线 → 高斯模糊 → 叠加回主画布）----
     if (pass == 0)
     {
-        juce::Path curvePath;
-        buildSmoothPath_ (curvePath, pts, false, yBot, yTop);
+        // v0.5.3: 用 JUCE 真高斯模糊替换旧版 4 层递减描边模拟。
+        //   离屏画一条实心主曲线 → applyGaussianBlurEffect 扩散 → 半透明叠回，得柔光晕。
+        const float radius = 7.0f;
+        const int   pad    = (int) std::ceil (radius * 3.0f);
 
-        // 4 层递减粗细描边，模拟 bloom
-        const struct { float width; float alpha; } layers[] = {
-            { 14.0f, 0.04f },
-            { 10.0f, 0.07f },
-            {  6.0f, 0.12f },
-            {  3.0f, 0.20f },
-        };
-        for (const auto& lyr : layers)
+        juce::Rectangle<int> region (canvas.getX() - pad, canvas.getY() - pad,
+                                     canvas.getWidth() + pad * 2,
+                                     canvas.getHeight() + pad * 2);
+        const int gw = juce::jmax (1, region.getWidth());
+        const int gh = juce::jmax (1, region.getHeight());
+
+        juce::Image glow (juce::Image::ARGB, gw, gh, true);
         {
-            g.setColour (rp.primary.withAlpha (lyr.alpha));
-            g.strokePath (curvePath, juce::PathStrokeType (lyr.width));
+            juce::Graphics gg (glow);
+            gg.setColour (rp.primary);
+            gg.addTransform (juce::AffineTransform::translation (-region.getX(), -region.getY()));
+            juce::Path curvePath;
+            buildSmoothPath_ (curvePath, pts, false, yBot, yTop);
+            gg.strokePath (curvePath, juce::PathStrokeType (juce::jmax (3.0f, rp.lineWidth * 2.0f)));
+            auto pd = glow.getPixelData();
+            if (pd != nullptr)
+                pd->applyGaussianBlurEffect (radius);
         }
+        g.saveState();
+        g.setOpacity (0.55);
+        g.drawImageAt (glow, region.getX(), region.getY());
+        g.restoreState();
         return;
     }
 
@@ -167,14 +180,23 @@ void CrystalStyle::renderPass (juce::Graphics& g, int pass,
         g.fillPath (fillPath);
         g.setColour (juce::Colours::white);  // 清除 gradient
 
-        // 主曲线双层描边
+        // 主曲线双层描边（colormap 时沿频率横向取色）
+        ColorMap cm;
+        cm.configure (rp.colorMap, rp.primary, rp.secondary, rp.peak);
+        const bool useMap  = ! cm.isSolid();
+        const float gx0    = (float) inner.getX();
+        const float gx1    = (float) inner.getRight();
+
         juce::Path curvePath;
         buildSmoothPath_ (curvePath, pts, false, yBot, yTop);
 
-        g.setColour (rp.primary.withAlpha (0.40f));
+        if (useMap) g.setGradientFill (cm.horizontalGradient (gx0, gx1, yBot, 0.40f));
+        else        g.setColour (rp.primary.withAlpha (0.40f));
         g.strokePath (curvePath, juce::PathStrokeType (2.5f));
-        g.setColour (rp.primary.withAlpha (0.90f));
+        if (useMap) g.setGradientFill (cm.horizontalGradient (gx0, gx1, yBot, 0.90f));
+        else        g.setColour (rp.primary.withAlpha (0.90f));
         g.strokePath (curvePath, juce::PathStrokeType (rp.lineWidth));
+        g.setColour (juce::Colours::white);   // 清渐变
         return;
     }
 

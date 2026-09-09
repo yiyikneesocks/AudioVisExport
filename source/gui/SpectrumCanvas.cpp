@@ -9,6 +9,7 @@
 // =============================================================================
 #include "SpectrumCanvas.h"
 #include "WinDragCompat.h"
+#include "../core/SpectrumMask.h"
 #include <cmath>
 #if JUCE_WINDOWS
  #include <windows.h>      // isProcessElevated：UIPI 诊断用
@@ -26,6 +27,17 @@ namespace
     const juce::Colour kInsideBg         (0xff17171c);   // 棋盘关时范围内近黑底
     const juce::Colour kBorderCol        (0xe6ffffff);   // 输出画布边界线（半透白）
     constexpr float    kOutsideImageMul  = 0.35f;        // 范围外元素不透明度乘子（压在灰底上 → 变暗发灰）
+
+    // 频谱蒙版图片平均色缓存（按路径；与 VisPipeline 同逻辑，避免每帧重算）
+    juce::Colour maskAverageColourCached (const juce::Image& im, const juce::String& path)
+    {
+        static std::map<juce::String, juce::Colour> cache;
+        auto it = cache.find (path);
+        if (it != cache.end()) return it->second;
+        const juce::Colour c = SpectrumMask::averageColour (im);
+        cache[path] = c;
+        return c;
+    }
 }
 
 SpectrumCanvas::SpectrumCanvas (SpectrumParams& paramsRef) : params (paramsRef)
@@ -93,19 +105,34 @@ void SpectrumCanvas::paint (juce::Graphics& g)
 
         if (params.spectrumPresent)
         {
+            // 频谱蒙版：图片填轮廓（+可选描边），取代裸频谱填充层（与导出同源）
+            juce::Image specLayer = base;
+            if (params.maskImage.enabled && ! params.maskImage.path.isEmpty())
+            {
+                const juce::Image im = loadCached (params.maskImage.path);
+                if (im.isValid())
+                {
+                    const juce::Colour stroke = params.maskImage.strokeAutoColor
+                                              ? maskAverageColourCached (im, params.maskImage.path)
+                                              : params.maskImage.strokeColor;
+                    juce::Image masked = SpectrumMask::compose (base, im, params.maskImage, stroke);
+                    if (masked.isValid()) specLayer = masked;
+                }
+            }
+
             const auto total = buildVisAffine (params.transform).followedBy (disp);
             // 范围内：原样
             g.saveState();
             g.reduceClipRegion (dispRect.toNearestInt());
             g.addTransform (total);
-            g.drawImageAt (base, 0, 0);
+            g.drawImageAt (specLayer, 0, 0);
             g.restoreState();
             // 范围外：频谱 base 大部分是透明的，只把"画到的部分"变暗压在灰底上（不整块涂灰，避免矩形灰框伪影）
             g.saveState();
             g.excludeClipRegion (dispRect.toNearestInt());
             g.addTransform (total);
             g.setOpacity (kOutsideImageMul);
-            g.drawImageAt (base, 0, 0);
+            g.drawImageAt (specLayer, 0, 0);
             g.restoreState();
         }
 
@@ -127,6 +154,22 @@ void SpectrumCanvas::paint (juce::Graphics& g)
         g.drawLine (juce::Line<float> (dr.getBottomLeft(), dr.getBottomRight()),  1.0f);
         g.drawLine (juce::Line<float> (dr.getTopLeft(),    dr.getBottomLeft()),   1.0f);
         g.drawLine (juce::Line<float> (dr.getTopRight(),   dr.getBottomRight()),  1.0f);
+    }
+
+    // v0.5.4: 蒙版图片编辑模式提示（橙色框 + 文案；范围内拖图，范围外退出）
+    if (editMaskImage && params.maskImage.enabled)
+    {
+        const auto dr = outputDisplayRect();
+        const juce::Colour oc (0xFFFF7A00);
+        g.setColour (oc);
+        const float dd[] = { 6.0f, 4.0f };
+        g.drawDashedLine (juce::Line<float> (dr.getTopLeft(), dr.getTopRight()), dd, 2, 2.0f);
+        g.drawDashedLine (juce::Line<float> (dr.getBottomLeft(), dr.getBottomRight()), dd, 2, 2.0f);
+        g.drawDashedLine (juce::Line<float> (dr.getTopLeft(), dr.getBottomLeft()), dd, 2, 2.0f);
+        g.drawDashedLine (juce::Line<float> (dr.getTopRight(), dr.getBottomRight()), dd, 2, 2.0f);
+        g.setFont (juce::FontOptions (14.0f, juce::Font::bold));
+        g.drawText ("Editing mask image — drag inside to move · click outside to stop",
+                    dr.reduced (10).removeFromTop (24), juce::Justification::left);
     }
 
     // 变换手柄 UI（有音频时始终显示）
@@ -494,6 +537,28 @@ void SpectrumCanvas::mouseDown (const juce::MouseEvent& e)
 
     const auto out = toOutput (e.position);
 
+    // v0.5.4: 蒙版图片编辑模式——范围内拖动=平移图片 offset；点范围外=退出编辑
+    if (editMaskImage)
+    {
+        const bool inside = params.maskImage.enabled
+                         && out.getX() >= 0.0f && out.getY() >= 0.0f
+                         && out.getX() <= (float) juce::jmax (1, params.width)
+                         && out.getY() <= (float) juce::jmax (1, params.height);
+        if (! inside)
+        {
+            editMaskImage = false;          // 点频谱外 → 停止编辑
+            dragMode = DragMode::None;
+            repaint();
+            return;
+        }
+        dragMode      = DragMode::MoveMask;
+        dragStartOut  = out;
+        dragStartOffX = params.maskImage.offsetX;
+        dragStartOffY = params.maskImage.offsetY;
+        repaint();
+        return;
+    }
+
     // 1) 先检查当前选中元素的手柄
     auto h = hitHandle (out);
 
@@ -601,6 +666,16 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
         return;
 
     const auto out = toOutput (e.position);
+
+    // v0.5.4: 蒙版图片编辑模式——只平移图片 offset，不动频谱变换
+    if (dragMode == DragMode::MoveMask)
+    {
+        params.maskImage.offsetX = dragStartOffX + (out.getX() - dragStartOut.getX());
+        params.maskImage.offsetY = dragStartOffY + (out.getY() - dragStartOut.getY());
+        repaint();
+        return;
+    }
+
     auto& t = activeTransform();
     const auto [ew, eh] = activeElementSize();
 

@@ -678,6 +678,54 @@ PATH=/home/azulores/miniconda3/envs/gitenv/bin:$PATH git -c http.version=HTTP/1.
 
 ---
 
+## 7.8 协作 / 编辑工具链避坑（AI 高频踩，务必先读）
+
+> 本节由历次会话实际踩坑沉淀。改动前先扫一眼，能省掉大量返工与"假 diff"。
+
+**1. 行尾混用（最坑，已两次造成整文件伪 diff）**
+- 本仓库**没有** `.gitattributes`，`core.autocrlf` 未设置 → 各文件行尾**按提交时原样混存**：
+  - CRLF：`SpectrumCanvas.cpp` / `MainComponent.cpp` / `SpectrumStyle.cpp` / `BarStyle.cpp` …
+  - LF：`Y2KLineStyle.cpp` / `CrystalStyle.cpp` / `PolylineStyle.cpp` / `BarLineStyle.cpp` / `ParamPanel.cpp` / `ColorMap.cpp` …
+- **严禁**对文件跑"全局统一 CRLF↔LF"脚本——会把每一行都变成改动，真实 diff 被淹没（曾见 ParamPanel 虚高到 1080 行）。
+- 正确做法：
+  - 优先用 **`edit` 工具**逐处精确改（它保留该文件原有行尾）。
+  - 若必须用脚本重写整文件，**先按 HEAD 版本判定该文件的目标行尾再写回**：
+    ```python
+    def head_style(p):                       # 读 HEAD 判断 CRLF / LF
+        b = subprocess.check_output(["git","show",f"HEAD:{p}"])
+        cr = b.count(b"\r\n"); lf = b.count(b"\n") - cr
+        return "CRLF" if cr >= lf else "LF"   # 新文件默认按同目录兄弟（多为 LF）
+    body = open(p,"rb").read().replace(b"\r\n", b"\n")        # 先归一到 LF
+    if head_style(p) == "CRLF": body = body.replace(b"\n", b"\r\n")
+    open(p,"wb").write(body)
+    ```
+  - **改完必查** `git diff --stat`：某文件行数远超你的逻辑改动 → 十有八九被行尾搅了，按上法还原。
+
+**2. `edit` 工具锚点必须唯一**
+- 插入函数时用 `return xxx;\n}` 这类短尾锚点，易命中文件里**更早的同名片段**（曾把 `horizontalGradient`
+  插进 `ColorMap::map()` 体内，编译炸）。锚点请带**前后各 3–5 行唯一上下文**，或直接 `write` 整文件重写。
+
+**3. JUCE API 惯用坑**
+- `ColourGradient::colours` **是私有**（且英式拼写 `colours`）→ 不能 `grad.colors.clear()` 复用同一 gradient 改色。
+  逐柱/逐段上色请**每次新建 `ColourGradient` 传进 `setGradientFill`**（160 段/帧，开销可忽略）。
+- `reduceClipRegion` / `excludeClipRegion` **只有 int-rect 版**，无 float → `rect.toNearestInt()`（≤1px 偏差，无感）。
+- `drawLine` **没有 `(Point,Point,thickness)` 重载** → 用 `drawLine(juce::Line<float>(a,b), t)` 或四 float 版。
+- `drawDashedLine(Line<float>, const float* dashes, int numDashes, thickness)`：`numDashes` 是数组段数（如 `{6,4}`+2 = 实6空4）。
+- 真高斯模糊直接用 **`image.getPixelData()->applyGaussianBlurEffect(radius)`**（`GlowEffect` 内部即如此），别手搓卷积。
+- **全局快捷键收不到键**：无组件持焦时 `ComponentPeer::getTargetForKeyPress` 回退到**顶层窗口**且只向**父链**走，
+  永不进入子组件 → 顶层 content（`MainComponent`）的 `keyPressed` 不被调用。要让空格/Delete 即时生效，
+  须 `setWantsKeyboardFocus(true)` 并在合适时机（如 `loadFile` 末尾）`grabKeyboardFocus()`。
+
+**4. `--set` 点路径前缀别靠猜**
+- 分组前缀固定：`time.` / `visual.` / `transform.` / `output.` / `fft.` / `freq.` / `dynamic.`。
+  例：`time.peakDecayAccelDbPerSec2`（**不是** `spectrum.`）、`transform.rotationDeg`（**不是** `spectrum.rotation`）。
+- 拿不准就查 `source/core/SpectrumParams.cpp` 的 `setByKey`（`if (key == "...")` 列表是唯一事实源）。
+
+**5. CLI `--help` 糖列表易过期**
+- `--style <...>` 帮助串落后于工厂；新增样式时顺手同步 `CliArgs::helpText()` 与 GUI `ParamPanel` 的样式下拉数组（两处须一致）。
+
+---
+
 ## 8. 完整可调参数表（~50 个，供 AI 快速查询）
 
 **参数注入顺序**（低优先级 → 高优先级，后者覆盖前者）：
@@ -737,8 +785,8 @@ SpectrumParams.h 默认值
 
 | 字段 | 点路径 | 默认 | GUI 控件 | 说明 |
 |---|---|---|---|---|
-| style | `visual.style` | `y2k-line` | "Render style" 下拉 | `y2k-line`/`bar`/`polyline`/`crystal` |
-| colorMap | `visual.colorMap` | `solid` | （预留，下拉骨架）| 未来 gradient/rainbow |
+| style | `visual.style` | `y2k-line` | "Render style" 下拉 | `y2k-line`/`bar`/`bar-line`/`bar-mirror`/`polyline`/`crystal` |
+| colorMap | `visual.colorMap` | `solid` | （CLI `--set` / GUI）| `solid`/`gradient`（按强度）/`rainbow`（按频带相位），已接 bar/line 全样式 |
 | primaryColor | `visual.primaryColor` | `#ec4899` | "Primary" 颜色按钮 | 主描边色 |
 | secondaryColor | `visual.secondaryColor` | `#f9a8d4` | "Secondary" 颜色按钮 | 填充/网格色 |
 | peakColor | `visual.peakColor` | `#be185d` | "Peak" 颜色按钮 | 峰值虚线/帽色 |
@@ -756,6 +804,25 @@ SpectrumParams.h 默认值
 | drawGrid | `visual.drawGrid` | false | "Draw grid" toggle | 开关网格 |
 | drawAxisLabels | `visual.drawAxisLabels` | false | "Axis labels" toggle | 开关坐标轴标签 |
 | （非 param，仅 GUI 状态）| — | — | "Checkerboard BG" toggle | 预览画布是否画棋盘格（方便肉眼判断透明区，**不影响导出**）|
+
+### 8.5.1 频谱蒙版图片（点前缀：`mask.`，v0.5.4，GUI 有"Choose mask image..."按钮）
+
+> 图片只在"频谱轮廓"覆盖区可见（频谱=窗口/蒙版）。bar 逐柱（gap 不铺图）、line 整块。实现＝`SpectrumMask::compose`
+> 读频谱 base 层 alpha 做像素蒙版（预乘安全）；`VisPipeline` 与 `SpectrumCanvas` 共用，预览即所得。
+
+| 字段 | 点路径 | 默认 | GUI 控件 | 说明 |
+|---|---|---|---|---|
+| maskImage.enabled | `mask.enabled` | false | "Use spectrum mask" toggle | 蒙版总开关（空 path 时开关无效果） |
+| maskImage.path | `mask.path` | "" | "Choose mask image..." 按钮 | 蒙版图片路径（设非空自动置 enabled=true） |
+| maskImage.offsetX | `mask.offsetX` | 0 | 「编辑图片位置」模式内画布拖拽 | 图片相对轮廓 bbox 中心的额外平移（输出 px） |
+| maskImage.offsetY | `mask.offsetY` | 0 | 同上 | |
+| maskImage.scale | `mask.scale` | 1.0 | （CLI 预留） | 相对"cover 铺满 bbox"的额外缩放 |
+| maskImage.strokeEnabled | `mask.strokeEnabled` | false | "Outline (auto avg color)" toggle | 沿轮廓内侧勾边开关（选项 C） |
+| maskImage.strokeWidth | `mask.strokeWidth` | 2.0 | "Outline width" 滑块（0.5..12） | 描边宽度（≈内侧环像素宽） |
+| maskImage.strokeAutoColor | `mask.strokeAutoColor` | true | （设 `mask.strokeColor` 自动置 false）| 描边色=图片平均色 |
+| maskImage.strokeColor | `mask.strokeColor` | `#ffffffff` | （CLI `--set`）| 手动描边色（auto 时忽略）|
+
+> 图片随频谱**整体**拖动/缩放/旋转（蒙版取自 base，套用同一 `p.transform`）；GUI「编辑图片位置」开启后可在轮廓内单独平移 `offsetX/Y`，点轮廓外自动退出编辑。
 
 ### 8.6 输出组（点前缀：`output.`，GUI 部分有控件）
 

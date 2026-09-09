@@ -18,6 +18,7 @@
 #include "PngSequenceEncoder.h"
 #include "FreqMap.h"
 #include "VisTransform.h"
+#include "SpectrumMask.h"
 
 #include <chrono>
 #include <vector>
@@ -106,6 +107,17 @@ namespace
         return im;
     }
 
+    // 图片蒙版平均色缓存（按路径；均色与帧无关，只算一次）
+    static juce::Colour averageColourCached (const juce::Image& im, const juce::String& path)
+    {
+        static std::map<juce::String, juce::Colour> cache;
+        auto it = cache.find (path);
+        if (it != cache.end()) return it->second;
+        const juce::Colour c = SpectrumMask::averageColour (im);
+        cache[path] = c;
+        return c;
+    }
+
     // 画一张图片图层：默认铺满输出画布（与频谱同基准），再套用 VisTransform
     static void drawImageLayer (juce::Graphics& g, const ImageLayer& layer, int w, int h)
     {
@@ -174,18 +186,33 @@ namespace
                 drawImageLayer (g, p.images[(size_t) i], p.width, p.height);
 
             // 频谱元素：未变换（set=false）直接铺满；已变换则按仿射合成
+            //   若开启频谱蒙版：图片填轮廓（+可选描边），取代裸频谱填充层（选项 C）
             if (p.spectrumPresent)
             {
+                juce::Image layer = base;
+                if (p.maskImage.enabled && ! p.maskImage.path.isEmpty())
+                {
+                    const juce::Image im = loadImageForLayer (p.maskImage.path);
+                    if (im.isValid())
+                    {
+                        const juce::Colour stroke = p.maskImage.strokeAutoColor
+                                                  ? averageColourCached (im, p.maskImage.path)
+                                                  : p.maskImage.strokeColor;
+                        juce::Image masked = SpectrumMask::compose (base, im, p.maskImage, stroke);
+                        if (masked.isValid()) layer = masked;
+                    }
+                }
+
                 if (p.transform.set)
                 {
                     g.saveState();
                     g.addTransform (buildVisAffine (p.transform));
-                    g.drawImageAt (base, 0, 0);
+                    g.drawImageAt (layer, 0, 0);
                     g.restoreState();
                 }
                 else
                 {
-                    g.drawImageAt (base, 0, 0);
+                    g.drawImageAt (layer, 0, 0);
                 }
             }
 

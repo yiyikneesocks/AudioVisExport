@@ -7,6 +7,7 @@
 // 网格：可选（同 Y2KLineStyle 风格）。
 // =============================================================================
 #include "BarStyle.h"
+#include "../core/ColorMap.h"
 #include <cmath>
 #include <algorithm>
 
@@ -83,14 +84,12 @@ void BarStyle::render (juce::Graphics& g,
     const float yBot  = (float) inner.getBottom();
     const float yTop  = (float) inner.getY();
 
-    // 渐变填充（底=primary@0.85, 顶=secondary@0.35）
-    juce::ColourGradient grad (rp.primary.withAlpha (0.85f),
-                               0.0f, yBot,
-                               rp.secondary.withAlpha (0.35f),
-                               0.0f, yTop,
-                               false);
+    // ColorMap：solid 走原 primary→secondary 竖向渐变（零回归）；gradient/rainbow 逐柱取色。
+    ColorMap cm;
+    cm.configure (rp.colorMap, rp.primary, rp.secondary, rp.peak);
+    const bool useMap = ! cm.isSolid();
 
-    // 画柱
+    // 画柱（solid：底 primary→顶 secondary；colormap：底基色→顶基色淡）
     for (int i = 0; i < N; ++i)
     {
         float n = std::clamp (frame.normalized[i], 0.0f, 1.0f);
@@ -101,21 +100,32 @@ void BarStyle::render (juce::Graphics& g,
         float h = yBot - y;
         if (h < 1.0f) continue;
 
-        // 渐变填充
-        grad.point1 = juce::Point<float> (x, yBot);
-        grad.point2 = juce::Point<float> (x, y);
+        juce::Colour bottom, top;
+        if (useMap)
+        {
+            const juce::Colour base = cm.colourForBand (i, N, n);
+            bottom = base.withAlpha (0.85f);
+            top    = base.withAlpha (0.40f);
+        }
+        else
+        {
+            bottom = rp.primary.withAlpha (0.85f);
+            top    = rp.secondary.withAlpha (0.35f);
+        }
+        juce::ColourGradient grad (bottom, x, yBot, top, x, y, false);
         g.setGradientFill (grad);
         g.fillRect (x, y, barW, h);
     }
     // 重置 gradient（JUCE 需手动清除，否则影响后续绘制）
     g.setColour (juce::Colours::white);
 
-    // 柱顶描边（1px primary 不透明线，增加锐利感）
-    g.setColour (rp.primary);
+    // 柱顶描边（1px 不透明线，增加锐利感；colormap 时逐柱取色）
+    if (! useMap) g.setColour (rp.primary);
     for (int i = 0; i < N; ++i)
     {
         float n = std::clamp (frame.normalized[i], 0.0f, 1.0f);
         if (n < 0.005f) continue;
+        if (useMap) g.setColour (cm.colourForBand (i, N, n));
         float x = x0 + (float) i * slotW;
         float y = normalizedToY_ (n, canvas);
         g.drawHorizontalLine ((int) std::round (y), x, x + barW);

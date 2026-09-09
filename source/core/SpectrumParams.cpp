@@ -270,7 +270,22 @@ juce::String SpectrumParams::toJson() const
     // audio
     s << "  \"audio\": {\n";
     s << "    \"path\": \"" << escJson (audioPath) << "\"\n";
-    s << "  }\n";
+    s << "  },\n";
+    // maskImage：频谱蒙版图片（v0.5.4）
+    {
+        const auto& mk = maskImage;
+        s << "  \"maskImage\": {\n";
+        s << "    \"enabled\": " << (mk.enabled ? "true" : "false") << ",\n";
+        s << "    \"path\": \"" << escJson (mk.path) << "\",\n";
+        s << "    \"offsetX\": " << mk.offsetX << ",\n";
+        s << "    \"offsetY\": " << mk.offsetY << ",\n";
+        s << "    \"scale\": " << mk.scale << ",\n";
+        s << "    \"strokeEnabled\": " << (mk.strokeEnabled ? "true" : "false") << ",\n";
+        s << "    \"strokeWidth\": " << mk.strokeWidth << ",\n";
+        s << "    \"strokeAutoColor\": " << (mk.strokeAutoColor ? "true" : "false") << ",\n";
+        s << "    \"strokeColor\": \"" << colourHex (mk.strokeColor) << "\"\n";
+        s << "  }\n";
+    }
     s << "}";
     return s;
 }
@@ -444,6 +459,22 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
     // 从 spectrumIndex 派生每张图片的 aboveSpectrum（保持一致）
     for (size_t i = 0; i < p.images.size(); ++i)
         p.images[i].aboveSpectrum = ((int) i >= p.spectrumIndex);
+    // maskImage：频谱蒙版图片（v0.5.4）
+    auto mk = root.getProperty ("maskImage", juce::var());
+    if (auto* o = mk.getDynamicObject())
+    {
+        p.maskImage.enabled         = getBool   (mk, "enabled", p.maskImage.enabled);
+        p.maskImage.path            = getStr    (mk, "path", p.maskImage.path);
+        p.maskImage.offsetX         = getFloat  (mk, "offsetX", p.maskImage.offsetX);
+        p.maskImage.offsetY         = getFloat  (mk, "offsetY", p.maskImage.offsetY);
+        p.maskImage.scale           = getFloat  (mk, "scale", p.maskImage.scale);
+        p.maskImage.strokeEnabled   = getBool   (mk, "strokeEnabled", p.maskImage.strokeEnabled);
+        p.maskImage.strokeWidth     = getFloat  (mk, "strokeWidth", p.maskImage.strokeWidth);
+        p.maskImage.strokeAutoColor = getBool   (mk, "strokeAutoColor", p.maskImage.strokeAutoColor);
+        bool cok = false;
+        auto sc = parseColour (getStr (mk, "strokeColor", ""), &cok);
+        if (cok) p.maskImage.strokeColor = sc;
+    }
     errorMessage.clear();
     return p;
 }
@@ -550,6 +581,16 @@ bool SpectrumParams::applyOverride (const juce::String& dottedKey,
     if      (key == "spectrum.present")      { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); spectrumPresent=v; return true; }
     if      (key == "spectrum.index")        { bool ok=true; int v=toInt(&ok);  if(!ok) return setErr("invalid int"); spectrumIndex=juce::jmax(0, v); return true; }
     if      (key == "spectrum.snapEnabled")  { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); snapEnabled=v; return true; }
+    // mask.*（频谱蒙版图片，v0.5.4）
+    if      (key == "mask.enabled")          { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); maskImage.enabled=v; return true; }
+    if      (key == "mask.path")             { maskImage.path=val; if (!val.isEmpty()) maskImage.enabled=true; return true; }
+    if      (key == "mask.offsetX")          { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.offsetX=v; return true; }
+    if      (key == "mask.offsetY")          { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.offsetY=v; return true; }
+    if      (key == "mask.scale")            { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.scale=v; return true; }
+    if      (key == "mask.strokeEnabled")    { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); maskImage.strokeEnabled=v; return true; }
+    if      (key == "mask.strokeWidth")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.strokeWidth=v; return true; }
+    if      (key == "mask.strokeAutoColor")  { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); maskImage.strokeAutoColor=v; return true; }
+    if      (key == "mask.strokeColor")      { bool ok; auto c=parseColour(val, &ok); if(!ok) return setErr("invalid color"); maskImage.strokeColor=c; maskImage.strokeAutoColor=false; return true; }
 
     errorMessage = "unknown key: " + key;
     return false;

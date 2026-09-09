@@ -39,6 +39,9 @@ public:
     // v0.5.2: 频谱层操作 + 吸附开关
     std::function<void ()>     onAddSpectrumClicked;
     std::function<void ()>     onSelectSpectrumClicked;
+    // v0.5.4: 频谱蒙版图片
+    std::function<void ()>     onChooseMaskImage;      // 弹文件框选蒙版图
+    std::function<void (bool)> onToggleMaskEdit;       // 切换"编辑图片位置"模式
 
     void setProgressText (const juce::String& s);
     void setOutputDirText (const juce::String& s);
@@ -50,6 +53,10 @@ public:
 
     // 棋盘格预览开关状态（MainComponent 读取）
     bool getCheckerPreview() const noexcept { return checkerToggle.getToggleState(); }
+
+    // v0.5.4: 频谱蒙版图片控件同步（MainComponent 调用）
+    void setMaskEditChecked (bool b);   // 编辑模式被"点范围外"自动退出时同步勾选
+    void syncMaskControls();            // 选图后从 params 回填蒙版控件勾选态
 
 private:
     SpectrumParams& params;
@@ -72,6 +79,12 @@ private:
     juce::TextButton addImageBtn{ "Add image..." }, layerUpBtn{ "Up" },
                      layerDownBtn{ "Down" }, layerRemoveBtn{ "Remove" },
                      addSpectrumBtn{ "Add spectrum" }, selectSpectrumBtn{ "Select spectrum" };
+    // v0.5.4: 频谱蒙版图片控件
+    juce::TextButton maskChooseBtn{ "Choose mask image..." };
+    juce::ToggleButton maskOnToggle { "Use spectrum mask" };
+    juce::ToggleButton maskStrokeToggle { "Outline (auto avg color)" };
+    juce::ToggleButton maskEditToggle { "Edit image position" };
+    juce::Slider* maskStrokeWidthSliderPtr = nullptr;
     juce::ToggleButton snapToggle { "Snapping" };               // v0.5.2 吸附开关
     juce::Slider layerOpacitySlider;                            // v0.5.1 需要引用以刷新
     juce::Slider* layerOpacitySliderPtr = nullptr;

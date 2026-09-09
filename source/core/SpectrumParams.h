@@ -26,6 +26,24 @@ struct ImageLayer
     bool  visible = true;
 };
 
+// 频谱蒙版图片（v0.5.4）：图片只在"频谱轮廓"覆盖到的区域可见——
+//   频谱填充区变成一扇"窗口"，图片从窗口里透出来；频谱自身退为可选描边。
+//   与频谱元素绑定（跟随 p.transform 一起拖动/缩放/旋转）；offset/scale 是
+//   图片在轮廓 bbox 内的相对微调（GUI"编辑图片"模式下拖动改这两个）。
+struct MaskImageLayer
+{
+    bool  enabled = false;
+    juce::String path;
+    float offsetX = 0.0f;          // 相对频谱 bbox 中心额外平移（输出像素）
+    float offsetY = 0.0f;
+    float scale   = 1.0f;          // 相对"铺满 bbox(cover)"的额外缩放
+    // 描边（沿轮廓内侧勾边）
+    bool  strokeEnabled   = false;
+    float strokeWidth     = 2.0f;
+    bool  strokeAutoColor = true;  // true = 用图片平均色；false = 用 strokeColor
+    juce::Colour strokeColor { 0xffffffff };
+};
+
 struct SpectrumParams
 {
     // ---- FFT ----
@@ -84,6 +102,9 @@ struct SpectrumParams
     bool spectrumPresent = true;       // false = 频谱被删除（可一键恢复）
     int  spectrumIndex   = 0;          // 统一 z 序中"频谱之下"的图片数量（上方 = N - spectrumIndex）
     bool snapEnabled     = true;       // 吸附开关（旋转 + 移动）
+
+    // ---- 频谱蒙版图片（v0.5.4）----
+    MaskImageLayer maskImage;
 
     // ---- 输出 ----
     int width  = 1280;

@@ -40,3 +40,29 @@ juce::Colour ColorMap::map (float intensity) const noexcept
     // 默认 = solid
     return primaryColor_;
 }
+
+juce::Colour ColorMap::colourForBand (int bandIdx, int bandCount, float intensity) const noexcept
+{
+    if (name_ == "gradient")
+        return map (intensity);                                   // 按该带强度上色
+    if (name_ == "rainbow")
+    {
+        const float t = bandCount > 1
+                      ? std::clamp ((float) bandIdx / (float) (bandCount - 1), 0.0f, 1.0f)
+                      : 0.0f;
+        return map (t);                                           // 按频率位置铺彩虹
+    }
+    return primaryColor_;
+}
+
+juce::ColourGradient ColorMap::horizontalGradient (float x0, float x1, float y, float alpha) const
+{
+    // solid：两端同色（等价纯色，调用方一般走 isSolid 分支用 primary）
+    // gradient / rainbow：沿频率轴取 8 个采样点
+    juce::ColourGradient grad (map (0.0f).withAlpha (alpha), x0, y,
+                               map (1.0f).withAlpha (alpha), x1, y, false);
+    if (! isSolid())
+        for (int k = 1; k < 8; ++k)
+            grad.addColour (k / 8.0f, map (k / 8.0f).withAlpha (alpha));
+    return grad;
+}

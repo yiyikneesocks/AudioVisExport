@@ -11,6 +11,7 @@
 // 可选：采样点圆点（drawDots，默认关，用 --set visual.drawDots=true 开启）
 // =============================================================================
 #include "PolylineStyle.h"
+#include "../core/ColorMap.h"
 #include <cmath>
 #include <algorithm>
 
@@ -90,6 +91,11 @@ void PolylineStyle::render (juce::Graphics& g,
 
     const float yBot = (float) inner.getBottom();
 
+    ColorMap cm;
+    cm.configure (rp.colorMap, rp.primary, rp.secondary, rp.peak);
+    const bool useMap = ! cm.isSolid();
+    const float xRight = x0 + xLen;
+
     // 1) 半透明填充
     juce::Path fillPath;
     fillPath.startNewSubPath (pts[0].x, yBot);
@@ -98,7 +104,8 @@ void PolylineStyle::render (juce::Graphics& g,
         fillPath.lineTo (pts[i]);
     fillPath.lineTo (pts[N - 1].x, yBot);
     fillPath.closeSubPath();
-    g.setColour (rp.secondary.withAlpha (0.25f));
+    if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 0.25f));
+    else        g.setColour (rp.secondary.withAlpha (0.25f));
     g.fillPath (fillPath);
 
     // 2) 主折线双层描边（外粗半透明 + 内细不透明）
@@ -107,10 +114,13 @@ void PolylineStyle::render (juce::Graphics& g,
     for (int i = 1; i < N; ++i)
         linePath.lineTo (pts[i]);
 
-    g.setColour (rp.primary.withAlpha (0.35f));
+    if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 0.35f));
+    else        g.setColour (rp.primary.withAlpha (0.35f));
     g.strokePath (linePath, juce::PathStrokeType (3.0f));
-    g.setColour (rp.primary);
+    if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 1.0f));
+    else        g.setColour (rp.primary);
     g.strokePath (linePath, juce::PathStrokeType (rp.lineWidth));
+    g.setColour (juce::Colours::white);   // 清渐变
 
     // 3) 峰值折线虚线
     juce::Path peakPath;

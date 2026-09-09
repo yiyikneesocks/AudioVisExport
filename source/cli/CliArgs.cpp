@@ -37,7 +37,7 @@ AudioVisExport v0.5.3 — 透明背景频谱图视频生成器
   --audio <path>                  audio.path
   --width N / --height N          output.width / output.height
   --fps N                         time.fps
-  --style <y2k-line|bar|polyline> visual.style
+  --style <y2k-line|bar|bar-line|bar-mirror|polyline|crystal>  visual.style
   --color-map <solid|gradient|rainbow>  visual.colorMap
   --primary-color #rrggbb         visual.primaryColor
   --secondary-color #rrggbb       visual.secondaryColor

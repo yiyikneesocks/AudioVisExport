@@ -75,6 +75,9 @@ MainComponent::MainComponent() : canvas (params), panel (params)
     panel.onLayerRemove     = [this] { removeSelectedLayer(); };
     panel.onAddSpectrumClicked  = [this] { addSpectrumLayer(); };
     panel.onSelectSpectrumClicked = [this] { canvas.selectSpectrum(); canvas.repaint(); };
+    // v0.5.4: 频谱蒙版图片
+    panel.onChooseMaskImage = [this] { chooseMaskImageFile(); };
+    panel.onToggleMaskEdit  = [this] (bool b) { canvas.setEditMaskImage (b); canvas.repaint(); };
     panel.onReadLayerOpacity = [this]() -> double
     {
         const int sel = canvas.selectedImageIndex();
@@ -233,6 +236,9 @@ void MainComponent::timerCallback()
     canvas.style = style.get();
     canvas.showCheckerboard = panel.getCheckerPreview();
     canvas.repaint();
+
+    // v0.5.4: 画布编辑模式可能被"点范围外"自动退出 → 同步面板勾选态（幂等，无通知环）
+    panel.setMaskEditChecked (canvas.editMaskImageMode());
 
     // 传输 UI
     if (hasAudio)
@@ -783,6 +789,30 @@ void MainComponent::chooseImageFile()
                                   const auto f = fc.getResult();
                                   if (f != juce::File())
                                       addImageLayer (f);
+                              });
+}
+
+// v0.5.4: 选择频谱蒙版图片（图片只在频谱轮廓内可见，随频谱整体变换）
+void MainComponent::chooseMaskImageFile()
+{
+    fileChooser = std::make_unique<juce::FileChooser> ("选择蒙版图片",
+                                                       lastDir,
+                                                       "*.png;*.jpg;*.jpeg;*.gif;*.bmp");
+    fileChooser->launchAsync (juce::FileBrowserComponent::openMode
+                                | juce::FileBrowserComponent::canSelectFiles,
+                              [this] (const juce::FileChooser& fc)
+                              {
+                                  const auto f = fc.getResult();
+                                  if (f == juce::File())
+                                      return;
+                                  params.maskImage.path    = f.getFullPathName();
+                                  params.maskImage.enabled = true;
+                                  params.maskImage.offsetX = 0.0f;
+                                  params.maskImage.offsetY = 0.0f;
+                                  lastDir = f.getParentDirectory();
+                                  panel.syncMaskControls();   // 反映"启用"勾选
+                                  canvas.setEditMaskImage (false);
+                                  canvas.repaint();
                               });
 }
 

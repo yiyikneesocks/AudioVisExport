@@ -49,6 +49,12 @@ public:
     void selectImage (int idx){ selectedImage = idx; repaint(); }
     int  imageCount() const noexcept { return (int) params.images.size(); }
 
+    // ---- 频谱蒙版图片编辑模式（v0.5.4）----
+    //   开启后：在频谱范围内拖动 = 平移蒙版图片（maskImage.offset），不移动频谱；
+    //   点击频谱范围外 = 自动退出编辑模式。关闭时：图片随频谱作为整体一起拖动。
+    void setEditMaskImage (bool on) { editMaskImage = on; repaint(); }
+    bool editMaskImageMode() const noexcept { return editMaskImage; }
+
     void paint (juce::Graphics& g) override;
 
 private:
@@ -59,10 +65,13 @@ private:
     {
         None, Move, Rotate,
         ScaleTL, ScaleTR, ScaleBR, ScaleBL,   // 四角（等比缩放）
-        ScaleT,  ScaleB,  ScaleL,  ScaleR     // 四边（单轴拉伸）
+        ScaleT,  ScaleB,  ScaleL,  ScaleR,    // 四边（单轴拉伸）
+        MoveMask                              // v0.5.4：编辑模式下平移蒙版图片
     };
     DragMode dragMode = DragMode::None;
     int selectedImage = -1;             // 当前选中元素：-1 = 频谱，>=0 = params.images 下标
+    bool editMaskImage = false;         // v0.5.4：蒙版图片编辑模式
+    float dragStartOffX = 0.0f, dragStartOffY = 0.0f;   // 拖图起始 offset
 
     // ---- 拖放 HUD / 提权诊断（UIPI）----
     bool dragHovering = false;

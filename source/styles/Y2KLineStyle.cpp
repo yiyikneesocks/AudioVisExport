@@ -16,6 +16,7 @@
 //   本样式内颜色只带自身 alpha（与 Y2K 一致），不再乘 rp.opacity，避免双重叠加。
 // =============================================================================
 #include "Y2KLineStyle.h"
+#include "../core/ColorMap.h"
 #include <cmath>
 #include <algorithm>
 
@@ -223,19 +224,28 @@ void Y2KLineStyle::render (juce::Graphics& g,
     const float yTop = (float) inner.getY();
     const float yBot = (float) inner.getBottom();
 
-    // 3) 填充区域（从底部到曲线的半透明 tint）
+    ColorMap cm;
+    cm.configure (rp.colorMap, rp.primary, rp.secondary, rp.peak);
+    const bool useMap  = ! cm.isSolid();
+    const float xRight = x0 + xLen;
+
+    // 3) 填充区域（从底部到曲线的半透明 tint；colormap 时沿频率横向取色）
     juce::Path fillPath;
     buildSmoothPath_ (fillPath, curvePts, /*closeToBottom*/ true, yBot, yTop);
-    g.setColour (rp.secondary.withAlpha (0.25f));
+    if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 0.25f));
+    else        g.setColour (rp.secondary.withAlpha (0.25f));
     g.fillPath (fillPath);
 
     // 4) 主曲线双层描边（外粗半透明 + 内细不透明，视觉厚度）
     juce::Path curvePath;
     buildSmoothPath_ (curvePath, curvePts, /*closeToBottom*/ false, yBot, yTop);
-    g.setColour (rp.primary.withAlpha (0.35f));
+    if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 0.35f));
+    else        g.setColour (rp.primary.withAlpha (0.35f));
     g.strokePath (curvePath, juce::PathStrokeType (3.0f));
-    g.setColour (rp.primary);
+    if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 1.0f));
+    else        g.setColour (rp.primary);
     g.strokePath (curvePath, juce::PathStrokeType (rp.lineWidth));
+    g.setColour (juce::Colours::white);   // 清渐变
 
     // 5) 峰值保持虚线（同样 Catmull-Rom 平滑后 createDashedStroke）
     std::vector<juce::Point<float>> peakPts ((size_t) N);

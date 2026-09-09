@@ -96,6 +96,7 @@ private:
     void chooseAudioFile();
     void togglePlayPause();                   // v0.5.3: 播放/暂停切换（Play 按钮 + 空格共用）
     void chooseImageFile();
+    void chooseMaskImageFile();          // v0.5.4: 选频谱蒙版图片
     void addImageLayer (const juce::File& f);   // 拖入/选择图片 → 新建图片图层并选中
     void moveSelectedLayer (int delta);         // +1 = 上移一层，-1 = 下移一层（统一 z 序）
     void removeSelectedLayer();                 // 统一删除（图片或频谱）

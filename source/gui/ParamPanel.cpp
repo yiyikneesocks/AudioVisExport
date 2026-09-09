@@ -47,10 +47,10 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
 {
     // ---- Style ----
     addHeader ("Style");
-    addCombo ("Render style", { "y2k-line", "bar", "bar-line", "polyline", "crystal" }, 1,
+    addCombo ("Render style", { "y2k-line", "bar", "bar-line", "bar-mirror", "polyline", "crystal" }, 1,
               [this] (int id)
               {
-                  static const char* names[] = { "y2k-line", "bar", "bar-line", "polyline", "crystal" };
+                  static const char* names[] = { "y2k-line", "bar", "bar-line", "bar-mirror", "polyline", "crystal" };
                   params.style = names[id - 1];
                   notify();
               });
@@ -273,6 +273,43 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
         notify();
     };
 
+    // ---- Spectrum Mask（频谱蒙版图片，v0.5.4）----
+    addHeader ("Spectrum Mask");
+    addRow ("", &maskOnToggle);
+    addRow ("", &maskChooseBtn);
+    addRow ("", &maskStrokeToggle);
+    addAndMakeVisible (maskOnToggle);
+    addAndMakeVisible (maskChooseBtn);
+    addAndMakeVisible (maskStrokeToggle);
+    maskOnToggle.setToggleState    (params.maskImage.enabled, juce::dontSendNotification);
+    maskStrokeToggle.setToggleState(params.maskImage.strokeEnabled, juce::dontSendNotification);
+    maskOnToggle.onClick = [this]
+    {
+        params.maskImage.enabled = maskOnToggle.getToggleState();
+        if (! params.maskImage.enabled) setMaskEditChecked (false);   // 关蒙版顺带退编辑
+        notify();
+    };
+    maskStrokeToggle.onClick = [this]
+    {
+        params.maskImage.strokeEnabled = maskStrokeToggle.getToggleState();
+        notify();
+    };
+    maskChooseBtn.onClick = [this] { if (onChooseMaskImage) onChooseMaskImage(); };
+    maskChooseBtn.setTooltip ("Pick an image that is shown only inside the spectrum silhouette "
+                              "(bars / shape act as the mask). It moves & scales with the spectrum.");
+    maskStrokeWidthSliderPtr = addSlider ("Outline width", 0.5, 12.0, 0.5, 1.0,
+               [this] { return (double) params.maskImage.strokeWidth; },
+               [this] (double v) { params.maskImage.strokeWidth = (float) v; notify(); });
+    addRow ("", &maskEditToggle);
+    addAndMakeVisible (maskEditToggle);
+    maskEditToggle.setToggleState (false, juce::dontSendNotification);
+    maskEditToggle.onClick = [this]
+    {
+        if (onToggleMaskEdit) onToggleMaskEdit (maskEditToggle.getToggleState());
+    };
+    maskEditToggle.setTooltip ("When on: drag the picture inside the outline to reposition it; "
+                               "click outside the outline to stop editing. When off: picture moves with the spectrum.");
+
     // ---- Export ----
     addHeader ("Export");
     widthEditor.setInputFilter (new IntInputFilter(), true);
@@ -425,6 +462,20 @@ void ParamPanel::openColourPicker (juce::TextButton& btn, juce::Colour current,
     };
     juce::CallOutBox::launchAsynchronously (std::move (selector),
                                             btn.getScreenBounds(), nullptr);
+}
+
+void ParamPanel::setMaskEditChecked (bool b)
+{
+    if (maskEditToggle.getToggleState() != b)
+        maskEditToggle.setToggleState (b, juce::dontSendNotification);
+}
+
+void ParamPanel::syncMaskControls()
+{
+    maskOnToggle.setToggleState    (params.maskImage.enabled, juce::dontSendNotification);
+    maskStrokeToggle.setToggleState(params.maskImage.strokeEnabled, juce::dontSendNotification);
+    if (maskStrokeWidthSliderPtr != nullptr)
+        maskStrokeWidthSliderPtr->setValue (params.maskImage.strokeWidth, juce::dontSendNotification);
 }
 
 void ParamPanel::setProgressText (const juce::String& s)

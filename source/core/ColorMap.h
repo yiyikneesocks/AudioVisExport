@@ -26,6 +26,15 @@ public:
     // 强度 [0,1] → 颜色
     juce::Colour map (float intensity) const noexcept;
 
+    // 当前 colorMap 是否等同单色（未设置 / solid）——调用方据此走旧路径避免回归
+    bool isSolid() const noexcept { return name_ != "gradient" && name_ != "rainbow"; }
+
+    // 逐带取色：gradient 按该带强度上色，rainbow 按频率位置上色，其余返回 primary。
+    juce::Colour colourForBand (int bandIdx, int bandCount, float intensity) const noexcept;
+
+    // 沿 x（频率轴）铺开的线性渐变：供折线 / 曲线类样式按频率上色（8 个采样点）
+    juce::ColourGradient horizontalGradient (float x0, float x1, float y, float alpha) const;
+
     // 峰值专用颜色
     juce::Colour peakColor() const noexcept { return peakColor_; }
 

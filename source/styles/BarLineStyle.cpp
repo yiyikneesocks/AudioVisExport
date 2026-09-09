@@ -10,6 +10,7 @@
 // 空带（n < 0.005）：柱体不画，但边缘插值仍参与邻柱计算（无悬空跳变）。
 // =============================================================================
 #include "BarLineStyle.h"
+#include "../core/ColorMap.h"
 #include <cmath>
 #include <algorithm>
 #include <vector>
@@ -51,12 +52,9 @@ void BarLineStyle::render (juce::Graphics& g,
         edge[(size_t) k] = 0.5f * (n[(size_t) k - 1] + n[(size_t) k]);
     edge[(size_t) N] = n[(size_t) N - 1];
 
-    // 渐变模板（底=primary@0.85, 顶=secondary@0.35，逐柱重设范围）
-    juce::ColourGradient grad (rp.primary.withAlpha (0.85f),
-                               0.0f, yBot,
-                               rp.secondary.withAlpha (0.35f),
-                               0.0f, 0.0f,
-                               false);
+    ColorMap cm;
+    cm.configure (rp.colorMap, rp.primary, rp.secondary, rp.peak);
+    const bool useMap = ! cm.isSolid();
 
     // 画梯形柱（贴底柱跳过；顶点 y 用 canvas 映射与旧版口径一致）
     for (int i = 0; i < N; ++i)
@@ -77,16 +75,19 @@ void BarLineStyle::render (juce::Graphics& g,
         bar.lineTo          (xL, yBot);
         bar.closeSubPath();
 
-        grad.point1 = juce::Point<float> (0.0f, yBot);
-        grad.point2 = juce::Point<float> (0.0f, yPeak);
+        const juce::Colour bottom = useMap ? cm.colourForBand (i, N, n[(size_t) i]).withAlpha (0.85f)
+                                           : rp.primary.withAlpha (0.85f);
+        const juce::Colour top    = useMap ? cm.colourForBand (i, N, n[(size_t) i]).withAlpha (0.40f)
+                                           : rp.secondary.withAlpha (0.35f);
+        juce::ColourGradient grad (bottom, 0.0f, yBot, top, 0.0f, yPeak, false);
         g.setGradientFill (grad);
         g.fillPath (bar);
 
-        // 顶边斜面描边（primary，宽度随 lineWidth）
+        // 顶边斜面描边（宽度随 lineWidth）
         juce::Path topEdge;
         topEdge.startNewSubPath (xL, yEdgeL);
         topEdge.lineTo          (xR, yEdgeR);
-        g.setColour (rp.primary);
+        g.setColour (useMap ? cm.colourForBand (i, N, n[(size_t) i]) : rp.primary);
         g.strokePath (topEdge, juce::PathStrokeType (
             juce::jmax (1.0f, rp.lineWidth),
             juce::PathStrokeType::curved,

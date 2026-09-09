@@ -84,12 +84,17 @@ set(AVX_ENGINE_SOURCES
     source/core/SpectrumCore.cpp
     source/core/SpectrumStyle.h
     source/core/SpectrumStyle.cpp
+    source/core/SpectrumMask.h
+    source/core/SpectrumMask.cpp
     source/styles/Y2KLineStyle.h
     source/styles/Y2KLineStyle.cpp
     source/styles/BarStyle.h
     source/styles/BarStyle.cpp
-    source/styles/BarLineStyle.cpp
-    source/styles/PolylineStyle.h
+     source/styles/BarLineStyle.cpp
+     source/styles/BarLineStyle.h
+     source/styles/BarMirrorStyle.h
+     source/styles/BarMirrorStyle.cpp
+     source/styles/PolylineStyle.h
     source/styles/PolylineStyle.cpp
     source/styles/CrystalStyle.h
     source/styles/CrystalStyle.cpp
