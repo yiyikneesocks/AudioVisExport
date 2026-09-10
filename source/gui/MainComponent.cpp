@@ -419,7 +419,7 @@ void MainComponent::loadFileInternal (const juce::File& f)
         juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
                                                 "Load failed",
                                                 "Could not read that audio file. "
-                                                "Supported formats: WAV / AIFF / FLAC / OGG; MP3 & WMA on Windows.");
+                                                "Supported formats: WAV / AIFF / FLAC / OGG / MP3.");
         hasAudio = false;
         canvas.hasAudio = false;
         nowPlayingLabel.setText ("No audio loaded", juce::dontSendNotification);
@@ -513,10 +513,10 @@ SpectrumStyle::RenderParams MainComponent::buildRp (const SpectrumParams& p)
     SpectrumStyle::RenderParams rp;
     rp.width          = p.width;
     rp.height         = p.height;
-    rp.paddingLeft    = 32.0f;
+    rp.paddingLeft    = 0.0f;   // v0.5.4 #2：取消左/下边距，谱贴框、柱底与基线轴重合
     rp.paddingRight   = 6.0f;
     rp.paddingTop     = 4.0f;
-    rp.paddingBottom  = 16.0f;
+    rp.paddingBottom  = 0.0f;
     rp.primary        = p.primaryColor;
     rp.secondary      = p.secondaryColor;
     rp.peak           = p.peakColor;

@@ -31,6 +31,12 @@ endif()
 # =============================================================================
 # JUCE 8.0.12
 # =============================================================================
+
+# v0.5.4 #7：开启 JUCE 软件 MP3 解码（解码代码随 juce_audio_formats 源码编译；
+#   JUCE 官方免责声明版权风险由使用者自负。需在 FetchContent_MakeAvailable 前声明，
+#   使宏传入 JUCE 子目录编译）。
+add_compile_definitions (JUCE_USE_MP3AUDIOFORMAT=1)
+
 option(AVX_USE_LOCAL_JUCE "Use local JUCE checkout at third_party/JUCE" OFF)
 
 if (AVX_USE_LOCAL_JUCE)

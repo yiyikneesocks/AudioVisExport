@@ -93,7 +93,8 @@ static int cmdProbePcm (const juce::String& path)
     PcmSource pcm;
     if (! pcm.load (path)) {
         std::cout << "[FAIL] PcmSource::load() returned false\n";
-        std::cout << "  Possible reasons: file missing, corrupt, or not wav/aiff\n";
+        std::cout << "  Supported: wav / aiff / flac / ogg / mp3\n";
+        std::cout << "  Possible reasons: file missing, corrupt, or unsupported format\n";
         return 1;
     }
 

@@ -58,20 +58,19 @@
 
 - **v0.5.3 已完整发版**（2026-09-09，tag `v0.5.3` + GitHub Release 已发）。
 - **v0.5.4 编码中（重点＝频谱样式 + 蒙版图片 + 基线轴 + 崩溃报告）**：
-  已推送到 GitHub main（`5d4b42e..14b5104`，20 commits），**尚未发版**（用户实测进行中）。
+  已推送到 GitHub main（`5d4b42e..14b5104`，20 commits；当前 HEAD=22a966f 本地 + 五连修复未提交），**尚未发版**（用户 Windows 实测进行中）。
   - ✅ 已完成：A1 ColorMap / A2 bar-mirror / A3 CrystalStyle v2 bloom / A4 频谱蒙版图片
     （BUG1 漂移修复 + BUG2 独立拉伸）/ Tabbed UI（4 tab）/ Baseline axis（baselineY）
     / Bar 布局 pitch 模型重做（#25 + #1' + #3''）/ Bar-line 峰帽 v3（连贯分段）
     / Line-only 切换 / Scale snapping / Crash reporter / mp3/flac registerBasicFormats
-    / Timestamped deploy /收件箱三文件协议 / style proposals doc / Y2Kmeter audit。
-  - 🔧 已知问题（未修）：
-    - ⚠️ **compose() 崩溃持续**：scratch buffer static thread_local + null guard 已做，
-      用户实测 09100508 build 仍崩溃（RVA 0x1B305，compose+0x8f5，e[idx] 空指针读）。
-      3 次 minidump 分析一致指向 stroke erosion 循环 buffer 指针为 NULL。根因未明。
-    - ⚠️ **mp3/flac 解码失败**：registerBasicFormats() 已调用但用户实测仍无法播放。
-      可能 JUCE_USE_FLAC/JUCE_USE_OGGVORBIS 编译标志未启用。
-    - ⏳ baseline axis 位置应 coincident with spectrum bottom line（待修正）。
-    - ⏳ #3（grey-out controls）和 #4（bar restored original cap）尚未由用户实测。
+    / Timestamped deploy /收件箱三文件协议 / style proposals doc / Y2Kmeter audit。 / INBOX 五连修复（崩溃根除+轴重合+mp3+pitch 1/90+末柱报告，23:2x）
+  - 🔧 已知问题：
+    - ✅ **compose() 平均色描边崩溃 → 已根除**（渲染不再逐帧算均色；均色只在加载图/Use average 按钮时算一次）。
+    - ✅ **mp3 解码 → 已支持**（开启 JUCE_USE_MP3AUDIOFORMAT 软件解码 + PcmSource 注册 MP3AudioFormat）。
+    - ✅ **baseline axis 与频谱底部/左缘重合** → 已取消全样式 reduced(2) 缩进 + 左/下内边距归 0。
+    - ✅ **pitch 默认 1/90**（与 bandCount=90 联动，默认 90 柱全宽）。
+    - ⏳ #3（grey-out controls）和 #4（bar restored original cap）尚未由用户 Windows 实测。
+    - ⏳ 末柱斜面决定因素报告 → 已写入 INBOX_REPLY（等用户知悉）。
   - 📋 协作机制：INBOX 三件套 + status gate + #0/#0+/#10/#11 轮次节奏协议，
     REPLY 三固定子节结构。全部写入 PLAN.md「文档更新触发点」。
 - **发版后遗留**：

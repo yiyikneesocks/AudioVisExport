@@ -40,7 +40,7 @@ void PolylineStyle::render (juce::Graphics& g,
     // 网格
     if (rp.drawGrid)
     {
-        auto inner = canvas.reduced (2);
+        auto inner = canvas;
         if (! inner.isEmpty())
         {
             for (int db = (int) rp.minDb; db <= (int) rp.maxDb; db += 20)
@@ -74,7 +74,7 @@ void PolylineStyle::render (juce::Graphics& g,
     const int N = frame.bandCount;
     if (N <= 1) return;
 
-    auto inner = canvas.reduced (2);
+    auto inner = canvas;
     if (inner.getWidth() <= 2 || inner.getHeight() <= 2) return;
 
     // 采样点 → 像素坐标（x 等距，y 由 dbToY）

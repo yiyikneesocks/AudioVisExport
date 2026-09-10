@@ -161,11 +161,18 @@
 - SpectrumCanvas：scaleSnap 拖拽角/边时正确应用 `applyScaleSnap()`。
 - makeContainTransform pos 公式修正影响所有图片图层的默认定位（含蒙版图片）。
 
-**已知问题（未修，见 `docs/inbox/INBOX_REPLY.md` 与 minidump 分析）**：
-- ⚠️ **compose() 崩溃持续**：用户勾选 Outline（平均色描边）即闪退。已做 scratch buffer static thread_local + null guard，但用户实测 09100508 build 仍崩溃（RVA 0x1B305，compose+0x8f5，e[idx] 空指针读）。3 次 minidump 分析一致指向 stroke erosion 循环的 buffer 指针为 NULL。根因未明（理论：JUCE 内部 Image 分配、Windows heap 行为、或编译器优化路径），需进一步排查。
-- ⚠️ **mp3/flac 解码失败**：`registerBasicFormats()` 已调用但用户实测仍无法播放 mp3/flac。可能 `JUCE_USE_FLAC`/`JUCE_USE_OGGVORBIS` 编译标志未在 CMake 中启用，待验证。
+**已知问题（截至 INBOX 五连修复轮，见 `docs/inbox/INBOX_REPLY.md`）**：
+- ✅ **compose() 平均色描边崩溃 → 已根除**（渲染不再逐帧算均色；均色只在加载图片/Use average 按钮时算一次写入描边色，见下方收尾补丁）。
+- ✅ **mp3 解码失败 → 已修复**（开启 `JUCE_USE_MP3AUDIOFORMAT` 软件解码 + PcmSource 注册 `MP3AudioFormat`）。
 - ⏳ **#3（grey-out controls）和 #4（bar restored original cap）尚未由用户实测**。
-- ⏳ **baseline axis 位置**：手柄应在 spectrum 底部线条处（使用 frameRectOut 而非 full canvas edge），待修正。
+- ⏳ **baseline axis 位置 → 已改为贴频谱底部/左缘**（取消缩进 + 边距归 0），等待用户目测确认。
+
+**v0.5.4 收尾补丁（INBOX #1/#2/#7/#8/#9，HEAD 22a966f 后）**：
+- **#1 平均色描边崩溃根除**：SpectrumCanvas 渲染路径删除逐帧 `maskAverageColourCached`，渲染统一读 `strokeColor`；均色只在 `applyMaskImageFile`（加载图）/ `onUseMaskAvgColour`（Use average 按钮）时算一次写入；VisPipeline 导出保留首帧缓存（CLI 参数固定，实际只算一次）。
+- **#2 基线轴与频谱底部/左缘重合**：全部 12 处样式 `canvas.reduced(2)` → `canvas`；`paddingLeft 32→0`、`paddingBottom 16→0`（SpectrumStyle.h 默认值 + MainComponent 固定值同步）；柱底/左缘贴画框 = baselineY=0 轴线。
+- **#7 mp3 全平台支持**：CMake 全局 `JUCE_USE_MP3AUDIOFORMAT=1`（FetchContent 前声明传入 JUCE 子目录）；PcmSource 注册 `MP3AudioFormat`；CLI/GUI 报错消息更新为 5 格式列表。Linux 实测 mp3 probe + 152 帧导出 OK。
+- **#8 pitch 默认值**：`barPitchRatio` 1.0 → `1/90`（SpectrumParams.h），与 bandCount=90 一致；probe-spectrum 回归 bandCount=90 / ok=true。
+- **#9 末柱斜面报告**：详见 `docs/inbox/INBOX_REPLY.md`（左端高 edge[N-1]=(n[N-2]+n[N-1])/2；右端高 edge[N]=max(n[N-1], n[N-2]/2)）。
 
 **验证记录**：
 - Linux + Win 交叉双构建 0 error（`ninja AudioVisGUI AudioVisExport`）。

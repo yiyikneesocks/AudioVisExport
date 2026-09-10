@@ -106,7 +106,9 @@ struct SpectrumParams
     //     · 调 width → pitch 不动，gap 联动
     //     · 调 gap   → pitch 不动，width = pitch − gap
     //     · 调 pitch → width 不动，gap 联动
-    float barPitchRatio = 1.0f;    // 间距（×slot），0.05..2.5
+    // v0.5.4 #25: 默认 pitch = 1/90 与 bandCount=90 联动（此前写死 1.0f → 每柱占整宽 →
+    //   90 柱叠在 x0 一根 → 只显示一根细柱；用户拖一下才正常 → 修复默认值）
+    float barPitchRatio = 1.0f / 90.0f;   // 间距（×slot），0.05..2.5
     float barWidthRatio = 0.72f;   // 柱宽（×slot），0.02..2.5（默认 0.72 = 旧默认外观 (1-0.28)×1.0）
     float barGapRatio   = 0.28f;   // 间隙（×slot，派生值，可为负）；默认 0.28 保持旧观感
 

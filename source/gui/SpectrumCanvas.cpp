@@ -28,16 +28,8 @@ namespace
     const juce::Colour kBorderCol        (0xe6ffffff);   // 输出画布边界线（半透白）
     constexpr float    kOutsideImageMul  = 0.35f;        // 范围外元素不透明度乘子（压在灰底上 → 变暗发灰）
 
-    // 频谱蒙版图片平均色缓存（按路径；与 VisPipeline 同逻辑，避免每帧重算）
-    juce::Colour maskAverageColourCached (const juce::Image& im, const juce::String& path)
-    {
-        static std::map<juce::String, juce::Colour> cache;
-        auto it = cache.find (path);
-        if (it != cache.end()) return it->second;
-        const juce::Colour c = SpectrumMask::averageColour (im);
-        cache[path] = c;
-        return c;
-    }
+    // v0.5.4 #1：取消逐帧平均色缓存——渲染统一读 strokeColor（平均色在加载图片/取色按钮时算一次写入）。
+    //   原每帧调用 averageColour 计算矢量 adj 图均色（含透明度通道）曾导致 Windows 越界崩溃，现整体移除。
 }
 
 SpectrumCanvas::SpectrumCanvas (SpectrumParams& paramsRef) : params (paramsRef)
@@ -116,12 +108,8 @@ void SpectrumCanvas::paint (juce::Graphics& g)
                 {
                     // v0.5.4 #4：色彩调整后的图（identity 时零开销返回原图；带缓存）
                     const juce::Image adj = SpectrumMask::adjustedImageCached (im, params.maskImage);
-                    const juce::String adjKey = juce::String::formatted (
-                        "%s|%.4f|%.4f|%.4f", params.maskImage.path.toRawUTF8(),
-                        params.maskImage.brightness, params.maskImage.contrast, params.maskImage.saturation);
-                    const juce::Colour stroke = params.maskImage.strokeAutoColor
-                                              ? maskAverageColourCached (adj, adjKey)
-                                              : params.maskImage.strokeColor;
+                    // v0.5.4 #1：渲染只读 strokeColor——不再逐帧算平均色（崩溃根因）；描边色在加载图/Use average 按钮时已算好
+                    const juce::Colour stroke = params.maskImage.strokeColor;
                     juce::Image masked = SpectrumMask::compose (base, adj, params.maskImage, stroke);
                     if (masked.isValid()) specLayer = masked;
                 }

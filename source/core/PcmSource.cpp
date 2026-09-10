@@ -29,6 +29,10 @@ juce::AudioFormatManager& sharedFormatManager()
         // v0.5.4 #8：全平台 basic formats（wav/aiff + flac/vorbis 按编译开关；
         //   Windows 额外 WindowsMediaAudioFormat → mp3/wma 可读）
         manager.registerBasicFormats();
+        #if JUCE_USE_MP3AUDIOFORMAT
+        // v0.5.4 #7：注册 JUCE 软件 MP3 解码器（registerBasicFormats 不含 mp3；宏在 CMake 开启）
+        manager.registerFormat (new juce::MP3AudioFormat(), false);
+        #endif
     });
     return manager;
 }

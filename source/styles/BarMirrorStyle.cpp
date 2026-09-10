@@ -11,7 +11,7 @@
 
 float BarMirrorStyle::normalizedToHalf_ (float n, const juce::Rectangle<int>& canvas)
 {
-    auto inner = canvas.reduced (2);
+    auto inner = canvas;
     const float t = std::clamp (n, 0.0f, 1.0f);
     return t * (float) inner.getHeight() * 0.5f;   // 半高内映射
 }
@@ -24,7 +24,7 @@ void BarMirrorStyle::render (juce::Graphics& g,
     const int N = frame.bandCount;
     if (N <= 0) return;
 
-    auto inner = canvas.reduced (2);
+    auto inner = canvas;
     if (inner.getWidth() <= 2 || inner.getHeight() <= 2) return;
 
     // v0.5.4 #25：三联动布局（与 BarStyle 同式）

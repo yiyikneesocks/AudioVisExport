@@ -8,7 +8,7 @@
 
 ## v0.5.4 — 2026-09-10（频谱样式专项 + 蒙版图片 + 基线轴 + 崩溃报告）
 
-> 状态：**已推送 GitHub main，尚未发版**（用户实测进行中）。
+> 状态：已推送 GitHub main，v0.5.4 五连修复完成，**尚未发版**（用户 Windows 实测进行中）。
 
 ### 新功能
 - **ColorMap 颜色映射（三种模式）**：
@@ -29,7 +29,7 @@
 - **Scale snapping**：角/边拖拽时自动对齐画布/元素边缘（复用移动吸附同一套候选）。
 - **Windows 崩溃报告**：崩溃时自动写 MiniDump + 文本报告到 `exe/crash/` 目录，
   GUI 与 CLI 均已接入。
-- **mp3/flac 格式注册**：`registerBasicFormats()` 已调用（含 FLAC/OGG），但解码仍失败待修。
+- **mp3 全平台解码（v0.5.4 补丁）**：开启 JUCE 软件 MP3 解码宏 `JUCE_USE_MP3AUDIOFORMAT` + PcmSource 显式注册 `MP3AudioFormat`；wav/aiff/flac/ogg/mp3 五种格式均可加载导出。
 
 ### 修复
 - `makeContainTransform` pos 公式：`out/2−s·c` → `out/2−c`（修复所有图片图层 s≠1 时的定位偏差）。
@@ -37,12 +37,15 @@
 - Bar 布局 slotW 公式：`innerWidth/N` → `pitchRatio × innerWidth`（修复 bar/bar-line/bar-mirror 的柱宽计算）。
 - Tab 文字重叠：hidden-row labels 重新隐藏。
 - Scale snap 拖拽：角/边拖拽时正确应用 `applyScaleSnap()`。
+- **基线轴与频谱底部/左缘重合（INBOX #2）**：取消全部样式 `reduced(2)` 缩进 + 左(32)/下(16) 内边距归 0——柱底/左缘贴画框，与 baselineY=0 轴重合。
+- **平均色描边崩溃根除（INBOX #1）**：渲染不再逐帧算平均色（删除逐帧缓存），均色只在加载图片/Use average 按钮时算一次写入描边色。
+- **pitch 默认值 1/90（INBOX #8）**：`barPitchRatio` 默认从 1.0 改为 1/90，与 bandCount=90 联动，默认 90 柱全宽。
 
 ### 升级注意事项
 - JSON 新增 `visual.baselineY`（float 0..1，默认 0=底部）、`visual.lineOnly`（bool，默认 false）、
   `visual.barPitchRatio`（float，默认 1/90）；旧预设完全兼容。
 - CLI 新增 `--set visual.baselineY=0.5`、`--set visual.lineOnly=on`、`--set visual.barPitchRatio=0.012`。
-- **已知问题**：compose() 描边闪退（scratch buffer 修复未解决，待进一步排查）；mp3/flac 解码失败（编译标志待验证）。
+- **已知问题**：v0.5.4 已修复 compose 描边闪退（渲染不再逐帧算均色）与 mp3 解码（已启用软件解码）；剩余问题见 docs/inbox/INBOX_REPLY.md。
 
 ---
 

@@ -83,7 +83,7 @@ std::vector<juce::Point<float>> CrystalStyle::buildMirrorPoints_ (
         const juce::Rectangle<int>& canvas, const RenderParams& rp)
 {
     // 下臂点 = baselineBottom(nv)：由上臂点 y 反推 nv（同一像素映射），再映射下臂
-    auto inner = canvas.reduced (2);
+    auto inner = canvas;
     const float bottom = (float) inner.getBottom();
     const float H = (float) canvas.getHeight();
     const float span = juce::jmax (1.0f, rp.maxDb - rp.minDb);
@@ -103,7 +103,7 @@ void CrystalStyle::buildCurvePoints_ (std::vector<juce::Point<float>>& pts,
 {
     const int N = frame.bandCount;
     pts.resize ((size_t) N);
-    auto inner = canvas.reduced (2);
+    auto inner = canvas;
     const float x0   = (float) inner.getX();
     const float xLen = (float) inner.getWidth();
     const float invN = 1.0f / (float) juce::jmax (1, N - 1);
@@ -145,7 +145,7 @@ void CrystalStyle::renderPass (juce::Graphics& g, int pass,
     const int N = frame.bandCount;
     if (N <= 1) return;
 
-    auto inner = canvas.reduced (2);
+    auto inner = canvas;
     if (inner.getWidth() <= 2 || inner.getHeight() <= 2) return;
 
     std::vector<juce::Point<float>> pts;

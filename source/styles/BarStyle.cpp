@@ -34,7 +34,7 @@ void BarStyle::render (juce::Graphics& g,
     // 网格
     if (rp.drawGrid)
     {
-        auto inner = canvas.reduced (2);
+        auto inner = canvas;
         if (! inner.isEmpty())
         {
             for (int db = (int) rp.minDb; db <= (int) rp.maxDb; db += 20)
@@ -70,7 +70,8 @@ void BarStyle::render (juce::Graphics& g,
     const int N = frame.bandCount;
     if (N <= 0) return;
 
-    auto inner = canvas.reduced (2);
+    // v0.5.4 #2：取消 reduced(2) 缩进——谱底/左缘直接贴画框，与基线轴 y=(1-baselineY)*H 同基准重合
+    auto inner = canvas;
     if (inner.getWidth() <= 2 || inner.getHeight() <= 2) return;
 
     // 柱体布局：等距分布。每带占一个 slot，slot 内柱居中：

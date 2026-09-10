@@ -118,7 +118,7 @@ void Y2KLineStyle::drawGrid_ (juce::Graphics& g, const juce::Rectangle<int>& can
                                const RenderParams& rp) const
 {
     if (! rp.drawGrid) return;
-    auto inner = canvas.reduced (2);
+    auto inner = canvas;
     if (inner.isEmpty()) return;
 
     // 横线（每 20dB；0dB 强调）
@@ -206,7 +206,7 @@ void Y2KLineStyle::render (juce::Graphics& g,
     const int N = frame.bandCount;
     if (N <= 1) return;
 
-    auto inner = canvas.reduced (2);
+    auto inner = canvas;
     if (inner.getWidth() <= 2 || inner.getHeight() <= 2) return;
 
     // 2) 采样点 → 像素坐标（x 走 inner 等距；y 走 canvas 的 dbToY，与 Y2K 一致）

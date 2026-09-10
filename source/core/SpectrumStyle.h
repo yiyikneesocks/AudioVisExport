@@ -33,8 +33,9 @@ public:
         juce::Colour bg        { 0x00000000 };
 
         // 几何（边距，单位 px）
-        float paddingLeft = 32.0f, paddingRight = 6.0f;
-        float paddingTop  = 4.0f,  paddingBottom = 16.0f;
+        // v0.5.4 #2：左/下 0 边距 → 频谱紧贴画框，柱底与基线轴 y=(1-baselineY)*H 完全重合
+        float paddingLeft = 0.0f, paddingRight = 6.0f;
+        float paddingTop  = 4.0f,  paddingBottom = 0.0f;
 
         // 描线
         float lineWidth = 1.4f;
