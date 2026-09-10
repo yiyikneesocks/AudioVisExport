@@ -272,6 +272,10 @@ void Y2KLineStyle::render (juce::Graphics& g,
             for (int i = 1; i < N; ++i) fillDn.lineTo (dn[(size_t) i]);
             fillDn.lineTo (dn[(size_t) N - 1].getX(), yBot);
             fillDn.closeSubPath();
+            // v0.5.4 #10：下臂填充须重置为与上臂填充同色——此前继承了上臂描边的 1.0f 渐变/颜色，
+            //   导致下臂比上臂实得多（拖动基线轴时"基轴两侧颜色不一致"）
+            if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 0.25f));
+            else        g.setColour (rp.secondary.withAlpha (0.25f));
             g.fillPath (fillDn);
         }
         juce::Path curveDn;
