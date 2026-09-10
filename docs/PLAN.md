@@ -46,39 +46,29 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-09）
+## 当前状态（最后更新：2026-09-10）
 
-- **v0.5.2 已完整发版**（commit `0a92842`、tag `v0.5.2`、GitHub Release 已发）
-- **v0.5.3 已完整发版**（2026-09-09，tag `v0.5.3` + GitHub Release 已发）：
-  B1–B5 + F1 + 真·B3 + B6（旋转后拉伸平行四边形，S·R→R·S）+ Above spectrum UI 移除
-  + N1 频谱自吸附修复 + N2 CAD 吸附辅助线（9 特征点↔9 特征点，边-边/角-角全对齐）
-  + N3 空格播放/暂停（含键盘焦点修复）+ N4 范围内外视觉区分（超范围内容变暗发灰）。
-  执行详情见 `docs/HISTORY.md`「v0.5.3」条目与 `docs/RELEASE_NOTES.md` v0.5.3 节。
-- **发版后遗留（回归/可选）**：
-  - ⏳ 导出侧范围内裁剪回归待用户复测（本轮仅改 GUI `SpectrumCanvas`，`VisPipeline` 未动，理论上输出不变）。
-  - P-verify 缩放 / 旋转时的吸附辅助线（v0.5.3 仅做移动吸附辅助线，缩放辅助线列为可选）。
-- **v0.5.4 编码中（重点＝频谱样式 + 频谱蒙版图片）**：已动代码，**双端构建 0 error、已交叉编译部署到 Windows**，
-  **尚未 commit / 未推 GitHub / 未改版本号**，等用户预览效果满意后一起提交。已完成：
-  - ✅ **A1 ColorMap 接入**：`gradient`（按 `normalized` 强度上色）/ `rainbow`（按频带相位铺彩虹）/ `solid`，
-    已接进 bar / bar-line（逐柱）、polyline / y2k-line / crystal（沿频率横向渐变）。`--set visual.colorMap=…`。
-  - ✅ **A2 镜像柱 `bar-mirror`**：新样式，柱绕水平中线上下镜像 + 峰帽；工厂 / CMake / GUI 下拉 / CLI help 全接。
-  - ✅ **A3 CrystalStyle v2 真 bloom**：pass0 的 4 层假描边 → JUCE 真高斯 `applyGaussianBlurEffect`（透明背景上验证 alpha 不糊脏）。
-  - ✅ **A4 频谱蒙版图片**（用户临时追加需求）：图片只在"频谱轮廓"内可见（频谱=窗口/蒙版）；
-    bar 逐柱（gap 处不铺图）、line 整块（下边界到基线）；描边沿轮廓内侧勾边，默认色=**图片平均色**（可关/可手动覆盖）；
-    图片与频谱**绑定整体拖动**，「编辑图片位置」按钮开启后可在轮廓内单独平移图片、点轮廓外自动退出编辑。
-    实现＝读 `base`（频谱 ARGB 层的 alpha）做 style-agnostic 像素蒙版（预乘安全），`VisPipeline` 与 `SpectrumCanvas` 共用 `SpectrumMask::compose`（预览即所得）。
-  - 验证：18 组合（6 样式×3 colormap）出帧 + 蒙版逐柱/整块像素断言（gap 透明、填充被图片替换、auto 平均色、空路径零回归）+ `vis_anchor_test` 28/28。
-  - ⏳ **待用户预览**后一起 commit（含本 v0.5.4 全部改动）。
-  - 🔧 **蒙版 Bug 修复轮**（见 `docs/inbox/INBOX_WORKLOG.md`「✅」）：BUG1 图片随电平漂移 → 几何改独立 `VisTransform`（与电平无关，实测 0 漂移）；
-    BUG2 图片不可独立拉伸 → 「Edit image position」给独立手柄（角缩放/边拉伸/平移/旋转）+ 吸附频谱画框边/中线。已双端构建 0 error + 部署。
-  - 🔧 **#11 崩溃修复**：勾选平均色描边闪退 = `averageColour()` 按 ARGB 步进读 RGB 格式（JPEG）越界 → 像素访问前归一 ARGB（commit `7f15c3b`）。
-  - 🔧 **#3 蒙版默认行为**（用户修正需求）：`set=false` 从"拉伸铺满频谱画框"改为**与其他图片图层一致（等比 contain 居中输出画布）**；
-    过程中揪出 `makeContainTransform` 潜在 bug（旧 pos 公式 `out/2−s·c` 在 s≠1 时不居中，正确为 `out/2−c`）→ 所有图片图层默认定位一并修正。
-    新增常驻回归 `scripts/vis_mask_test.cpp`（ninja vis_mask_test：contain 居中 / 不漂移 / 手柄=渲染 三断言），与 `vis_anchor_test` 同步更新断言。
-  - 🆕 **协作机制 v2**：`docs/inbox/` 三件套 + 状态开关（INBOX 首行 `状态 0/1`：1=用户编辑中 AI 只读；0=空闲 AI 可精确删已完成且已备份的编号行）；
-    **每完成一条立刻重读 INBOX**；测试反馈写 INBOX；协议全文见上方「文档更新触发点」。`docs/inbox/` 已 gitignore（本地专用）。
-  - ⏳ **待拍板（REPLY 三份计划）**：#6 选项卡 UI（A，工作量最大）/ #8 通用基线轴（B，取代 bar-mirror）/ #9 峰帽连贯曲线（C，照搬 Y2K 峰线思路）。
-    拍板顺序建议：C（小）→ B（中）→ A（大）。#100（Y2KMeter 借鉴审计）收尾后做。
+- **v0.5.3 已完整发版**（2026-09-09，tag `v0.5.3` + GitHub Release 已发）。
+- **v0.5.4 编码中（重点＝频谱样式 + 蒙版图片 + 基线轴 + 崩溃报告）**：
+  已推送到 GitHub main（`5d4b42e..14b5104`，20 commits），**尚未发版**（用户实测进行中）。
+  - ✅ 已完成：A1 ColorMap / A2 bar-mirror / A3 CrystalStyle v2 bloom / A4 频谱蒙版图片
+    （BUG1 漂移修复 + BUG2 独立拉伸）/ Tabbed UI（4 tab）/ Baseline axis（baselineY）
+    / Bar 布局 pitch 模型重做（#25 + #1' + #3''）/ Bar-line 峰帽 v3（连贯分段）
+    / Line-only 切换 / Scale snapping / Crash reporter / mp3/flac registerBasicFormats
+    / Timestamped deploy /收件箱三文件协议 / style proposals doc / Y2Kmeter audit。
+  - 🔧 已知问题（未修）：
+    - ⚠️ **compose() 崩溃持续**：scratch buffer static thread_local + null guard 已做，
+      用户实测 09100508 build 仍崩溃（RVA 0x1B305，compose+0x8f5，e[idx] 空指针读）。
+      3 次 minidump 分析一致指向 stroke erosion 循环 buffer 指针为 NULL。根因未明。
+    - ⚠️ **mp3/flac 解码失败**：registerBasicFormats() 已调用但用户实测仍无法播放。
+      可能 JUCE_USE_FLAC/JUCE_USE_OGGVORBIS 编译标志未启用。
+    - ⏳ baseline axis 位置应 coincident with spectrum bottom line（待修正）。
+    - ⏳ #3（grey-out controls）和 #4（bar restored original cap）尚未由用户实测。
+  - 📋 协作机制：INBOX 三件套 + status gate + #0/#0+/#10/#11 轮次节奏协议，
+    REPLY 三固定子节结构。全部写入 PLAN.md「文档更新触发点」。
+- **发版后遗留**：
+  - ⏳ 导出侧范围内裁剪回归待用户复测（v0.5.3 遗留）。
+  - P-verify 缩放/旋转时的吸附辅助线（v0.5.3 可选项）。
 
 ## 候选下一版（v0.5.4 → 重点：频谱样式，草案待用户拍板）
 

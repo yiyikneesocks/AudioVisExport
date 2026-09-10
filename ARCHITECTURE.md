@@ -8,6 +8,7 @@
 >
 > | 文档 / 项目版本 | 日期 | tag（可）| 里程碑 |
 > |---|---|---|---|
+> | v0.5.4 | 2026-09-10 | （未发版，代码已推 main）| **ColorMap**（gradient/rainbow/solid 全管线）+ **bar-mirror 镜像柱** + **CrystalStyle v2 真 bloom**（Gaussian blur）+ **频谱蒙版图片**（独立 VisTransform + 平均色描边 + 编辑模式 + vis_mask_test）+ **Tabbed UI**（4 tab）+ **Baseline axis**（baselineY 可拖动+snap）+ **Bar 布局 pitch 模型**（gap=pitch−width + bandCount 联动）+ **Bar-line 峰帽 v3**（连贯分段+capPull+双面 cap）+ **Line-only 切换** + **Scale snapping** + **Crash reporter**（MiniDump+txt，Windows）+ **mp3/flac registerBasicFormats**（解码仍失败待修）+ **makeContainTransform pos 修正** + **收件箱三文件协议** + **style proposals + Y2Kmeter audit docs** |
 > | v0.5.3 | 2026-09-09 | `v0.5.3`（已 push + Release）| **锚定缩放修正**（旋转后非等比拉伸不再斜切成平行四边形：合成序 S·R→R·S；对角漂移修复）+ **CAD 吸附辅助线 + 9 特征点对齐**（边对边/角对角）+ **范围内外视觉区分**（超范围内容变暗发灰）+ **空格播放/暂停** + 峰值帽二阶下落 `peakDecayAccelDbPerSec2` + 键盘删除兜底/面板实时刷新 + 移除 Above spectrum 按钮 + 频谱自吸附修复 |
 > | v0.5.2 | 2026-09-07 | `v0.5.2`（已 push + Release）| **统一图层模型**（频谱=真图层：可删除/一键恢复/参与 z 序，严格命中序修复"加图后频谱无法拖放"）+ 对边锚定缩放（拖角对角钉死/拖边对边钉死）+ 吸附系统（旋转 90°×n / 移动边缘对齐，可开关）+ Delete/Backspace 删除图层 |
 > | v0.5.1 | 2026-09-07 | `v0.5.1`（已 push + Release）| **图片图层系统重构**：图片按自身宽高比等比显示（contain 居中不变形），手柄框贴图片实际边缘，GUI 分组渲染与导出同源（修"图片永远盖住频谱"），Above spec 开关，默认频谱下方 |
@@ -77,7 +78,7 @@ AudioVisExport 是一个**音频可视化视频生成器**：导入音频文件�
 
 | 类别 | 支持格式 | 说明 |
 |---|---|---|
-| **音频输入**（`PcmSource`）| WAV (PCM), AIFF | JUCE `AudioFormatManager::registerBasicFormats()`, 单/多声道（多声道自动转立体声）。FLAC/MP3/OGG 未启用，因为 JUCE 核心未含第三方解码库。**如需支持需自行加 mp3/ogg/flac 插件**（`AudioFormatManager::registerFormat`）|
+| **音频输入**（`PcmSource`）| WAV (PCM), AIFF, FLAC, OGG, MP3, WMA | JUCE `AudioFormatManager::registerBasicFormats()`，单/多声道（多声道自动转立体声）。**注意**：v0.5.4 已调用 `registerBasicFormats()` 注册 FLAC/OGG/MP3/WMA，但用户实测 mp3/flac 仍无法解码——可能 `JUCE_USE_FLAC`/`JUCE_USE_OGGVORBIS` 编译标志未在 CMake 中启用，待排查。|
 | **图片输出** | PNG (ARGB) | JUCE `PNGImageFormat`，默认 0x00000000 全透明背景 |
 | **视频输出** (ffmpeg) | MP4 (h264 yuv420p — 预览无 alpha) / **WebM (VP9 yuva420p — alpha)** / **MOV (QTRLE — alpha)** | 透明通道视频必须用 WebM/MOV，不能用 MP4/h264 |
 
@@ -470,16 +471,17 @@ if (!hasAudio) 画中文案 "Drag & drop a WAV or AIFF file to begin\n(or click 
 
 | # | 限制 | 影响 | 建议扩展点 |
 |---|---|---|---|
-| L1 | **音频输入格式仅 WAV/AIFF**（MP3/FLAC/OGG/M4A 未启用）| 无法拖入 FLAC 等 | `PcmSource::load` 扩展：在 `formatManager.registerBasicFormats()` 之后注册 `OggVorbisAudioFormat / FlacAudioFormat / MP3AudioFormat`（JUCE 需要 `juce::ogg_vorbis` / `juce::flac` 模块；MP3 需 `dr_mp3` 格式）|
+| L1 | **音频输入格式 MP3/FLAC/OGG 解码失败**（v0.5.4 已调用 `registerBasicFormats()` 但用户实测仍无法播放）| 无法拖入 MP3/FLAC 等格式 | 排查 `JUCE_USE_FLAC`/`JUCE_USE_OGGVORBIS` 编译标志是否在 CMake 中启用（可能需要 `-DJUCE_USE_FLAC=1` 等）；`PcmSource::load` 已使用 `registerBasicFormats()` |
 | L2 | **GUI 仅单音频替换，不支持 playlist 或 multi-clip timeline** | 每次 loadFile 会释放旧 readerSource + transport.setSource(nullptr) | 未来 timeline editing（docs/ROADMAP.md「中期」）|
 | L3 | **参数改动不回放历史 PCM** → 改参后，曲线需要 `attackMs+releaseMs` 秒才能稳定 | N/A（设计决策：避免重新解码全音频）| 若用户要"立即到达对应视觉稳态"，可在 advanceCoreTo 内部跳过前 N 帧不渲染 |
-| L4 | **多 pass 合成目前在单 Graphics 上叠加**，CrystalStyle::renderPass 的 glow 层没有真 blur | 水晶效果 bloom 是多层粗描边近似而非 GaussianBlur | docs/ROADMAP.md「多 pass 架构扩展路」：每 pass 到独立 Image + juce::ImageEffectFilter GaussianBlur |
+| L4 | **多 pass 合成目前在单 Graphics 上叠加**，CrystalStyle::renderPass 的 glow 层没有真 blur | v0.5.4 已改用 JUCE `applyGaussianBlurEffect`（真 bloom），此项已修复 |
 | L5 | **导出时 GUI 播放引擎不暂停**：后台线程开独立的 `VisPipeline::run` 再次解码同一个音频文件（当前是 OK 的，因为音频只读）| CPU 峰值略高 | 可加 if (exporting) transport.stop(); exportDone exchange 后可选恢复 |
 | L6 | **面板 paramsDirty 粒度是"任意字段修改即重建 core/style 全量"**：改颜色/画网格不需要重建 core，只用重绘 | 轻微性能浪费（30fps 下无感，但 60fps + 512 band 时会有影响）| 加细分 dirty flag：`dirtyEngine / dirtyStyle / dirtyRepaintOnly` |
 | L7 | **GUI 导出目录不落盘（仅本次会话有效）**：下次启动需重新选 | N/A | 加 `juce::ApplicationProperties` + OptionsPage 记忆最后导出目录 |
 | L8 | **颜色选择弹层的 OK/Cancel 不是显式按钮**：JUCE ColourSelector 是实时 change broadcaster，点外部关闭后最后一次选择的颜色立即生效（但如果用户"后悔"，没有 undo）| UX | 加 "Preset colours" combos 与 "Reset to default" 按钮 |
 | L9 | **minDb/maxDb/bgColor 没有 GUI 控件**（参见 §8 表中标注"无 GUI，预留"的 3 个字段）| 改 minDb/maxDb 必须用 CLI `--set dynamic.minDb=-96` 或 JSON | 补 2 个 Slider + 1 个 ColourPicker 到 Appearance section 末尾 |
 | L10 | **进度条 seekBar 没有播放头刻度样式**，只是标准 LinearHorizontal Slider | UX | 自定义 LookAndFeel method：drawLinearSlider 画一个带圆角的轨迹 + 拖动圆点 |
+| L11 | **compose() 描边闪退**（v0.5.4）：勾选 Outline（平均色描边）即 SEH 崩溃。已做 scratch buffer static thread_local + null guard，3 次 minidump 分析一致指向 stroke erosion 循环的 buffer 指针为 NULL。根因未明（可能与 JUCE Image 内部数据分配、Windows heap 行为、或编译器优化有关） | 勾选 Outline 即崩溃 | 需在 compose() 内加运行时日志定位具体失败行；或改用 JUCE 2D Path 重绘描边避免手动 erosion buffer |
 
 
 

@@ -55,6 +55,125 @@
 > **章节编号对照**：2026-09-08 文档四拆后 `ARCHITECTURE.md` 重编号——旧 §6→`HISTORY.md` §1、
 > 旧 §7→`docs/ROADMAP.md`、旧 §9.5→§7.5、旧 §10→§8、旧 §11→§9（§1-§5 编号不变）。
 
+### v0.5.4 — 2026-09-10（频谱样式专项 + 蒙版图片系统 + 基线轴 + 崩溃报告 + 多项UI增强）
+
+> 说明：v0.5.4 于 2026-09-09~10 开发，已推送到 GitHub main（commit `5d4b42e..14b5104`），
+> **尚未发版**（用户实测进行中，含多轮 INBOX 反馈迭代）。以下为截至 14b5104 的全部变更。
+
+**变更（频谱样式增强 + 蒙版图片 + 基线轴 + crash reporter + bar布局重做）**：
+
+- **A1 ColorMap 落地（`source/core/ColorMap.{h,cpp}` 新增）**：
+  - `gradient`：按 `normalized` 强度上色，primary→secondary→白渐变；
+  - `rainbow`：按频带相位铺彩虹色相环；
+  - `solid`：单色（原有行为，向后兼容）；
+  - 公共 helper `colourForBand()` / `horizontalGradient()` 供 bar/bar-line（逐柱）、
+    polyline/y2k-line/crystal（沿频率横向渐变）共用；
+  - `--set visual.colorMap=gradient|rainbow|solid` CLI 贯通。
+
+- **A2 镜像柱 `bar-mirror`（`source/styles/BarMirrorStyle.{h,cpp}` 新增）**：
+  - 柱绕画布水平中线上下镜像（上半柱+下半柱），峰值帽同步镜像；
+  - 工厂注册 + CMake + GUI 下拉第 6 项 + CLI help；
+  - ColorMap 逐柱上色已接入。
+
+- **A3 CrystalStyle v2 真 bloom**：
+  - pass0 的 4 层假描边 → JUCE 真高斯 `applyGaussianBlurEffect(radius)`（透明背景上验证 alpha 不糊脏）；
+  - ColorMap 横向渐变已接入。
+
+- **A4 频谱蒙版图片（`source/core/SpectrumMask.{h,cpp}` 新增）**：
+  - 图片只在"频谱轮廓"内可见（频谱=窗口/蒙版）；
+  - bar 逐柱（gap 处不铺图）、line 整块（下边界到基线）；
+  - 描边沿轮廓内侧勾边，默认色=**图片平均色**（可关/可手动覆盖）；
+  - 图片与频谱**绑定整体拖动**，「编辑图片位置」按钮开启后可在轮廓内单独平移/缩放/旋转、点轮廓外自动退出编辑；
+  - `compose()` 为 VisPipeline（导出）与 SpectrumCanvas（GUI预览）共用的合成函数；
+  - `adjustedImageCached()` 使用 bounded 8-entry map + CriticalSection double-checked lock（GUI paint线程与导出线程安全）；
+  - BUG1 修复：图片随电平漂移 → 几何改独立 `VisTransform`（与电平无关，实测 0 漂移）；
+  - BUG2 修复：图片不可独立拉伸 → 「Edit image position」给独立手柄（角缩放/边拉伸/平移/旋转）+ 吸附频谱画框边/中线；
+  - 新增常驻回归 `scripts/vis_mask_test.cpp`（contain 居中/不漂移/手柄=渲染 三断言）。
+
+- **Tabbed UI（#6，`source/gui/ParamPanel.{h,cpp}` 重做）**：
+  - 4 个选项卡：Spectrum / Image / Mask / Export；
+  - 画布选中元素自动切换到对应 tab（频谱→Spectrum / 图片→Image / 蒙版图片→Mask）；
+  - Image tab：被选图片的 Brightness/Contrast/Saturation 三滑块；
+  - Mask tab：Mask 颜色按钮（Primary/Secondary/Background）+ 两个新按钮（Use average / Use average colour）；
+  - 新增 `ParamPanel::refreshStyleDependentControls()`：CapPull / Line-only / Peak caps 开关在不适用的样式下灰掉。
+
+- **基线轴（#8，`baselineY` 参数，0=底，1=顶）**：
+  - 新参 `SpectrumParams::baselineY`（JSON `visual.baselineY`，CLI `--set visual.baselineY`）；
+  - 画布叠加层：水平虚线 + 可拖动方块手柄；双击/拖动吸附到 [0,¼,⅓,½,⅔,¾,1]，½ 时显示"mirror"提示；
+  - bar 样式（bar/bar-line/bar-mirror）：柱体对称生长——top = a+(1−a)n，bottom = a(1−n)；
+  - line 样式（y2k/polyline）：a>0 时生成双曲线（上臂=baselineTop，下臂=baselineBottom），双填充+双描边；
+  - CrystalStyle：a>0 时双曲线 + 下臂镜像填充；
+  - `VisTransform.h` 新增 `baselineTop(n,a)` / `baselineBottom(n,a)` 静态 inline helper；
+  - `makeContainTransform` pos 公式修正：旧 `out/2−s·c` → 正确 `out/2−c`（修复所有图片图层 s≠1 时的定位偏差）。
+
+- **Bar 布局 pitch 模型重做（#25 + #1' + #3''）**：
+  - 不变量：`gap = pitch − width`；`barPitchRatio` 驱动 slot 宽度；
+  - `bandCount = floor(100 / pitch%)`，与 Band count 滑块联动互锁；
+  - 所有 bar 渲染器（bar/bar-line/bar-mirror）改用 `slotW = pitchRatio × innerWidth`（而非旧 `innerWidth/N`）；
+  - 字段默认值修正：`barPitchRatio` 从 1.0 改为 1/90（修复新建时单细条 bug）。
+
+- **Bar-line 峰帽 v3（#9，连贯分段式）**：
+  - `capN_[]` 每带状态：首原则 cap ≥ bar top；fall rate 含高度因子；
+  - cap 宽度 = bar 宽度（段跨柱宽），bar 之间有间隙，邻峰拉平用 2-pass Laplacian（`capPull` 参数控制强度，0=legacy 长斜线）；
+  - baselineY > 0 时底部也生成镜像 cap；
+  - last-bar edge lift（末柱边缘不衰减）。
+
+- **Line-only 切换（#6/lineOnly）**：
+  - 新参 `SpectrumParams::lineOnly`（JSON `visual.lineOnly`，CLI `--set visual.lineOnly`）；
+  - y2k-line / polyline / crystal：lineOnly=on 时跳过填充（只画线+峰值）；
+  - bar / bar-line / bar-mirror 不受此开关影响。
+
+- **Scale snapping（#3，`applyScaleSnap()`）**：
+  - 角/边拖拽时与目标画布/元素中心/边自动对齐（复用移动吸附同一套候选集）。
+
+- **崩溃报告（#8，`source/core/CrashReporter.{h,cpp}` 新增，Windows-only）**：
+  - `SetUnhandledExceptionFilter` → MiniDump + 文本报告写入 `exe/crash/`；
+  - GUI (`Main.cpp`) 与 CLI (`CliMain.cpp`) 均已接入；
+  - `EXCEPTION_HEAP_CORRUPTION` 使用常量 `0xC0000374`（excpt.h 宏在交叉环境不可用）；
+  - `CMakeLists.txt` 两个 Windows target 链接 `dbghelp`。
+
+- **mp3/flac 支持（部分）**：
+  - `PcmSource::sharedFormatManager` 改调 `registerBasicFormats()`（WAV/AIFF/FLAC/OGG；MP3/WMA 仅 Windows 下有 WindowsMediaAudioFormat）；
+  - GUI 文件格式过滤器 + 原生拖放路由更新为 `*.wav;*.aif;*.aiff;*.mp3;*.flac;*.ogg;*.wma`；
+  - **已知问题**：用户实测 mp3/flac 仍无法解码——可能 `JUCE_USE_FLAC`/`JUCE_USE_OGGVORBIS` 编译标志未启用，待排查。
+
+- **Timestamped deploy + 自动清理**：
+  - 部署文件名改为 `AudioVisGUI_MMDDHHmm.exe`（避免版本重名覆盖）；
+  - 部署前自动删除旧版本（跳过被 Windows 锁定的文件）；
+  - `Run_AudioVisGUI.bat` 自动拉起最新时间戳版本。
+
+- **文档新增**：
+  - `docs/STYLE_PROPOSALS.md`：A 组（Y2Kmeter 参考：spectrogram/3D/scope/VU/Milkdrop）+ B 组（原创：radial/LED/waveform/particles/text/terrain），含预览链接；
+  - `docs/Y2KMETER_AUDIT.md`：7 项借鉴项 + 12 项候选评估（top 推荐：Milkdrop 层 via libprojectM 4 + WasapiLoopbackCapture）。
+
+- **收件箱三文件协作协议（本地专用，已 gitignore）**：
+  - `docs/inbox/INBOX.md`：用户输入箱，首行 `状态 0/1` 闸门（1=编辑中→AI 只读）；
+  - `docs/inbox/INBOX_WORKLOG.md`：AI 台账（备份/指纹去重/归档）；
+  - `docs/inbox/INBOX_REPLY.md`：AI 给用户的信息（三固定子节结构）；
+  - 协议规则写入 `docs/PLAN.md`（#0/#0+/#10/#11 轮次节奏、REPLY 结构等）。
+
+**修复**：
+- `VisTransform::makeContainTransform` pos 公式：`out/2−s·c` → `out/2−c`（修复 s≠1 时图片不居中）。
+- SpectrumMask averageColour：JPEG 图片为非 ARGB 格式 → 读像素前先 `convertedToFormat(ARGB)`（修复越界崩溃）。
+- compose() scratch buffer：`std::vector<int> tmp, er` 改为 `static thread_local`（per-frame 70MB 分配 → 复用），加 null guard（**但用户实测仍崩溃，见下方已知问题**）。
+- BarStyle / BarLineStyle：capPull / slotW 公式从 `innerWidth/N` 改为 `pitchRatio × innerWidth`。
+- ParamPanel：hidden-row labels 重新隐藏（防止 Tab 文字重叠）。
+- SpectrumCanvas：scaleSnap 拖拽角/边时正确应用 `applyScaleSnap()`。
+- makeContainTransform pos 公式修正影响所有图片图层的默认定位（含蒙版图片）。
+
+**已知问题（未修，见 `docs/inbox/INBOX_REPLY.md` 与 minidump 分析）**：
+- ⚠️ **compose() 崩溃持续**：用户勾选 Outline（平均色描边）即闪退。已做 scratch buffer static thread_local + null guard，但用户实测 09100508 build 仍崩溃（RVA 0x1B305，compose+0x8f5，e[idx] 空指针读）。3 次 minidump 分析一致指向 stroke erosion 循环的 buffer 指针为 NULL。根因未明（理论：JUCE 内部 Image 分配、Windows heap 行为、或编译器优化路径），需进一步排查。
+- ⚠️ **mp3/flac 解码失败**：`registerBasicFormats()` 已调用但用户实测仍无法播放 mp3/flac。可能 `JUCE_USE_FLAC`/`JUCE_USE_OGGVORBIS` 编译标志未在 CMake 中启用，待验证。
+- ⏳ **#3（grey-out controls）和 #4（bar restored original cap）尚未由用户实测**。
+- ⏳ **baseline axis 位置**：手柄应在 spectrum 底部线条处（使用 frameRectOut 而非 full canvas edge），待修正。
+
+**验证记录**：
+- Linux + Win 交叉双构建 0 error（`ninja AudioVisGUI AudioVisExport`）。
+- `vis_mask_test`：3 断言 ALL PASS（contain 居中 / 漂移=0 / 手柄=渲染）。
+- `vis_anchor_test`：28 断言 ALL PASS。
+- 18 组合（6 样式×3 colormap）出帧验证。
+- Windows 部署 20 commits 推送到 GitHub main（`5d4b42e..14b5104`），`docs/inbox/` gitignored 不在 remote。
+
 ### v0.5.0 — 2026-09-06
 **变更（Windows 原生交付 + UIPI 拖放修复 + GUI/样式增强；实施计划见 `docs/PLAN_v0.5.0.md`）**：
 

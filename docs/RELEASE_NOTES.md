@@ -6,6 +6,46 @@
 
 ---
 
+## v0.5.4 — 2026-09-10（频谱样式专项 + 蒙版图片 + 基线轴 + 崩溃报告）
+
+> 状态：**已推送 GitHub main，尚未发版**（用户实测进行中）。
+
+### 新功能
+- **ColorMap 颜色映射（三种模式）**：
+  - `gradient`：按频谱强度渐变（Primary→Secondary→白色），最常用；
+  - `rainbow`：按频带相位铺彩虹色相环，视觉冲击强；
+  - `solid`：单色（原有行为，向后兼容）。
+  - 面板 Appearance 区新增 "Color map" 下拉；CLI `--set visual.colorMap=gradient|rainbow|solid`。
+- **bar-mirror 镜像柱样式**：柱体绕水平中线上下对称镜像 + 峰值帽，适合对称感强的视觉。
+- **CrystalStyle v2 真高斯辉光**：替换旧 4 层假描边，效果更自然（透明背景 alpha 处理安全）。
+- **频谱蒙版图片**：图片只在"频谱轮廓"内可见（bar 逐柱 gap 处不铺图、line 整块）；
+  描边沿轮廓内侧勾边，默认色=图片平均色（可关/可手动覆盖）；
+  图片绑定频谱整体拖动，「编辑图片位置」模式内可独立平移/缩放/旋转。
+- **4 选项卡参数面板**：Spectrum / Image / Mask / Export 分 tab，画布选中元素自动切换；
+  Mask tab 有独立颜色按钮 + 平均色按钮。
+- **基线轴（baselineY）**：拖动水平轴线控制频谱对称生长中心（0=底部，1=顶部）；
+  bar 样式对称生长，line 样式 a>0 时生成双曲线+双填充；双击/拖动吸附到 0,¼,⅓,½,⅔,¾,1。
+- **Line-only 切换**：y2k-line / polyline / crystal 可只画线不填充（面板 Appearance 区）。
+- **Scale snapping**：角/边拖拽时自动对齐画布/元素边缘（复用移动吸附同一套候选）。
+- **Windows 崩溃报告**：崩溃时自动写 MiniDump + 文本报告到 `exe/crash/` 目录，
+  GUI 与 CLI 均已接入。
+- **mp3/flac 格式注册**：`registerBasicFormats()` 已调用（含 FLAC/OGG），但解码仍失败待修。
+
+### 修复
+- `makeContainTransform` pos 公式：`out/2−s·c` → `out/2−c`（修复所有图片图层 s≠1 时的定位偏差）。
+- `averageColour` JPEG 越界：像素访问前先归一化为 ARGB 格式（修复 JPEG 图片平均色崩溃）。
+- Bar 布局 slotW 公式：`innerWidth/N` → `pitchRatio × innerWidth`（修复 bar/bar-line/bar-mirror 的柱宽计算）。
+- Tab 文字重叠：hidden-row labels 重新隐藏。
+- Scale snap 拖拽：角/边拖拽时正确应用 `applyScaleSnap()`。
+
+### 升级注意事项
+- JSON 新增 `visual.baselineY`（float 0..1，默认 0=底部）、`visual.lineOnly`（bool，默认 false）、
+  `visual.barPitchRatio`（float，默认 1/90）；旧预设完全兼容。
+- CLI 新增 `--set visual.baselineY=0.5`、`--set visual.lineOnly=on`、`--set visual.barPitchRatio=0.012`。
+- **已知问题**：compose() 描边闪退（scratch buffer 修复未解决，待进一步排查）；mp3/flac 解码失败（编译标志待验证）。
+
+---
+
 ## v0.5.3 — 2026-09-09（锚定缩放修复 + CAD 吸附辅助线 + 范围内外视觉 + 空格播放）
 
 ### 新功能
