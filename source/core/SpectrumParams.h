@@ -136,7 +136,7 @@ struct SpectrumParams
         bandCount = juce::jlimit (2, 512, n);
         barPitchRatio = 1.0f / (float) bandCount;   // 从带数侧进入 = 恰好铺满
     }
-    bool  barParticles  = true;    // bar / bar-line 样式：峰值帽（下落小横线）开关，false = 只留柱体
+    bool  barParticles  = true;    // 峰值标记开关：bar/bar-line = 峰帽横线；y2k/polyline/crystal = 峰值虚线
     float baselineY     = 0.0f;    // v0.5.4 #4 基线轴：0=底部，0.5=镜像，1=顶部；柱以轴为零点上下按比例生长
     float capPull       = 0.35f;   // v0.5.4 #2峰帽：帽顶点邻域拉扯强度 0..1；0=关闭拉扯（斜面可拉得很长）
     bool  lineOnly      = false;   // v0.5.4 #6：line 系只画线条，不画内部填充（tint/玻璃体）

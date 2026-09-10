@@ -58,14 +58,16 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-11 01:1x）
+## 当前状态（最后更新：2026-09-11 02:2x）
 
 - **v0.5.3 已完整发版**（2026-09-09，tag `v0.5.3` + GitHub Release 已发）。
 - **v0.5.4 编码中（重点＝频谱样式 + 蒙版图片 + 基线轴 + 崩溃报告）**：
   已推送到 GitHub main（`5d4b42e..14b5104` 20 commits 为 v0.5.4 主体；其后 INBOX 反馈迭代
-  `f45eaa5`（五连 #1/#2/#7/#8/#9）→ `c755f73`（#10 y2k 两臂颜色）→ `5877024`（#1b outline 崩溃真根因），
-  当前 HEAD=`5877024` 已推送 origin/main、工作树干净），**尚未发版**（用户 Windows 实测进行中，最新部署 `AudioVisGUI_09110110.exe`）。
-  - ✅ 已完成：A1 ColorMap / A2 bar-mirror / A3 CrystalStyle v2 bloom / A4 频谱蒙版图片
+  `f45eaa5`（五连 #1/#2/#7/#8/#9）→ `c755f73`（#10 y2k 两臂颜色）→ `5877024`（#1b outline 崩溃真根因）
+  → `a7ac78b`/`22a966f`（文档同步 + 纪律强化）→ `856f228`（文档补齐 + 写入安全规则）
+  → **本轮 02:2x：#3 peak-caps 四件套（见下方 ✅）**），**尚未发版**
+  （用户 Windows 实测进行中，最新部署 `AudioVisGUI_09110217.exe`）。
+  - ✅ 已完成：A1 ColorMap / A2 bar-mirror（**后于 #3.1 删除**，改为 bar + 基线轴 50%）/ A3 CrystalStyle v2 bloom / A4 频谱蒙版图片
     （BUG1 漂移修复 + BUG2 独立拉伸）/ Tabbed UI（4 tab）/ Baseline axis（baselineY）
     / Bar 布局 pitch 模型重做（#25 + #1' + #3''）/ Bar-line 峰帽 v3（连贯分段）
     / Line-only 切换 / Scale snapping / Crash reporter / mp3/flac registerBasicFormats
@@ -83,6 +85,8 @@
     - ⏳ 末柱斜面决定因素报告 → 已写入 INBOX_REPLY（等用户知悉）。
   - 📋 协作机制：INBOX 三件套 + status gate + #0/#0+/#10/#11 轮次节奏协议，
     REPLY 三固定子节结构。全部写入 PLAN.md「文档更新触发点」。
+  - 🛠 **崩溃报告器已两次立功**（#1b 与本轮排查）：用户只需照常闪退，`exe/crash/*.dmp`
+    自动落盘 → 我方读 dump + `build_win/AudioVisGUI.map` 符号化即可定位到函数/指令级，无需用户手工发文件。
 - **发版后遗留**：
   - ⏳ 导出侧范围内裁剪回归待用户复测（v0.5.3 遗留）。
   - P-verify 缩放/旋转时的吸附辅助线（v0.5.3 可选项）。

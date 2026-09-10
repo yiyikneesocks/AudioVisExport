@@ -100,8 +100,6 @@ set(AVX_ENGINE_SOURCES
     source/styles/BarStyle.cpp
      source/styles/BarLineStyle.cpp
      source/styles/BarLineStyle.h
-     source/styles/BarMirrorStyle.h
-     source/styles/BarMirrorStyle.cpp
      source/styles/PolylineStyle.h
     source/styles/PolylineStyle.cpp
     source/styles/CrystalStyle.h
@@ -220,6 +218,20 @@ add_executable(vis_anchor_test EXCLUDE_FROM_ALL
     scripts/vis_anchor_test.cpp)
 target_compile_definitions(vis_anchor_test PRIVATE JUCE_USE_CURL=0)
 target_link_libraries(vis_anchor_test PRIVATE juce::juce_graphics juce::juce_events)
+
+# v0.5.4 #3：峰帽/峰线跟随基线轴 + Peak caps 全样式 + 下臂描边/填充回归
+add_executable(vis_peaks_test EXCLUDE_FROM_ALL
+    scripts/vis_peaks_test.cpp
+    source/core/SpectrumStyle.cpp
+    source/core/ColorMap.cpp
+    source/styles/BarStyle.cpp
+    source/styles/BarLineStyle.cpp
+    source/styles/Y2KLineStyle.cpp
+    source/styles/PolylineStyle.cpp
+    source/styles/CrystalStyle.cpp)
+target_compile_definitions(vis_peaks_test PRIVATE JUCE_USE_CURL=0)
+target_include_directories(vis_peaks_test PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/source)
+target_link_libraries(vis_peaks_test PRIVATE juce::juce_graphics juce::juce_events)
 
 add_executable(vis_mask_test EXCLUDE_FROM_ALL
     scripts/vis_mask_test.cpp

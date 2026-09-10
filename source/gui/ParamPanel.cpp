@@ -58,16 +58,16 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
 
     // ---- Style（Spectrum 页）----
     addHeader ("Style");
-    addCombo ("Render style", { "y2k-line", "bar", "bar-line", "bar-mirror", "polyline", "crystal" }, 1,
+    addCombo ("Render style", { "y2k-line", "bar", "bar-line", "polyline", "crystal" }, 1,
               [this] (int id)
               {
-                  static const char* names[] = { "y2k-line", "bar", "bar-line", "bar-mirror", "polyline", "crystal" };
+                  static const char* names[] = { "y2k-line", "bar", "bar-line", "polyline", "crystal" };
                   params.style = names[id - 1];
                   refreshStyleDependentControls();   // #3
                   notify();
               })
-        ->setTooltip ("bar-mirror is deprecated: use bar / bar-line with Baseline = 50%\n"
-                      "for the same mirrored look (plus full axis flexibility).");
+        ->setTooltip ("Mirrored bars: pick bar / bar-line and set Baseline = 50%\n"
+                      "(the former bar-mirror style was removed as a duplicate).");
     bandCountSliderPtr = addSlider ("Band count", 16, 512, 1, 1.0,
                [this] { return (double) params.bandCount; },
                [this] (double v) { params.setBandCount ((int) v);
@@ -95,6 +95,11 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
                                 "stay at the right edge. Moving Band count sets pitch = 100/N.");
     peakCapsTogglePtr = addToggle ("Peak caps", params.barParticles,
                [this] (bool v) { params.barParticles = v; notify(); });
+    // v0.5.4 #3.3：此开关原先只对 bar 系有效；现在全样式统一——
+    //   bar / bar-line = 峰值帽横线；y2k-line / polyline / crystal = 峰值保持虚线。
+    peakCapsTogglePtr->setTooltip ("Show peak-hold markers.\n"
+                                   "  bar / bar-line: falling peak caps (two-sided with a baseline).\n"
+                                   "  y2k-line / polyline / crystal: the dashed peak-hold line.");
     // v0.5.4 #4：基线轴（0=底部；0.5=镜像；画布内可拖 + 吸附）
     auto* capPullSlider = addSlider ("Cap pull", 0, 100, 1, 1.0,
                [this] { return (double) params.capPull * 100.0; },
@@ -787,7 +792,7 @@ void ParamPanel::resized()
 void ParamPanel::refreshStyleDependentControls()
 {
     const juce::String st = params.style;
-    const bool barFam   = (st == "bar" || st == "bar-line" || st == "bar-mirror");
+    const bool barFam   = (st == "bar" || st == "bar-line");
     const bool lineFam  = (st == "y2k-line" || st == "polyline" || st == "crystal");
     if (barWidthSliderPtr != nullptr)  { barWidthSliderPtr->setEnabled (barFam);
                                           if (auto* l = rowLabels[barWidthSliderPtr].get()) l->setEnabled (barFam); }
@@ -795,7 +800,7 @@ void ParamPanel::refreshStyleDependentControls()
                                           if (auto* l = rowLabels[barGapSliderPtr].get()) l->setEnabled (barFam); }
     if (barPitchSliderPtr != nullptr)  { barPitchSliderPtr->setEnabled (barFam);
                                           if (auto* l = rowLabels[barPitchSliderPtr].get()) l->setEnabled (barFam); }
-    if (peakCapsTogglePtr != nullptr)   peakCapsTogglePtr->setEnabled (barFam);
+    if (peakCapsTogglePtr != nullptr)   peakCapsTogglePtr->setEnabled (true);   // #3.3：全样式有效
     if (capPullSliderPtr != nullptr)   { capPullSliderPtr->setEnabled (st == "bar-line");
                                           if (auto* l = rowLabels[capPullSliderPtr].get()) l->setEnabled (st == "bar-line"); }
     if (lineOnlyTogglePtr != nullptr)   lineOnlyTogglePtr->setEnabled (lineFam);

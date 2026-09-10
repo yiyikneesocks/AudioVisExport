@@ -136,6 +136,13 @@ void BarStyle::render (juce::Graphics& g,
         float x = x0 + (float) i * slotW;
         float y = normalizedToY_ (baselineTop (n, a), canvas);
         g.drawHorizontalLine ((int) std::round (y), x, x + barW);   // #2：恢复原样（仅顶缘）
+        // v0.5.4 #3.2：轴离开底/顶后柱体是双侧生长的，下臂外缘同样需要一条缘线
+        //   （否则下半截只是糊填充，视觉上丢失原 bar-mirror 的清晰轮廓）。
+        if (a > 0.001f)
+        {
+            const float y2 = normalizedToY_ (baselineBottom (n, a), canvas);
+            g.drawHorizontalLine ((int) std::round (y2), x, x + barW);
+        }
     }
 
     // 峰值帽（可选）：peakDb → normalized 近似 → Y 位置，画 2px 水平线
@@ -149,11 +156,18 @@ void BarStyle::render (juce::Graphics& g,
             pn = std::clamp (pn, 0.0f, 1.0f);
             if (pn < 0.01f) continue;
             float x = x0 + (float) i * slotW;
-            float y = normalizedToY_ (pn, canvas);
             // 帽宽 = barW + gap*0.5 向两侧延伸
             float capX = x - gap * 0.25f;
             float capW = barW + gap * 0.5f;
+            // v0.5.4 #3.2：帽必须与柱顶同构地过基线轴映射（旧码用原始 pn → 帽根本不跟轴动）。
+            //   上臂帽 = baselineTop(pn)；轴不在端点时下臂帽 = baselineBottom(pn)（双侧帽）。
+            float y = normalizedToY_ (baselineTop (pn, a), canvas);
             g.drawHorizontalLine ((int) std::round (y), capX, capX + capW);
+            if (a > 0.001f)
+            {
+                const float y2 = normalizedToY_ (baselineBottom (pn, a), canvas);
+                g.drawHorizontalLine ((int) std::round (y2), capX, capX + capW);
+            }
         }
     }
 }

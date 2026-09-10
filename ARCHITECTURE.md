@@ -25,7 +25,7 @@
 >
 > | 文档 / 项目版本 | 日期 | tag（可）| 里程碑 |
 > |---|---|---|---|
-> | v0.5.4 | 2026-09-10 | （未发版，代码已推 main）| **ColorMap**（gradient/rainbow/solid 全管线）+ **bar-mirror 镜像柱** + **CrystalStyle v2 真 bloom**（Gaussian blur）+ **频谱蒙版图片**（独立 VisTransform + 平均色描边 + 编辑模式 + vis_mask_test）+ **Tabbed UI**（4 tab）+ **Baseline axis**（baselineY 可拖动+snap）+ **Bar 布局 pitch 模型**（gap=pitch−width + bandCount 联动）+ **Bar-line 峰帽 v3**（连贯分段+capPull+双面 cap）+ **Line-only 切换** + **Scale snapping** + **Crash reporter**（MiniDump+txt，Windows）+ **mp3/flac registerBasicFormats**（解码仍失败待修）+ **makeContainTransform pos 修正** + **收件箱三文件协议** + **style proposals + Y2Kmeter audit docs** |
+> | v0.5.4 | 2026-09-10 | （未发版，代码已推 main）| **ColorMap**（gradient/rainbow/solid 全管线）+ ~~bar-mirror 镜像柱~~（#3.1 又删除：与"bar + 基线轴 50%"重复，保留别名兼容）+ **CrystalStyle v2 真 bloom**（Gaussian blur）+ **频谱蒙版图片**（独立 VisTransform + 平均色描边 + 编辑模式 + vis_mask_test）+ **Tabbed UI**（4 tab）+ **Baseline axis**（baselineY 可拖动+snap）+ **Bar 布局 pitch 模型**（gap=pitch−width + bandCount 联动）+ **Bar-line 峰帽 v3**（连贯分段+capPull+双面 cap）+ **Line-only 切换** + **Scale snapping** + **Crash reporter**（MiniDump+txt，Windows）+ **mp3 软件解码**（`JUCE_USE_MP3AUDIOFORMAT`，5 格式实测通过）+ **peak-caps 全样式跟随基线轴**（#3，`vis_peaks_test`）+ **compose 描边越界读根除**（#1b）+ **makeContainTransform pos 修正** + **收件箱三文件协议** + **style proposals + Y2Kmeter audit docs** |
 > | v0.5.3 | 2026-09-09 | `v0.5.3`（已 push + Release）| **锚定缩放修正**（旋转后非等比拉伸不再斜切成平行四边形：合成序 S·R→R·S；对角漂移修复）+ **CAD 吸附辅助线 + 9 特征点对齐**（边对边/角对角）+ **范围内外视觉区分**（超范围内容变暗发灰）+ **空格播放/暂停** + 峰值帽二阶下落 `peakDecayAccelDbPerSec2` + 键盘删除兜底/面板实时刷新 + 移除 Above spectrum 按钮 + 频谱自吸附修复 |
 > | v0.5.2 | 2026-09-07 | `v0.5.2`（已 push + Release）| **统一图层模型**（频谱=真图层：可删除/一键恢复/参与 z 序，严格命中序修复"加图后频谱无法拖放"）+ 对边锚定缩放（拖角对角钉死/拖边对边钉死）+ 吸附系统（旋转 90°×n / 移动边缘对齐，可开关）+ Delete/Backspace 删除图层 |
 > | v0.5.1 | 2026-09-07 | `v0.5.1`（已 push + Release）| **图片图层系统重构**：图片按自身宽高比等比显示（contain 居中不变形），手柄框贴图片实际边缘，GUI 分组渲染与导出同源（修"图片永远盖住频谱"），Above spec 开关，默认频谱下方 |
@@ -497,7 +497,7 @@ if (!hasAudio) 画中文案 "Drag & drop a WAV or AIFF file to begin\n(or click 
 
 | # | 限制 | 影响 | 建议扩展点 |
 |---|---|---|---|
-| L1 | **音频输入格式 MP3/FLAC/OGG 解码失败**（v0.5.4 已调用 `registerBasicFormats()` 但用户实测仍无法播放）| 无法拖入 MP3/FLAC 等格式 | 排查 `JUCE_USE_FLAC`/`JUCE_USE_OGGVORBIS` 编译标志是否在 CMake 中启用（可能需要 `-DJUCE_USE_FLAC=1` 等）；`PcmSource::load` 已使用 `registerBasicFormats()` |
+| L1 | ~~音频输入格式 MP3/FLAC/OGG 解码失败~~ | **v0.5.4 已修复**：CMake 开 `JUCE_USE_MP3AUDIOFORMAT=1` + `PcmSource` 注册 `MP3AudioFormat`；用户实测 5 格式（wav/aiff/flac/ogg/mp3）全数通过 | — |
 | L2 | **GUI 仅单音频替换，不支持 playlist 或 multi-clip timeline** | 每次 loadFile 会释放旧 readerSource + transport.setSource(nullptr) | 未来 timeline editing（docs/ROADMAP.md「中期」）|
 | L3 | **参数改动不回放历史 PCM** → 改参后，曲线需要 `attackMs+releaseMs` 秒才能稳定 | N/A（设计决策：避免重新解码全音频）| 若用户要"立即到达对应视觉稳态"，可在 advanceCoreTo 内部跳过前 N 帧不渲染 |
 | L4 | **多 pass 合成目前在单 Graphics 上叠加**，CrystalStyle::renderPass 的 glow 层没有真 blur | v0.5.4 已改用 JUCE `applyGaussianBlurEffect`（真 bloom），此项已修复 |
@@ -507,7 +507,7 @@ if (!hasAudio) 画中文案 "Drag & drop a WAV or AIFF file to begin\n(or click 
 | L8 | **颜色选择弹层的 OK/Cancel 不是显式按钮**：JUCE ColourSelector 是实时 change broadcaster，点外部关闭后最后一次选择的颜色立即生效（但如果用户"后悔"，没有 undo）| UX | 加 "Preset colours" combos 与 "Reset to default" 按钮 |
 | L9 | **minDb/maxDb/bgColor 没有 GUI 控件**（参见 §8 表中标注"无 GUI，预留"的 3 个字段）| 改 minDb/maxDb 必须用 CLI `--set dynamic.minDb=-96` 或 JSON | 补 2 个 Slider + 1 个 ColourPicker 到 Appearance section 末尾 |
 | L10 | **进度条 seekBar 没有播放头刻度样式**，只是标准 LinearHorizontal Slider | UX | 自定义 LookAndFeel method：drawLinearSlider 画一个带圆角的轨迹 + 拖动圆点 |
-| L11 | **compose() 描边闪退**（v0.5.4）：勾选 Outline（平均色描边）即 SEH 崩溃。已做 scratch buffer static thread_local + null guard，3 次 minidump 分析一致指向 stroke erosion 循环的 buffer 指针为 NULL。根因未明（可能与 JUCE Image 内部数据分配、Windows heap 行为、或编译器优化有关） | 勾选 Outline 即崩溃 | 需在 compose() 内加运行时日志定位具体失败行；或改用 JUCE 2D Path 重绘描边避免手动 erosion buffer |
+| L11 | ~~compose() 描边闪退（勾 Outline 必崩）~~ | **v0.5.4 #1b 已根除**：真根因＝`e[idx]` 行指针二次偏移 → `tmp[2yW+x]` 越界读堆（非分配失败、与均色无关）。用户 `crash/*.dmp` 符号化直指 `compose+0x8f5`。修复＝`e[x]` + `vis_mask_test` 用例 6（含负对照） | 见 §7.8 第 7 条避坑 |
 
 
 
@@ -719,8 +719,10 @@ PATH=/home/azulores/miniconda3/envs/gitenv/bin:$PATH git -c http.version=HTTP/1.
 
 **1. 行尾混用（最坑，已两次造成整文件伪 diff）**
 - 本仓库**没有** `.gitattributes`，`core.autocrlf` 未设置 → 各文件行尾**按提交时原样混存**：
-  - CRLF：`SpectrumCanvas.cpp` / `MainComponent.cpp` / `SpectrumStyle.cpp` / `BarStyle.cpp` …
-  - LF：`Y2KLineStyle.cpp` / `CrystalStyle.cpp` / `PolylineStyle.cpp` / `BarLineStyle.cpp` / `ParamPanel.cpp` / `ColorMap.cpp` …
+  - CRLF（截至 2026-09-11 实测仅存）：`SpectrumStyle.cpp` …
+  - LF：`SpectrumCanvas.cpp` / `MainComponent.cpp` / `BarStyle.cpp` / `Y2KLineStyle.cpp` / `CrystalStyle.cpp` /
+    `PolylineStyle.cpp` / `BarLineStyle.cpp` / `ParamPanel.cpp` / `ColorMap.cpp` …
+  - **别信这张表的"曾经"**：动手前用 `python -c` 实测该文件 CRLF/LF 计数（下面脚本的 `head_style()` 即可）。
 - **严禁**对文件跑"全局统一 CRLF↔LF"脚本——会把每一行都变成改动，真实 diff 被淹没（曾见 ParamPanel 虚高到 1080 行）。
 - 正确做法：
   - 优先用 **`edit` 工具**逐处精确改（它保留该文件原有行尾）。
@@ -768,6 +770,20 @@ PATH=/home/azulores/miniconda3/envs/gitenv/bin:$PATH git -c http.version=HTTP/1.
   改动 `VisTransform.h`/`SpectrumMask.cpp` 任一侧后务必跑 `vis_anchor_test` + `vis_mask_test`。
 - 验证几何的正确姿势：**先打一个最小探针程序看映射值**，别靠脑内推 JUCE `scaled/rotated/translated`
   的"before/after"文档措辞（极易推反）。
+
+**7. 像素缓冲与"轴映射"的三类隐性错（v0.5.4 #1b / #3 连踩，务必自查）**
+- **行指针 + 绝对下标 = 二次偏移**：`const int* e = tmp.data() + y*W;` 之后必须写 `e[x]`；
+  再套 `idx = y*W + x` 写成 `e[idx]` 就变成读 `tmp[2yW+x]` → 画布下半部**越界读堆**（Windows 勾 Outline 必崩，
+  Linux/小图/上半屏看不出问题）。凡"先取行指针再进 x 循环"的代码，下标只允许列号。
+- **像素判据别用绝对阈值**：JUCE `PixelARGB` 读回的是**预乘**值，`withAlpha(0.75f)` 的纯蓝线经 AA 后
+  `getBlue()` 可能只有 115；测试里判"某色是否存在"请用**两张渲染图做像素差分**（`vis_peaks_test` 的 `diffCount`），
+  别写 `getBlue() > 120` 这种一看就过、一跑就假阴的阈值。
+- **`baselineTop`/`baselineBottom` 必须成对使用，且反函数要显式减基**：
+  `top = a + (1−a)n` 的逆是 `n = ((bottom−y)/H − a)/(1−a)` —— 漏掉 `− a` 会反推出 `n + a/(1−a)`（被抬高并 clamp 到 1）。
+  `CrystalStyle::buildMirrorPoints_` 就因此让整个下半屏被填充。
+  **能从原始 `normalized[]`/`db[]` 直接算下臂的，就不要从下标/像素反推**（y2k / polyline 用 `nv[]` 正算，天然无此坑）。
+- 另：绘制序列里 `setGradientFill/setColour` 是**有状态**的，紧接其后的 `strokePath`/`fillPath` 若忘了重设，
+  会静默沿用上一段的颜色与 alpha（y2k 下臂描边"看不见"的真实原因就是继承了 fill 的 0.25f）。
 
 ---
 
@@ -830,7 +846,7 @@ SpectrumParams.h 默认值
 
 | 字段 | 点路径 | 默认 | GUI 控件 | 说明 |
 |---|---|---|---|---|
-| style | `visual.style` | `y2k-line` | "Render style" 下拉 | `y2k-line`/`bar`/`bar-line`/`bar-mirror`/`polyline`/`crystal` |
+| style | `visual.style` | `y2k-line` | "Render style" 下拉 | `y2k-line`/`bar`/`bar-line`/`polyline`/`crystal`（`bar-mirror` 已于 v0.5.4 #3.1 删除，工厂仍接受该别名→`bar`） |
 | colorMap | `visual.colorMap` | `solid` | （CLI `--set` / GUI）| `solid`/`gradient`（按强度）/`rainbow`（按频带相位），已接 bar/line 全样式 |
 | primaryColor | `visual.primaryColor` | `#ec4899` | "Primary" 颜色按钮 | 主描边色 |
 | secondaryColor | `visual.secondaryColor` | `#f9a8d4` | "Secondary" 颜色按钮 | 填充/网格色 |

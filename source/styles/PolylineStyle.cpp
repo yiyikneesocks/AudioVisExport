@@ -175,12 +175,21 @@ void PolylineStyle::render (juce::Graphics& g,
 
     // 3) 峰值折线虚线
     // #5：基线轴模式下峰线跟随上臂映射
+    // v0.5.4 #3.3：改由 "Peak caps" 开关统一控制（此前对本样式置灰、无法关闭）
+    if (! rp.barParticles) return;
+
     auto peakY = [&] (float db) -> float
     {
         const float y0 = dbToY_ (db, canvas, rp.minDb, rp.maxDb);
         if (a <= 0.001f) return y0;
         const float pn = std::clamp ((db - rp.minDb) / (rp.maxDb - rp.minDb), 0.0f, 1.0f);
         return (float) inner.getBottom() - baselineTop (pn, a) * (float) canvas.getHeight();
+    };
+    auto peakYDn = [&] (float db) -> float
+    {
+        // v0.5.4 #3.4：下臂峰线（轴不在端点时两侧都要有）
+        const float pn = std::clamp ((db - rp.minDb) / (rp.maxDb - rp.minDb), 0.0f, 1.0f);
+        return (float) inner.getBottom() - baselineBottom (pn, a) * (float) canvas.getHeight();
     };
     juce::Path peakPath;
     peakPath.startNewSubPath (x0, peakY (frame.peakDb[0]));
@@ -194,4 +203,19 @@ void PolylineStyle::render (juce::Graphics& g,
     juce::PathStrokeType (1.2f).createDashedStroke (dashedPeak, peakPath, dashes, 2);
     g.setColour (rp.peak.withAlpha (0.75f));
     g.fillPath (dashedPeak);
+
+    if (a > 0.001f)
+    {
+        juce::Path peakDnPath;
+        peakDnPath.startNewSubPath (x0, peakYDn (frame.peakDb[0]));
+        for (int i = 1; i < N; ++i)
+        {
+            const float x = x0 + (float) i * invN * xLen;
+            peakDnPath.lineTo (x, peakYDn (frame.peakDb[i]));
+        }
+        juce::Path dashedDn;
+        juce::PathStrokeType (1.2f).createDashedStroke (dashedDn, peakDnPath, dashes, 2);
+        g.setColour (rp.peak.withAlpha (0.75f));
+        g.fillPath (dashedDn);
+    }
 }

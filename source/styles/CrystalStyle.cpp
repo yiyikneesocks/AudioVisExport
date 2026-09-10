@@ -90,7 +90,11 @@ std::vector<juce::Point<float>> CrystalStyle::buildMirrorPoints_ (
     std::vector<juce::Point<float>> dn (up.size());
     for (size_t i = 0; i < up.size(); ++i)
     {
-        const float nrm = juce::jlimit (0.0f, 1.0f, (bottom - up[i].getY()) / H / juce::jmax (0.001f, 1.0f - a));
+        // v0.5.4 #3.4 修复：baselineTop(n,a)=a+(1−a)n 的**正确逆**是
+        //   n = ((bottom−y)/H − a) / (1−a) —— 旧码漏减 a，反推出 n+a/(1−a)（被抬高），
+        //   下臂值整体上偏 → 轴拖高后下臂填充巨大且线跑出画布外（用户报"下面特别大/几乎填满"）。
+        const float nrm = juce::jlimit (0.0f, 1.0f,
+            ((bottom - up[i].getY()) / H - a) / juce::jmax (0.001f, 1.0f - a));
         dn[i] = juce::Point<float> (up[i].getX(), bottom - SpectrumStyle::baselineBottom (nrm, a) * H);
     }
     return dn;
@@ -267,24 +271,54 @@ void CrystalStyle::renderPass (juce::Graphics& g, int pass,
         g.strokePath (curvePath, juce::PathStrokeType (1.0f));
 
         // 峰值虚线（与 Y2KLineStyle 一致，保持功能对等）
-        std::vector<juce::Point<float>> peakPts ((size_t) N);
-        const float x0   = (float) inner.getX();
-        const float xLen = (float) inner.getWidth();
-        const float invN = 1.0f / (float) juce::jmax (1, N - 1);
-        for (int i = 0; i < N; ++i)
+        // v0.5.4 #3.3：由 "Peak caps" 开关统一控制；#5/#3.4：跟随基线轴映射 + 轴在中部时下臂也有一条
+        if (rp.barParticles)
         {
-            const float x = x0 + (float) i * invN * xLen;
-            const float y = dbToY_ (frame.peakDb[i], canvas, rp.minDb, rp.maxDb);
-            peakPts[(size_t) i] = { x, y };
-        }
-        juce::Path peakPath;
-        buildSmoothPath_ (peakPath, peakPts, false, yBot, yTop);
+            const float aP   = juce::jlimit (0.0f, 1.0f, rp.baselineY);
+            const float H    = (float) canvas.getHeight();
+            const float span = juce::jmax (1.0f, rp.maxDb - rp.minDb);
+            const float x0   = (float) inner.getX();
+            const float xLen = (float) inner.getWidth();
+            const float invN = 1.0f / (float) juce::jmax (1, N - 1);
+            auto peakN = [&] (int i) {
+                return juce::jlimit (0.0f, 1.0f, (frame.peakDb[i] - rp.minDb) / span);
+            };
 
-        juce::Path dashedPeak;
-        const float dashes[] = { 3.0f, 3.0f };
-        juce::PathStrokeType (1.0f).createDashedStroke (dashedPeak, peakPath, dashes, 2);
-        g.setColour (rp.peak.withAlpha (0.60f));
-        g.fillPath (dashedPeak);
+            std::vector<juce::Point<float>> peakPts ((size_t) N);
+            for (int i = 0; i < N; ++i)
+            {
+                const float x = x0 + (float) i * invN * xLen;
+                const float y = (aP > 0.001f)
+                    ? (float) inner.getBottom() - SpectrumStyle::baselineTop (peakN (i), aP) * H
+                    : dbToY_ (frame.peakDb[i], canvas, rp.minDb, rp.maxDb);
+                peakPts[(size_t) i] = { x, y };
+            }
+            juce::Path peakPath;
+            buildSmoothPath_ (peakPath, peakPts, false, yBot, yTop);
+
+            juce::Path dashedPeak;
+            const float dashes[] = { 3.0f, 3.0f };
+            juce::PathStrokeType (1.0f).createDashedStroke (dashedPeak, peakPath, dashes, 2);
+            g.setColour (rp.peak.withAlpha (0.60f));
+            g.fillPath (dashedPeak);
+
+            if (aP > 0.001f)
+            {
+                juce::Path peakDn;
+                for (int i = 0; i < N; ++i)
+                {
+                    const float x = x0 + (float) i * invN * xLen;
+                    const float y = (float) inner.getBottom()
+                                  - SpectrumStyle::baselineBottom (peakN (i), aP) * H;
+                    if (i == 0) peakDn.startNewSubPath (x, y);
+                    else        peakDn.lineTo (x, y);
+                }
+                juce::Path dashedDn;
+                juce::PathStrokeType (1.0f).createDashedStroke (dashedDn, peakDn, dashes, 2);
+                g.setColour (rp.peak.withAlpha (0.60f));
+                g.fillPath (dashedDn);
+            }
+        }
         return;
     }
 }

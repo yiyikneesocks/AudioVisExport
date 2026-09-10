@@ -281,6 +281,10 @@ void Y2KLineStyle::render (juce::Graphics& g,
         juce::Path curveDn;
         curveDn.startNewSubPath (dn[0]);
         for (int i = 1; i < N; ++i) curveDn.lineTo (dn[(size_t) i]);
+        // v0.5.4 #3.4：下臂描边必须显式设色——此前直接 strokePath，沿用上面 fill 留下的
+        //   secondary 0.25f（或 0.25 渐变），描边几乎不可见（用户报"下面那侧没有描边"）。
+        if (useMap) g.setGradientFill (cm.horizontalGradient (x0, xRight, yBot, 1.0f));
+        else        g.setColour (rp.primary);
         g.strokePath (curveDn, juce::PathStrokeType (rp.lineWidth));
         g.setColour (juce::Colours::white);
     }
@@ -309,17 +313,21 @@ void Y2KLineStyle::render (juce::Graphics& g,
     }
 
     // 5) 峰值保持虚线（同样 Catmull-Rom 平滑后 createDashedStroke）
+    //    v0.5.4 #3.3：line 系峰线改由 "Peak caps" 开关统一控制（此前该开关对本样式置灰、无法关闭）
+    if (! rp.barParticles) return;
+
+    std::vector<float> pnv ((size_t) N);
+    for (int i = 0; i < N; ++i)
+        pnv[(size_t) i] = std::clamp ((frame.peakDb[i] - rp.minDb) / (rp.maxDb - rp.minDb), 0.0f, 1.0f);
+
+    // 上臂峰线：a=0 走原始 dbToY（零回归）；a>0 与曲线同构地过 baselineTop（#5）
     std::vector<juce::Point<float>> peakPts ((size_t) N);
     for (int i = 0; i < N; ++i)
     {
         const float x = x0 + (float) i * invMax * xLen;
-        // #5：基线轴模式下峰线跟随上臂映射（与曲线同构）
-        float y = dbToY_ (frame.peakDb[i], canvas, rp.minDb, rp.maxDb);
-        if (a > 0.001f)
-        {
-            const float pn = std::clamp ((frame.peakDb[i] - rp.minDb) / (rp.maxDb - rp.minDb), 0.0f, 1.0f);
-            y = (float) inner.getBottom() - baselineTop (pn, a) * (float) canvas.getHeight();
-        }
+        const float y = (a > 0.001f)
+            ? (float) inner.getBottom() - baselineTop (pnv[(size_t) i], a) * (float) canvas.getHeight()
+            : dbToY_ (frame.peakDb[i], canvas, rp.minDb, rp.maxDb);
         peakPts[(size_t) i] = { x, y };
     }
     juce::Path peakPath;
@@ -330,4 +338,23 @@ void Y2KLineStyle::render (juce::Graphics& g,
     juce::PathStrokeType (1.2f).createDashedStroke (dashedPeakPath, peakPath, dashes, 2);
     g.setColour (rp.peak.withAlpha (0.75f));
     g.fillPath (dashedPeakPath);
+
+    // v0.5.4 #3.4：轴不在底/顶时，下臂也要有一条峰线（此前只有上侧有）。
+    //   下臂点在轴下方，buildSmoothPath_ 的贴底剪枝会砍平 → 手构折线（与下臂曲线同法）。
+    if (a > 0.001f)
+    {
+        juce::Path peakDnPath;
+        for (int i = 0; i < N; ++i)
+        {
+            const float x = x0 + (float) i * invMax * xLen;
+            const float y = (float) inner.getBottom()
+                          - baselineBottom (pnv[(size_t) i], a) * (float) canvas.getHeight();
+            if (i == 0) peakDnPath.startNewSubPath (x, y);
+            else        peakDnPath.lineTo (x, y);
+        }
+        juce::Path dashedDn;
+        juce::PathStrokeType (1.2f).createDashedStroke (dashedDn, peakDnPath, dashes, 2);
+        g.setColour (rp.peak.withAlpha (0.75f));
+        g.fillPath (dashedDn);
+    }
 }

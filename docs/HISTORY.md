@@ -164,7 +164,7 @@
 - SpectrumCanvas：scaleSnap 拖拽角/边时正确应用 `applyScaleSnap()`。
 - makeContainTransform pos 公式修正影响所有图片图层的默认定位（含蒙版图片）。
 
-**用户实测进度（滚动更新，截至 2026-09-11 01:1x，明细见 `docs/inbox/INBOX_REPLY.md`）**：
+**用户实测进度（滚动更新，截至 2026-09-11 02:2x，明细见 `docs/inbox/INBOX_REPLY.md`）**：
 - ✅ **compose() 平均色描边崩溃 → 已根除**（渲染不再逐帧算均色；均色只在加载图片/Use average 按钮时算一次写入描边色，见下方收尾补丁）。
 - ✅ **mp3 解码失败 → 已修复**（开启 `JUCE_USE_MP3AUDIOFORMAT` 软件解码 + PcmSource 注册 `MP3AudioFormat`）。
 - ✅ **#2 基线轴与频谱底部/左缘重合 → 用户确认通过**（"4.基线轴与频谱底部/左缘完全重合已通过"）。
@@ -173,9 +173,9 @@
 - ✅ **#10 line 样式拖轴两侧颜色一致 → 用户确认通过**（"10.和3中情况一样，颜色已经通过"）。
 - ✅ **拖图到 Mask 页设蒙版 + 蒙版图片几何 → 用户确认"蒙版图没问题"**。
 - ❌ **勾 Outline 必崩 → 用户重报，根因并非均色**：真根因＝compose 描边越界读（见下方 #1b 小节，已修，待用户复测）。
-- ⏳ **#5 控件按样式置灰 → 基本通过，但派生出新 #3 峰帽四件套问题**（3.1 bar-mirror 该删 / 3.2 bar 帽不随轴动 / 3.3 line 系无法勾选峰帽 / 3.4 line-y2k-crystal 拖轴后下侧异常）→ 下一轮任务。
+- ✅ **新 #3 peak-caps 四件套 + #5 派生项 → 已修**（3.1 删除 bar-mirror 样式（别名向后兼容）/ 3.2 bar 峰帽跟随基线轴且双侧 / 3.3 "Peak caps" 对 line 系取消置灰并真正门控峰线 / 3.4 y2k 下臂描边着色 + 三样式下臂峰线 + crystal 下臂填充不再溢出半屏；新增 `vis_peaks_test` 16 断言 + 负对照，见下方 #3 小节）→ 待用户复测。
+- ✅ **新 #6 蒙版图片本体 → 用户确认"没问题"，已按用户要求从 INBOX 删除**；双按钮（Border colour 手选 / Use average 一次算色）已随 #1/#1b 落地可用。
 - ⏳ **#9 峰帽 v3 + 末柱斜面**：用户反馈"我没看到关键汇报在哪" → 已在 INBOX_REPLY 待办速览点名指路，等待实测。
-- ⏳ **蒙版描边色双按钮（新 #6）**：用户要求排在 outline 修复之后，现已解锁。
 
 **v0.5.4 收尾补丁（INBOX #1/#2/#7/#8/#9，commit `f45eaa5`，HEAD `22a966f` 后）**：
 - **#1 平均色描边崩溃根除**：SpectrumCanvas 渲染路径删除逐帧 `maskAverageColourCached`，渲染统一读 `strokeColor`；均色只在 `applyMaskImageFile`（加载图）/ `onUseMaskAvgColour`（Use average 按钮）时算一次写入；VisPipeline 导出保留首帧缓存（CLI 参数固定，实际只算一次）。
@@ -204,11 +204,33 @@
   事实记录未受损（`INBOX_WORKLOG.md` 逐轮台账 + 本文件均完整），已按台账 + `git log` 核对 commit 号后重建为摘要，并在 REPLY 内如实记录该事故。
 - 由此固化规则：改三件套前先整体备份、归档尾部只准顶部插入不得重写、用户原话必须逐字备份、改后比对行数确认未缩水。
 
+**INBOX #3（2026-09-11 02:2x，commit 见下）· peak-caps 四件套（3.1~3.4）+ 派生 #5**：
+- **3.1 删除 bar-mirror 样式**：用户指出"bar 能拖轴以后和 bar-mirror 重复"→ 删 `source/styles/BarMirrorStyle.{h,cpp}` +
+  CMake + GUI 下拉 + CLI `--style` 列表；`SpectrumStyle::create` 保留 `"bar-mirror"|"barmirror"|"mirror"` → **BarStyle** 别名，
+  旧 JSON 预设不失效（实测 `--style bar-mirror` 与 `bar` 出图一致）。替代用法：bar/bar-line + Baseline=50%。
+- **3.2 bar 峰帽不随基线轴动**：根因＝`BarStyle` 帽用 `normalizedToY_(pn)` 原始值，未过 baseline 映射（bar-line 已过，故表现正常）。
+  修复＝上帽 `baselineTop(pn,a)`、`a>0` 时下帽 `baselineBottom(pn,a)`（**双侧帽**）；同时补下臂外缘 1px 缘线（顶替被删样式的清晰轮廓）。
+- **3.3 line 系无法勾选 Peak caps**：根因＝`refreshStyleDependentControls` 把开关 `setEnabled(barFam)`，line 系永远置灰。
+  修复＝开关全样式可用，并在 y2k-line / polyline / crystal 内以 `rp.barParticles` 门控峰值虚线（关＝一条不画）；
+  参数注释语义同步为"bar 系=峰帽横线 / line 系=峰值保持虚线"。
+- **3.4 line 系拖轴后下侧异常（三个独立 bug）**：
+  - **y2k-line 下臂无描边**：`curveDn` 描边前**漏 `setColour`** → 继承上方 fill 的 `secondary 0.25f`，几乎不可见。修复＝显式设 primary/1.0f 渐变（与上臂同式）。
+  - **三样式下臂无峰线**：峰线只算 `baselineTop`。修复＝`a>0.001` 时追加 `baselineBottom` 镜像峰线（y2k 手构折线绕开贴底剪枝；polyline/crystal 同法）。
+  - **crystal 下臂"特别大、几乎填满"**：`buildMirrorPoints_` 由上臂 y **反推 n 时漏减 a**（`baselineTop` 的逆应为 `((bottom−y)/H − a)/(1−a)`），
+    反推出 `n+a/(1−a)` 被抬高并 clamp 到 1 → 下臂点全部落到画布底 → 整个下半屏被填充。修复＝补 `- a`。
+    另 crystal pass2 峰线原先完全不过轴（直接 `dbToY_`），一并改为 baseline 映射 + 双侧。
+- **测试补强**：新增常驻回归 `scripts/vis_peaks_test.cpp`（CMake target `vis_peaks_test`）16 断言——
+  bar 帽 a=0 零回归 / a=0.5 上下帽精确落在 0.6·H、0.4·H 且无残留旧行；三样式 Peak caps 开关的 on/off 像素差 > 500 且轴上下各 > 100；
+  y2k 下臂 primary 描边存在且高度正确；crystal 下半屏填充不超 25% 面积。**负对照**（逐个还原 3 个 bug）→ 精准 5 条 FAIL，证明用例有效。
+- **验证**：Linux 全量 0 error；`vis_peaks_test` / `vis_mask_test` / `vis_anchor_test` 三套 ALL PASS；
+  6 样式 `--preview-frame`（baselineY=0.5）出图全 OK；Windows 交叉构建 34/34 → 部署 `AudioVisGUI_09110217.exe`。
+
 **验证记录**：
 - Linux + Win 交叉双构建 0 error（`ninja AudioVisGUI AudioVisExport`）。
 - `vis_mask_test`：3 断言 ALL PASS（contain 居中 / 漂移=0 / 手柄=渲染）。
 - `vis_anchor_test`：28 断言 ALL PASS。
-- 18 组合（6 样式×3 colormap）出帧验证。
+- `vis_peaks_test`（v0.5.4 #3 新增）：16 断言 ALL PASS + 负对照 5 FAIL 有效性验证。
+- 18 组合（6 样式×3 colormap）出帧验证；#3 后为 5 样式 + bar-mirror 别名。
 - Windows 部署 20 commits 推送到 GitHub main（`5d4b42e..14b5104`），`docs/inbox/` gitignored 不在 remote。
 
 ### v0.5.0 — 2026-09-06

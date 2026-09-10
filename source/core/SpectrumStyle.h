@@ -51,7 +51,7 @@ public:
         bool  lineOnly = false;         // #6：line 系只画线不画填充
         float peakDecayDbPerSec        = 12.0f;  // #2: 峰帽下落速度（dB/s，与 core 同源）
         float peakDecayAccelDbPerSec2  = 0.0f;   // #2: 峰帽下落加速度（dB/s²）
-        bool  barParticles  = true;   // bar / bar-line：峰值帽（缓慢下落的小横线）开关
+        bool  barParticles  = true;   // 全样式：峰值标记开关（bar 系=峰帽横线；line 系=峰值保持虚线）
 
         // 元素开关
         bool  drawGrid        = true;
