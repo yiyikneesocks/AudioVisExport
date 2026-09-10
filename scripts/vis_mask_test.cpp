@@ -150,6 +150,56 @@ int main()
                && p.getBlue() <= p.getAlpha(), "premultiplied invariants hold after adjust (no unpremult leak)");
     }
 
+    // ---- 6) #1b 描边环回归（compose stroke 路径）----
+    //   旧 bug：行指针 e 后再用绝对下标 e[idx]（idx=y*W+x）= tmp[2*y*W+x]，
+    //   y≥H/2 越界读堆（Windows 上 ACCESS_VIOLATION，dump=compose+0x8f5）。
+    //   大画布让越界量达数 MB → 任何平台都暴露；四边都必须有勾边像素。
+    {
+        constexpr int SW = 1200, SH = 800;
+        juce::Image base = makeCanvas (SW, SH, { 100, 50, SW - 200, SH - 100 });
+        juce::Image pic (juce::Image::ARGB, 64, 64, true);
+        { juce::Graphics g (pic); g.fillAll (juce::Colour::fromRGB (128, 128, 128)); }
+
+        MaskImageLayer offCfg; offCfg.enabled = true;
+        MaskImageLayer onCfg;  onCfg.enabled = true; onCfg.strokeEnabled = true; onCfg.strokeWidth = 5.0f;
+
+        juce::Image outA = SpectrumMask::compose (base, pic, offCfg, juce::Colours::white);
+        juce::Image outB = SpectrumMask::compose (base, pic, onCfg,  juce::Colours::white);
+        check (outB.isValid(), "stroke compose returns valid image (no crash / no OOB)");
+
+        int top = 0, bottom = 0, left = 0, right = 0, tot = 0;
+        bool interiorDiff = false, outsideDiff = false;
+        if (outA.isValid() && outB.isValid())
+        {
+            juce::Image::BitmapData da (outA, juce::Image::BitmapData::readOnly);
+            juce::Image::BitmapData db (outB, juce::Image::BitmapData::readOnly);
+            for (int y = 0; y < SH; ++y)
+            {
+                const auto* ra = reinterpret_cast<const juce::PixelARGB*> (da.getLinePointer (y));
+                const auto* rb = reinterpret_cast<const juce::PixelARGB*> (db.getLinePointer (y));
+                for (int x = 0; x < SW; ++x)
+                {
+                    if (ra[x].getAlpha() == rb[x].getAlpha() && ra[x].getRed() == rb[x].getRed()
+                     && ra[x].getGreen() == rb[x].getGreen() && ra[x].getBlue() == rb[x].getBlue()) continue;
+                    ++tot;
+                    if (y >= 50 && y <= 54 && x >= 300 && x <= 800)  ++top;
+                    if (y >= 745 && y <= 749 && x >= 300 && x <= 800) ++bottom;
+                    if (x >= 100 && x <= 104 && y >= 250 && y <= 550) ++left;
+                    if (x >= 1095 && x <= 1099 && y >= 250 && y <= 550) ++right;
+                    if (x == 600 && y == 400) interiorDiff = true;     // 深内部不应被描边
+                    if (x == 5   && y == 5)   outsideDiff  = true;     // 轮廓外必须保持透明
+                }
+            }
+        }
+        std::printf ("      ring diffs: top=%d bottom=%d left=%d right=%d total=%d\n",
+                     top, bottom, left, right, tot);
+        check (top > 0 && bottom > 0 && left > 0 && right > 0,
+               "inner rim present on ALL FOUR edges (old code missed bottom via wrong row)");
+        check (! interiorDiff, "rim does not touch deep interior");
+        check (! outsideDiff,  "rim does not leak outside contour");
+        check (tot < (SW + SH) * 40, "rim is a thin band, not whole-shape repaint");
+    }
+
     std::printf (failures ? "FAILURES: %d\n" : "ALL PASS\n", failures);
     return failures ? 1 : 0;
 }

@@ -174,6 +174,14 @@
 - **#8 pitch 默认值**：`barPitchRatio` 1.0 → `1/90`（SpectrumParams.h），与 bandCount=90 一致；probe-spectrum 回归 bandCount=90 / ok=true。
 - **#9 末柱斜面报告**：详见 `docs/inbox/INBOX_REPLY.md`（左端高 edge[N-1]=(n[N-2]+n[N-1])/2；右端高 edge[N]=max(n[N-1], n[N-2]/2)）。
 
+**INBOX #1b（2026-09-11 01:1x）·勾 Outline 必崩真根因 = compose 描边越界读**：
+- 取证：用户 `crash_20260911_001832/002113.dmp`（minidump 解析 ACCESS_VIOLATION@0x7ff6e51ab355，模块基址 0x7ff6e5190000
+  → RVA 0x1b355）+ sha256 对齐部署 exe + `build_win/AudioVisGUI.map` 符号化 + objdump 反汇编 `sub esi,[r13+rax]`。
+- 根因：`rim = m[x] − e[idx]`，`e` 已是行指针、`idx=y*W+x` → 实读 `tmp[2·y·W+x]`，y≥H/2 越界读堆（Windows 必崩），
+  且前半行用错位腐蚀数据（下边缘描边一直是错的）。上一轮"根除"的均色路径是**另一条**真路径，本次与均色无关。
+- 修复：`e[idx]` → `e[x]`。回归：`vis_mask_test` 用例 6（1200×800 stroke：四边环对称 top/bottom=2505、left/right=1505，
+  深内部/轮廓外零污染）；负对照还原旧码 → 3 FAIL。此前 stroke 路径零测试覆盖 = 崩溃漏网原因。
+
 **验证记录**：
 - Linux + Win 交叉双构建 0 error（`ninja AudioVisGUI AudioVisExport`）。
 - `vis_mask_test`：3 断言 ALL PASS（contain 居中 / 漂移=0 / 手柄=渲染）。

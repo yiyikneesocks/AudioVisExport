@@ -323,8 +323,11 @@ juce::Image SpectrumMask::compose (const juce::Image& base,
             const int* e = tmp.data() + (size_t) y * W;
             for (int x = 0; x < W; ++x)
             {
-                const int idx = (size_t) y * W + x;
-                int rim = (int) m[x] - e[idx];          // 内侧环强度
+                // v0.5.4 #1b 修复：e/m 已是本行行指针，旧代码 e[idx]（idx=y*W+x）=
+                //   tmp[2*y*W+x] 二次偏移 → y≥H/2 起越界读堆 → ACCESS_VIOLATION
+                //   （Windows 崩溃 dump 0911_0018/0021 实证：compose+0x8f5 "sub esi,[r13+rax]"）。
+                //   正确值 = 本行腐蚀结果 e[x]；此前描边环用错行数据，视觉也随之修正。
+                int rim = (int) m[x] - e[x];             // 内侧环强度
                 if (rim <= 0) continue;
                 if (rim > 255) rim = 255;
                 const int inv = 255 - rim;

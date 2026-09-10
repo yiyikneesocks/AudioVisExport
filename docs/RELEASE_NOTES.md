@@ -40,12 +40,14 @@
 - **基线轴与频谱底部/左缘重合（INBOX #2）**：取消全部样式 `reduced(2)` 缩进 + 左(32)/下(16) 内边距归 0——柱底/左缘贴画框，与 baselineY=0 轴重合。
 - **平均色描边崩溃根除（INBOX #1）**：渲染不再逐帧算平均色（删除逐帧缓存），均色只在加载图片/Use average 按钮时算一次写入描边色。
 - **pitch 默认值 1/90（INBOX #8）**：`barPitchRatio` 默认从 1.0 改为 1/90，与 bandCount=90 联动，默认 90 柱全宽。
+- **勾 Outline 必崩·真根因修复（INBOX #1b）**：由崩溃 dump 符号化定位——`SpectrumMask::compose` 描边环行指针二次偏移
+  （`tmp[2·y·W+x]` 越界读堆）。修复后描边环四边正确对称（此前下边缘描边实际是错的）。
 
 ### 升级注意事项
 - JSON 新增 `visual.baselineY`（float 0..1，默认 0=底部）、`visual.lineOnly`（bool，默认 false）、
   `visual.barPitchRatio`（float，默认 1/90）；旧预设完全兼容。
 - CLI 新增 `--set visual.baselineY=0.5`、`--set visual.lineOnly=on`、`--set visual.barPitchRatio=0.012`。
-- **已知问题**：v0.5.4 已修复 compose 描边闪退（渲染不再逐帧算均色）与 mp3 解码（已启用软件解码）；剩余问题见 docs/inbox/INBOX_REPLY.md。
+- **已知问题**：v0.5.4 已修复 compose 描边闪退两条路径（均色逐帧计算 + 描边越界读 #1b）与 mp3 解码（软件解码）；剩余问题见 docs/inbox/INBOX_REPLY.md。
 
 ---
 

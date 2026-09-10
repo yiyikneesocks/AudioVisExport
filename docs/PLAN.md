@@ -54,7 +54,7 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-10）
+## 当前状态（最后更新：2026-09-11 01:1x）
 
 - **v0.5.3 已完整发版**（2026-09-09，tag `v0.5.3` + GitHub Release 已发）。
 - **v0.5.4 编码中（重点＝频谱样式 + 蒙版图片 + 基线轴 + 崩溃报告）**：
@@ -66,10 +66,14 @@
     / Timestamped deploy /收件箱三文件协议 / style proposals doc / Y2Kmeter audit。 / INBOX 五连修复（崩溃根除+轴重合+mp3+pitch 1/90+末柱报告，23:2x）
   - 🔧 已知问题：
     - ✅ **compose() 平均色描边崩溃 → 已根除**（渲染不再逐帧算均色；均色只在加载图/Use average 按钮时算一次）。
+    - ✅ **#1b 勾 Outline 必崩·真根因（09-11）**：用户重报后读 `crash/*.dmp` 符号化（minidump + `build_win/AudioVisGUI.map` + objdump）
+      → `SpectrumMask::compose +0x8f5`：描边环 `e[idx]` 行指针二次偏移（= `tmp[2·y·W+x]`）越界读堆。改 `e[x]` 修复；
+      `vis_mask_test` 补 stroke 用例 6（负对照 3 FAIL 证明有效）。部署 `AudioVisGUI_09110110.exe`。
     - ✅ **mp3 解码 → 已支持**（开启 JUCE_USE_MP3AUDIOFORMAT 软件解码 + PcmSource 注册 MP3AudioFormat）。
     - ✅ **baseline axis 与频谱底部/左缘重合** → 已取消全样式 reduced(2) 缩进 + 左/下内边距归 0。
     - ✅ **pitch 默认 1/90**（与 bandCount=90 联动，默认 90 柱全宽）。
     - ⏳ #3（grey-out controls）和 #4（bar restored original cap）尚未由用户 Windows 实测。
+    - ⏳ **下一轮**：INBOX 新 #3 peak-caps 四件套（3.1 bar-mirror 删除 / 3.2 bar 双侧帽跟随轴 / 3.3 line 系峰帽开关 / 3.4 下侧异常）+ 新 #6 蒙版双按钮（outline 已解锁）。
     - ⏳ 末柱斜面决定因素报告 → 已写入 INBOX_REPLY（等用户知悉）。
   - 📋 协作机制：INBOX 三件套 + status gate + #0/#0+/#10/#11 轮次节奏协议，
     REPLY 三固定子节结构。全部写入 PLAN.md「文档更新触发点」。
