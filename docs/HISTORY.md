@@ -57,8 +57,11 @@
 
 ### v0.5.4 — 2026-09-10（频谱样式专项 + 蒙版图片系统 + 基线轴 + 崩溃报告 + 多项UI增强）
 
-> 说明：v0.5.4 于 2026-09-09~10 开发，已推送到 GitHub main（commit `5d4b42e..14b5104`），
-> **尚未发版**（用户实测进行中，含多轮 INBOX 反馈迭代）。以下为截至 14b5104 的全部变更。
+> 说明：v0.5.4 于 2026-09-09~11 开发，主体已推送到 GitHub main（commit `5d4b42e..14b5104`），
+> 其后按用户 INBOX 反馈迭代：`f45eaa5`（五连 #1/#2/#7/#8/#9）→ `c755f73`（#10 y2k 两臂颜色）→
+> `5877024`（#1b outline 必崩真根因），**当前 HEAD=`5877024` 已推送**。
+> **尚未发版**（用户实测进行中，含多轮 INBOX 反馈迭代）。以下正文为截至 14b5104 的变更，
+> 之后的反馈迭代记在本节末尾（「v0.5.4 收尾补丁」及其后小节）。
 
 **变更（频谱样式增强 + 蒙版图片 + 基线轴 + crash reporter + bar布局重做）**：
 
@@ -161,26 +164,45 @@
 - SpectrumCanvas：scaleSnap 拖拽角/边时正确应用 `applyScaleSnap()`。
 - makeContainTransform pos 公式修正影响所有图片图层的默认定位（含蒙版图片）。
 
-**已知问题（截至 INBOX 五连修复轮，见 `docs/inbox/INBOX_REPLY.md`）**：
+**用户实测进度（滚动更新，截至 2026-09-11 01:1x，明细见 `docs/inbox/INBOX_REPLY.md`）**：
 - ✅ **compose() 平均色描边崩溃 → 已根除**（渲染不再逐帧算均色；均色只在加载图片/Use average 按钮时算一次写入描边色，见下方收尾补丁）。
 - ✅ **mp3 解码失败 → 已修复**（开启 `JUCE_USE_MP3AUDIOFORMAT` 软件解码 + PcmSource 注册 `MP3AudioFormat`）。
-- ⏳ **#3（grey-out controls）和 #4（bar restored original cap）尚未由用户实测**。
-- ⏳ **baseline axis 位置 → 已改为贴频谱底部/左缘**（取消缩进 + 边距归 0），等待用户目测确认。
+- ✅ **#2 基线轴与频谱底部/左缘重合 → 用户确认通过**（"4.基线轴与频谱底部/左缘完全重合已通过"）。
+- ✅ **#7 音频格式（wav/aiff/flac/ogg/mp3）→ 用户确认全数通过**。
+- ✅ **#8 pitch↔bandCount 新模型 + 默认 90 柱全宽 → 用户确认通过**。
+- ✅ **#10 line 样式拖轴两侧颜色一致 → 用户确认通过**（"10.和3中情况一样，颜色已经通过"）。
+- ✅ **拖图到 Mask 页设蒙版 + 蒙版图片几何 → 用户确认"蒙版图没问题"**。
+- ❌ **勾 Outline 必崩 → 用户重报，根因并非均色**：真根因＝compose 描边越界读（见下方 #1b 小节，已修，待用户复测）。
+- ⏳ **#5 控件按样式置灰 → 基本通过，但派生出新 #3 峰帽四件套问题**（3.1 bar-mirror 该删 / 3.2 bar 帽不随轴动 / 3.3 line 系无法勾选峰帽 / 3.4 line-y2k-crystal 拖轴后下侧异常）→ 下一轮任务。
+- ⏳ **#9 峰帽 v3 + 末柱斜面**：用户反馈"我没看到关键汇报在哪" → 已在 INBOX_REPLY 待办速览点名指路，等待实测。
+- ⏳ **蒙版描边色双按钮（新 #6）**：用户要求排在 outline 修复之后，现已解锁。
 
-**v0.5.4 收尾补丁（INBOX #1/#2/#7/#8/#9，HEAD 22a966f 后）**：
+**v0.5.4 收尾补丁（INBOX #1/#2/#7/#8/#9，commit `f45eaa5`，HEAD `22a966f` 后）**：
 - **#1 平均色描边崩溃根除**：SpectrumCanvas 渲染路径删除逐帧 `maskAverageColourCached`，渲染统一读 `strokeColor`；均色只在 `applyMaskImageFile`（加载图）/ `onUseMaskAvgColour`（Use average 按钮）时算一次写入；VisPipeline 导出保留首帧缓存（CLI 参数固定，实际只算一次）。
 - **#2 基线轴与频谱底部/左缘重合**：全部 12 处样式 `canvas.reduced(2)` → `canvas`；`paddingLeft 32→0`、`paddingBottom 16→0`（SpectrumStyle.h 默认值 + MainComponent 固定值同步）；柱底/左缘贴画框 = baselineY=0 轴线。
 - **#7 mp3 全平台支持**：CMake 全局 `JUCE_USE_MP3AUDIOFORMAT=1`（FetchContent 前声明传入 JUCE 子目录）；PcmSource 注册 `MP3AudioFormat`；CLI/GUI 报错消息更新为 5 格式列表。Linux 实测 mp3 probe + 152 帧导出 OK。
 - **#8 pitch 默认值**：`barPitchRatio` 1.0 → `1/90`（SpectrumParams.h），与 bandCount=90 一致；probe-spectrum 回归 bandCount=90 / ok=true。
 - **#9 末柱斜面报告**：详见 `docs/inbox/INBOX_REPLY.md`（左端高 edge[N-1]=(n[N-2]+n[N-1])/2；右端高 edge[N]=max(n[N-1], n[N-2]/2)）。
 
-**INBOX #1b（2026-09-11 01:1x）·勾 Outline 必崩真根因 = compose 描边越界读**：
+**v0.5.4 追加补丁（commit `c755f73`，用户测试后回报的 #10）**：
+- **#10 y2k-line 拖动基线轴时上下两侧"颜色不一致"**：根因＝`Y2KLineStyle::render` 下臂填充（`fillDn`）
+  沿用了上臂**描边**留下的 1.0f 不透明渐变/颜色状态，下臂因此比上臂"实"很多；修复＝填充下臂前重置为
+  与上臂填充同参数（`cm.horizontalGradient(..., 0.25f)` / `rp.secondary.withAlpha(0.25f)`）。
+- 用户已确认通过（"10.和3中情况一样，颜色已经通过"）。
+- ⚠️ 同批用户重报"勾选 outline 必然崩溃"→ 说明 #1 未真正根除，见下一小节 #1b。
+
+**INBOX #1b（2026-09-11 01:1x，commit `5877024`）·勾 Outline 必崩真根因 = compose 描边越界读**：
 - 取证：用户 `crash_20260911_001832/002113.dmp`（minidump 解析 ACCESS_VIOLATION@0x7ff6e51ab355，模块基址 0x7ff6e5190000
   → RVA 0x1b355）+ sha256 对齐部署 exe + `build_win/AudioVisGUI.map` 符号化 + objdump 反汇编 `sub esi,[r13+rax]`。
 - 根因：`rim = m[x] − e[idx]`，`e` 已是行指针、`idx=y*W+x` → 实读 `tmp[2·y·W+x]`，y≥H/2 越界读堆（Windows 必崩），
   且前半行用错位腐蚀数据（下边缘描边一直是错的）。上一轮"根除"的均色路径是**另一条**真路径，本次与均色无关。
 - 修复：`e[idx]` → `e[x]`。回归：`vis_mask_test` 用例 6（1200×800 stroke：四边环对称 top/bottom=2505、left/right=1505，
   深内部/轮廓外零污染）；负对照还原旧码 → 3 FAIL。此前 stroke 路径零测试覆盖 = 崩溃漏网原因。
+
+**文档协作协议强化（2026-09-11，`docs/PLAN.md` §0 新增「写入安全」）**：
+- 本轮重写 `docs/inbox/INBOX_REPLY.md` 待办速览时，用「读全文→切片重组→整写」的方式截断了其按轮归档尾部（约 110 行，09-09/09-08 轮 + 归档节）；
+  事实记录未受损（`INBOX_WORKLOG.md` 逐轮台账 + 本文件均完整），已按台账 + `git log` 核对 commit 号后重建为摘要，并在 REPLY 内如实记录该事故。
+- 由此固化规则：改三件套前先整体备份、归档尾部只准顶部插入不得重写、用户原话必须逐字备份、改后比对行数确认未缩水。
 
 **验证记录**：
 - Linux + Win 交叉双构建 0 error（`ninja AudioVisGUI AudioVisExport`）。

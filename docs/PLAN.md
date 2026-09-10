@@ -50,6 +50,10 @@
 > 下一轮开始 = 读文档1 新任务 + 顺手清理（状态 0 时）两件事一起做，然后继续推进。
 > **REPLY 结构（用户 #0+）**：开头 = **待办速览**（待办 / 待用户实测项 / 关键汇报——仅用户明确期待回复或 AI 认为必须知悉的）；
 > 普通工作汇报放后面。用户测完的条目由 AI 删掉并更新。三个 inbox 文档 AI 都可按逻辑清理。
+> **写入安全（2026-09-11 事故后新增，强制）**：因 `docs/inbox/` 不入 git、**没有任何历史副本**，改三件套前必须
+> ① 先整体备份（`cp docs/inbox/*.md /tmp/<tag>/`）；② **禁止用「读全文 → 切片重组 → 整写」的方式重写 REPLY/WORKLOG 的归档尾部**——
+> 新轮次一律**只在其顶部插入**、旧内容原样保留；③ 用户原话必须**逐字**备份（不得摘要，摘要是丢信息的主因）；
+> ④ 改完立即用 `grep -c ''` 对比行数，确认未意外缩水，并在汇报中如实说明任何截断/丢内容事故。
 > **任务排序规则（用户 #10）**：加急(`!!`) > 无争议/实现简单/不需要用户手动验证就能自证的 > 需用户实测确认的 > 需拍板的设计项（列计划）。被"缺用户测试结果"卡住的跳过不阻塞。
 
 ---
@@ -58,12 +62,14 @@
 
 - **v0.5.3 已完整发版**（2026-09-09，tag `v0.5.3` + GitHub Release 已发）。
 - **v0.5.4 编码中（重点＝频谱样式 + 蒙版图片 + 基线轴 + 崩溃报告）**：
-  已推送到 GitHub main（`5d4b42e..14b5104`，20 commits；当前 HEAD=22a966f 本地 + 五连修复未提交），**尚未发版**（用户 Windows 实测进行中）。
+  已推送到 GitHub main（`5d4b42e..14b5104` 20 commits 为 v0.5.4 主体；其后 INBOX 反馈迭代
+  `f45eaa5`（五连 #1/#2/#7/#8/#9）→ `c755f73`（#10 y2k 两臂颜色）→ `5877024`（#1b outline 崩溃真根因），
+  当前 HEAD=`5877024` 已推送 origin/main、工作树干净），**尚未发版**（用户 Windows 实测进行中，最新部署 `AudioVisGUI_09110110.exe`）。
   - ✅ 已完成：A1 ColorMap / A2 bar-mirror / A3 CrystalStyle v2 bloom / A4 频谱蒙版图片
     （BUG1 漂移修复 + BUG2 独立拉伸）/ Tabbed UI（4 tab）/ Baseline axis（baselineY）
     / Bar 布局 pitch 模型重做（#25 + #1' + #3''）/ Bar-line 峰帽 v3（连贯分段）
     / Line-only 切换 / Scale snapping / Crash reporter / mp3/flac registerBasicFormats
-    / Timestamped deploy /收件箱三文件协议 / style proposals doc / Y2Kmeter audit。 / INBOX 五连修复（崩溃根除+轴重合+mp3+pitch 1/90+末柱报告，23:2x）
+    / Timestamped deploy /收件箱三文件协议 / style proposals doc / Y2Kmeter audit。 / INBOX 五连修复（崩溃根除+轴重合+mp3+pitch 1/90+末柱报告，23:2x） / INBOX #10 y2k 两臂颜色一致（`c755f73`） / INBOX #1b outline 必崩真根因=compose 描边越界读（`5877024`）
   - 🔧 已知问题：
     - ✅ **compose() 平均色描边崩溃 → 已根除**（渲染不再逐帧算均色；均色只在加载图/Use average 按钮时算一次）。
     - ✅ **#1b 勾 Outline 必崩·真根因（09-11）**：用户重报后读 `crash/*.dmp` 符号化（minidump + `build_win/AudioVisGUI.map` + objdump）
