@@ -158,6 +158,12 @@ private:
     // v0.5.4 #7：描边色两按钮——手动选色 / 用图片平均色（固定为已算值）
     juce::TextButton maskColorBtn { "Border colour" }, maskAvgBtn { "Use average" };
     juce::ToggleButton maskEditToggle { "Edit image position" };
+    // v0.5.5 #5：描边模式 / 四边 / 预览节流控件指针
+    juce::ComboBox* outlineModeBoxPtr = nullptr;
+    juce::ToggleButton* outEdgeTogPtr[4] = { nullptr, nullptr, nullptr, nullptr };
+    juce::Slider* outEdgeWPtr[4] = { nullptr, nullptr, nullptr, nullptr };
+    juce::Slider* outlineFpsPtr = nullptr;
+    juce::ToggleButton* outlineTemporalPtr = nullptr;
     juce::Slider* maskStrokeWidthSliderPtr = nullptr;
     juce::Slider* maskBrightnessPtr = nullptr;
     juce::Slider* maskContrastPtr = nullptr;

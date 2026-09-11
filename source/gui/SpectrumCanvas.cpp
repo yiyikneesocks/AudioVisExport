@@ -108,9 +108,13 @@ void SpectrumCanvas::paint (juce::Graphics& g)
                 {
                     // v0.5.4 #4：色彩调整后的图（identity 时零开销返回原图；带缓存）
                     const juce::Image adj = SpectrumMask::adjustedImageCached (im, params.maskImage);
-                    // v0.5.4 #1：渲染只读 strokeColor——不再逐帧算平均色（崩溃根因）；描边色在加载图/Use average 按钮时已算好
+                    // v0.5.4 #1：outlineMode=image 时渲染只读 strokeColor（加载图/Use average 时已算一次）。
+                    // v0.5.5 #5：uniform/perBar/perFrame 走 composeWithPlan + 预览缓存（节流+插值），
+                    //   导出侧仍用 compose()（cache=nullptr）逐帧真算 → 两路径同源。
                     const juce::Colour stroke = params.maskImage.strokeColor;
-                    juce::Image masked = SpectrumMask::compose (base, adj, params.maskImage, stroke);
+                    const double nowSec = (double) juce::Time::getMillisecondCounterHiRes() * 0.001;
+                    juce::Image masked = SpectrumMask::composeWithPlan (
+                        base, adj, params.maskImage, stroke, &maskPalette, nowSec);
                     if (masked.isValid()) specLayer = masked;
                 }
                 catch (...) { }   // #2 防御：异常 → specLayer 保持 base（无蒙版回退）

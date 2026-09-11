@@ -396,7 +396,58 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
                               "(bars / shape act as the mask). It moves & scales with the spectrum.");
     maskStrokeWidthSliderPtr = addSlider ("Outline width", 0.5, 12.0, 0.5, 1.0,
                [this] { return (double) params.maskImage.strokeWidth; },
-               [this] (double v) { params.maskImage.strokeWidth = (float) v; notify(); });
+               [this] (double v) {
+                   params.maskImage.strokeWidth = (float) v;
+                   // 主滑块 = 四边的统一预设（想单独调某缘再用下面的分缘滑块）
+                   params.maskImage.outWTop = params.maskImage.outWBottom
+                       = params.maskImage.outWLeft = params.maskImage.outWRight = (float) v;
+                   notify();
+               });
+    // ---- v0.5.5 #5c/#5e：描边颜色模式 + 四边独立 + 预览节流 ----
+    outlineModeBoxPtr = addCombo ("Outline colour", { "image", "uniform", "perBar", "perFrame" },
+               1, [this] (int id)
+               {
+                   static const char* modes[] = { "image", "uniform", "perBar", "perFrame" };
+                   params.maskImage.outlineMode = modes[id - 1];
+                   notify();
+               });
+    outlineModeBoxPtr->setTooltip (
+        "Outline colour source:\n"
+        "  image    = image's own average (legacy; set at load / 'Use average')\n"
+        "  uniform  = average of the whole visible (masked) region, per frame\n"
+        "  perBar   = each bar outlines with ITS OWN visible-region average\n"
+        "  perFrame = line styles: this frame's visible-region average");
+    {
+        // C++17：lambda 不能捕获数组 → 成员指针用函数按 e 选择
+        auto onOf  = [] (int e) -> bool MaskImageLayer::* {
+            switch (e) { case 0: return &MaskImageLayer::outTop;    case 1: return &MaskImageLayer::outBottom;
+                         case 2: return &MaskImageLayer::outLeft;   default: return &MaskImageLayer::outRight; } };
+        auto wOf   = [] (int e) -> float MaskImageLayer::* {
+            switch (e) { case 0: return &MaskImageLayer::outWTop;   case 1: return &MaskImageLayer::outWBottom;
+                         case 2: return &MaskImageLayer::outWLeft;  default: return &MaskImageLayer::outWRight; } };
+        const char* edNames[4] = { "Outline top", "Outline bottom", "Outline left", "Outline right" };
+        for (int e = 0; e < 4; ++e)
+        {
+            auto* tg = addToggle (edNames[e], params.maskImage.*(onOf (e)),
+                                  [this, e, onOf] (bool on) { params.maskImage.*(onOf (e)) = on; notify(); });
+            outEdgeTogPtr[e] = tg;
+            outEdgeWPtr[e] = addSlider ("  width", 0.0, 24.0, 0.5, 1.0,
+                [this, e, wOf] { return (double) (params.maskImage.*(wOf (e))); },
+                [this, e, wOf] (double v) { params.maskImage.*(wOf (e)) = (float) v; notify(); });
+            outEdgeWPtr[e]->setTooltip ("Edge thickness. 0 = this edge off (also via its toggle).");
+        }
+    }
+    outlineFpsPtr = addSlider ("Outline fps (preview)", 0.0, 30.0, 1.0, 1.0,
+        [this] { return (double) params.maskImage.outlinePreviewFps; },
+        [this] (double v) { params.maskImage.outlinePreviewFps = (float) v; notify(); });
+    outlineFpsPtr->setTooltip ("How often the outline's live-average colours are recomputed IN THE PREVIEW\n"
+                               "(0 = every frame). Offline export always recomputes every frame for exactness.\n"
+                               "Lower = cheaper; smoothing keeps motion visually continuous.");
+    outlineTemporalPtr = addToggle ("Outline smoothing", params.maskImage.outlineTemporal,
+        [this] (bool b) { params.maskImage.outlineTemporal = b; notify(); });
+    outlineTemporalPtr->setTooltip ("Smoothly interpolate outline colours between recomputes\n"
+                                    "(off = snap to the new colour immediately).");
+
     // v0.5.4 #4：色彩调整（只作用蒙版图片；1.0=原图）
     maskBrightnessPtr = addSlider ("Brightness", 0.0, 2.0, 0.01, 1.0,
                [this] { return (double) params.maskImage.brightness; },
@@ -636,6 +687,33 @@ void ParamPanel::syncMaskControls()
         maskContrastPtr->setValue (params.maskImage.contrast, juce::dontSendNotification);
     if (maskSaturationPtr != nullptr)
         maskSaturationPtr->setValue (params.maskImage.saturation, juce::dontSendNotification);
+    // v0.5.5 #5
+    if (outlineModeBoxPtr != nullptr)
+    {
+        static const char* modes[] = { "image", "uniform", "perBar", "perFrame" };
+        int id = 1;
+        for (int i = 0; i < 4; ++i) if (params.maskImage.outlineMode == modes[i]) id = i + 1;
+        outlineModeBoxPtr->setSelectedId (id, juce::dontSendNotification);
+    }
+    {
+        auto onOf = [] (int e) -> bool MaskImageLayer::* {
+            switch (e) { case 0: return &MaskImageLayer::outTop;    case 1: return &MaskImageLayer::outBottom;
+                         case 2: return &MaskImageLayer::outLeft;   default: return &MaskImageLayer::outRight; } };
+        auto wOf  = [] (int e) -> float MaskImageLayer::* {
+            switch (e) { case 0: return &MaskImageLayer::outWTop;   case 1: return &MaskImageLayer::outWBottom;
+                         case 2: return &MaskImageLayer::outWLeft;  default: return &MaskImageLayer::outWRight; } };
+        for (int e = 0; e < 4; ++e)
+        {
+            if (outEdgeTogPtr[e] != nullptr)
+                outEdgeTogPtr[e]->setToggleState (params.maskImage.*(onOf (e)), juce::dontSendNotification);
+            if (outEdgeWPtr[e] != nullptr)
+                outEdgeWPtr[e]->setValue (params.maskImage.*(wOf (e)), juce::dontSendNotification);
+        }
+    }
+    if (outlineFpsPtr != nullptr)
+        outlineFpsPtr->setValue (params.maskImage.outlinePreviewFps, juce::dontSendNotification);
+    if (outlineTemporalPtr != nullptr)
+        outlineTemporalPtr->setToggleState (params.maskImage.outlineTemporal, juce::dontSendNotification);
 }
 
 void ParamPanel::setProgressText (const juce::String& s)

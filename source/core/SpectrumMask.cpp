@@ -177,6 +177,16 @@ juce::Image SpectrumMask::compose (const juce::Image& base,
                                    const MaskImageLayer& cfg,
                                    juce::Colour resolvedStroke)
 {
+    return composeWithPlan (base, image, cfg, resolvedStroke, nullptr, 0.0);
+}
+
+juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
+                                           const juce::Image& image,
+                                           const MaskImageLayer& cfg,
+                                           juce::Colour resolvedStroke,
+                                           PreviewPaletteCache* cache,
+                                           double nowSec)
+{
     if (! base.isValid() || ! image.isValid())
         return {};
 
@@ -257,98 +267,313 @@ juce::Image SpectrumMask::compose (const juce::Image& base,
         }
     }
 
-    // ---- 4. 描边（轮廓内侧勾边：mA 减去腐蚀(r) 的环）----
-    if (cfg.strokeEnabled && cfg.strokeWidth > 0.01f)
+    // ---- 4. 描边（v0.5.5 #5：四边独立开关/厚度 + 实时平均色计划）----
+    if (cfg.strokeEnabled)
     {
-        const int r = juce::jlimit (1, 32, (int) std::lround (cfg.strokeWidth));
-        // v0.5.4 #1 修复：scratch 复用，不再每帧分配 2×W×H×int（4K≈70MB/帧、8K≈268MB/帧 →
-        //   Windows JUCE new 失败返回 NULL → vector::data()=NULL → 描边循环读 NULL 崩溃）。
-        //   thread_local：GUI 消息线程与导出线程各自持有，无数据竞争。
-        static thread_local std::vector<int> tmp, er;
-        if (tmp.size() < (size_t) W * H)
-        {
-            tmp.resize ((size_t) W * H);
-            er.resize ((size_t) W * H);
-        }
-        if (tmp.data() == nullptr || er.data() == nullptr)
-            return {};
+        const int rT = cfg.outTop    ? juce::jlimit (1, 32, (int) std::lround (cfg.outWTop   )) : 0;
+        const int rB = cfg.outBottom ? juce::jlimit (1, 32, (int) std::lround (cfg.outWBottom )) : 0;
+        const int rL = cfg.outLeft   ? juce::jlimit (1, 32, (int) std::lround (cfg.outWLeft   )) : 0;
+        const int rR = cfg.outRight  ? juce::jlimit (1, 32, (int) std::lround (cfg.outWRight  )) : 0;
 
-        // 水平 min（半径 r）
-        for (int y = 0; y < H; ++y)
+        if (rT | rB | rL | rR)
         {
-            const uint8* row = mA.data() + (size_t) y * W;
-            for (int x = 0; x < W; ++x)
+            // 颜色计划：在**描边之前**的 out 上现算（避免白描边污染平均）。
+            //   GUI（带 cache）→ 节流 + 指数插值；导出 cache=nullptr → 每帧真算＝精确。
+            const StrokePlan fresh = makeStrokePlan (out, cfg, resolvedStroke);
+            const StrokePlan& plan = cache != nullptr
+                                         ? cache->update (nowSec, fresh, cfg)
+                                         : fresh;
+
+            // 四条方向各做一次"窗内最小值"。单调队列滑窗 O(W·H)（与 r 无关；旧版 2 次
+            //   全窗重扫是 O(W·H·r)，4 个方向若沿用旧写法要再 ×4）。rim = m − 方向窗最小值。
+            static thread_local std::vector<uint8> bufT, bufB, bufL, bufR;
+            const size_t n = (size_t) W * H;
+            if (bufT.size() < n)
             {
-                if (row[x] == 0) { er[(size_t) y * W + x] = 0; continue; }
-                int lo = x - r, hi = x + r;
-                int mn = 255;
-                for (int k = lo; k <= hi; ++k)
-                {
-                    const int kk = juce::jlimit (0, W - 1, k);
-                    const int v = row[kk];
-                    if (v < mn) mn = v;
-                    if (mn == 0) break;
-                }
-                er[(size_t) y * W + x] = mn;
+                bufT.resize (n); bufB.resize (n); bufL.resize (n); bufR.resize (n);
             }
-        }
-        // 垂直 min（半径 r）
-        for (int x = 0; x < W; ++x)
-        {
+            if (bufT.data() == nullptr || bufB.data() == nullptr
+                || bufL.data() == nullptr || bufR.data() == nullptr)
+                return {};   // 极端低内存：JUCE/STL 给不出缓冲 → 放弃描边（图本体已画好，宁缺勿崩）
+
+            if (rT != 0 || rB != 0)   // 纵向：按列滑窗
+            {
+                std::vector<int> dq ((size_t) H + 2);
+                for (int x = 0; x < W; ++x)
+                {
+                    int hd = 0, tl = 0;                       // 顶缘窗口 [y-rT, y]
+                    for (int y = 0; y < H; ++y)
+                    {
+                        const uint8 v = mA[(size_t) y * W + x];
+                        while (tl > hd && mA[(size_t) dq[tl - 1] * W + x] >= v) --tl;
+                        dq[tl++] = y;
+                        while (dq[hd] < y - rT) ++hd;
+                        bufT[(size_t) y * W + x] = mA[(size_t) dq[hd] * W + x];
+                    }
+                    hd = tl = 0;                              // 底缘窗口 [y, y+rB]
+                    for (int y = H - 1; y >= 0; --y)
+                    {
+                        const uint8 v = mA[(size_t) y * W + x];
+                        while (tl > hd && mA[(size_t) dq[tl - 1] * W + x] >= v) --tl;
+                        dq[tl++] = y;
+                        while (dq[hd] > y + rB) ++hd;
+                        bufB[(size_t) y * W + x] = mA[(size_t) dq[hd] * W + x];
+                    }
+                }
+            }
+            if (rL != 0 || rR != 0)   // 横向：按行滑窗
+            {
+                std::vector<int> dq ((size_t) W + 2);
+                for (int y = 0; y < H; ++y)
+                {
+                    const uint8* row = mA.data() + (size_t) y * W;
+                    int hd = 0, tl = 0;                       // 左缘窗口 [x-rL, x]
+                    for (int x = 0; x < W; ++x)
+                    {
+                        while (tl > hd && row[dq[tl - 1]] >= row[x]) --tl;
+                        dq[tl++] = x;
+                        while (dq[hd] < x - rL) ++hd;
+                        bufL[(size_t) y * W + x] = row[dq[hd]];
+                    }
+                    hd = tl = 0;                              // 右缘窗口 [x, x+rR]
+                    for (int x = W - 1; x >= 0; --x)
+                    {
+                        while (tl > hd && row[dq[tl - 1]] >= row[x]) --tl;
+                        dq[tl++] = x;
+                        while (dq[hd] > x + rR) ++hd;
+                        bufR[(size_t) y * W + x] = row[dq[hd]];
+                    }
+                }
+            }
+
+            const bool perCol = plan.perColumn
+                             && plan.colColour.size() >= (size_t) W;
+            juce::Image::BitmapData bd (out, juce::Image::BitmapData::readWrite);
             for (int y = 0; y < H; ++y)
             {
-                const int v0 = er[(size_t) y * W + x];
-                if (v0 == 0) { tmp[(size_t) y * W + x] = 0; continue; }
-                int mn = 255;
-                for (int k = y - r; k <= y + r; ++k)
+                auto* line = reinterpret_cast<juce::PixelARGB*> (bd.getLinePointer (y));
+                const uint8* m = mA.data()   + (size_t) y * W;
+                const uint8* t = bufT.data() + (size_t) y * W;
+                const uint8* b = bufB.data() + (size_t) y * W;
+                const uint8* l = bufL.data() + (size_t) y * W;
+                const uint8* rr = bufR.data() + (size_t) y * W;
+                for (int x = 0; x < W; ++x)
                 {
-                    const int kk = juce::jlimit (0, H - 1, k);
-                    const int v = er[(size_t) kk * W + x];
-                    if (v < mn) mn = v;
-                    if (mn == 0) break;
+                    const int mv = m[x];
+                    if (mv == 0) continue;
+                    // 启用的缘各算 rim，交汇处取 max（角部自然拼合）。
+                    // ⚠️ 未启用的方向 buf 未写，必须用 rX!=0 守卫，绝不能让 mv−0 混进来
+                    //    （那会把整个形状涂成描边）。
+                    int rim = 0;
+                    if (rT != 0) rim = juce::jmax (rim, mv - (int) t[x]);
+                    if (rB != 0) rim = juce::jmax (rim, mv - (int) b[x]);
+                    if (rL != 0) rim = juce::jmax (rim, mv - (int) l[x]);
+                    if (rR != 0) rim = juce::jmax (rim, mv - (int) rr[x]);
+                    if (rim <= 0) continue;
+                    if (rim > 255) rim = 255;
+                    const juce::Colour col = perCol ? plan.colColour[(size_t) x] : plan.uniform;
+                    const int inv = 255 - rim;
+                    const int srcR = col.getRed()   * rim / 255;
+                    const int srcG = col.getGreen() * rim / 255;
+                    const int srcB = col.getBlue()  * rim / 255;
+                    juce::PixelARGB d = line[x];
+                    const int a  = rim + d.getAlpha() * inv / 255;
+                    const int cr = srcR + d.getRed()   * inv / 255;
+                    const int cg = srcG + d.getGreen() * inv / 255;
+                    const int cb = srcB + d.getBlue()  * inv / 255;
+                    d.setARGB (static_cast<uint8> (a),
+                               static_cast<uint8> (juce::jmin (255, cr)),
+                               static_cast<uint8> (juce::jmin (255, cg)),
+                               static_cast<uint8> (juce::jmin (255, cb)));
+                    line[x] = d;
                 }
-                tmp[(size_t) y * W + x] = mn;
-            }
-        }
-
-        const uint8 sR = resolvedStroke.getRed();
-        const uint8 sG = resolvedStroke.getGreen();
-        const uint8 sB = resolvedStroke.getBlue();
-
-        juce::Image::BitmapData bd (out, juce::Image::BitmapData::readWrite);
-        for (int y = 0; y < H; ++y)
-        {
-            auto* line = reinterpret_cast<juce::PixelARGB*> (bd.getLinePointer (y));
-            const uint8* m = mA.data() + (size_t) y * W;
-            const int* e = tmp.data() + (size_t) y * W;
-            for (int x = 0; x < W; ++x)
-            {
-                // v0.5.4 #1b 修复：e/m 已是本行行指针，旧代码 e[idx]（idx=y*W+x）=
-                //   tmp[2*y*W+x] 二次偏移 → y≥H/2 起越界读堆 → ACCESS_VIOLATION
-                //   （Windows 崩溃 dump 0911_0018/0021 实证：compose+0x8f5 "sub esi,[r13+rax]"）。
-                //   正确值 = 本行腐蚀结果 e[x]；此前描边环用错行数据，视觉也随之修正。
-                int rim = (int) m[x] - e[x];             // 内侧环强度
-                if (rim <= 0) continue;
-                if (rim > 255) rim = 255;
-                const int inv = 255 - rim;
-                // 描边色（不透明）预乘 src = color * rim/255
-                const int srcR = sR * rim / 255;
-                const int srcG = sG * rim / 255;
-                const int srcB = sB * rim / 255;
-                juce::PixelARGB d = line[x];
-                // source-over：out = src + dst*(1-srcA)
-                const int a = rim + d.getAlpha() * inv / 255;
-                const int rr = srcR + d.getRed()   * inv / 255;
-                const int gg = srcG + d.getGreen() * inv / 255;
-                const int bb = srcB + d.getBlue()  * inv / 255;
-                d.setARGB (static_cast<uint8> (a),
-                           static_cast<uint8> (juce::jmin (255, rr)),
-                           static_cast<uint8> (juce::jmin (255, gg)),
-                           static_cast<uint8> (juce::jmin (255, bb)));
-                line[x] = d;
             }
         }
     }
 
     return out;
+}
+
+// =============================================================================
+// v0.5.5 #5：描边调色板（实时平均色）+ 预览节流/插值
+// =============================================================================
+namespace
+{
+    // 把逐段色铺成逐列数组（compose 描边按 x 查色 O(1)）
+    void bakeColumns (SpectrumMask::StrokePlan& plan)
+    {
+        plan.colColour.clear();
+        if (! plan.perColumn) return;
+        plan.colColour.resize ((size_t) plan.colWidth, juce::Colours::white);
+        for (size_t s = 0; s < plan.segEnd.size(); ++s)
+            for (int x = plan.segStart[s]; x <= plan.segEnd[s]; ++x)
+                if (x >= 0 && x < plan.colWidth)
+                    plan.colColour[(size_t) x] = plan.segColour[s];
+    }
+
+    inline uint8 lerp8 (uint8 a, uint8 b, float k) noexcept
+    {
+        return (uint8) ((float) a + ((float) b - (float) a) * k);
+    }
+    inline juce::Colour lerpColour (const juce::Colour& a, const juce::Colour& b, float k) noexcept
+    {
+        return juce::Colour::fromRGB (lerp8 (a.getRed(),   b.getRed(),   k),
+                                       lerp8 (a.getGreen(), b.getGreen(), k),
+                                       lerp8 (a.getBlue(),  b.getBlue(),  k));
+    }
+}
+
+SpectrumMask::StrokePlan SpectrumMask::makeStrokePlan (const juce::Image& out,
+                                                       const MaskImageLayer& cfg,
+                                                       juce::Colour fallbackUniform) noexcept
+{
+    StrokePlan plan;
+    plan.uniform = fallbackUniform;
+    if (cfg.outlineMode == "image" || ! out.isValid())   // image 模式＝v0.5.4 行为，零开销直通
+        return plan;
+
+    const int W = out.getWidth(), H = out.getHeight();
+    if (W <= 0 || H <= 0)
+        return plan;
+
+    // 列可见性 + 预乘通道和。"sum(预乘)/sum(alpha)" 数学上恒等于
+    //   按 alpha 加权的未预乘平均色，省掉整遍解预乘。
+    std::vector<uint8>   colAny ((size_t) W, 0);
+    std::vector<int64_t> sumA ((size_t) W, 0), sumR ((size_t) W, 0),
+                         sumG ((size_t) W, 0), sumB ((size_t) W, 0);
+    {
+        juce::Image::BitmapData bd (out, juce::Image::BitmapData::readOnly);
+        for (int y = 0; y < H; ++y)
+        {
+            const auto* line = reinterpret_cast<const juce::PixelARGB*> (bd.getLinePointer (y));
+            for (int x = 0; x < W; ++x)
+            {
+                const int a = line[x].getAlpha();
+                if (a > 0)
+                {
+                    colAny[(size_t) x] = 1;
+                    sumA[(size_t) x] += a;
+                    sumR[(size_t) x] += line[x].getRed();
+                    sumG[(size_t) x] += line[x].getGreen();
+                    sumB[(size_t) x] += line[x].getBlue();
+                }
+            }
+        }
+    }
+
+    // 连续可见列 = 一个"可视段"。bar 之间有全零列 → 每柱一段（perBar 语义）；
+    // 折线一整个 blob → 单段。gap=0 柱粘连时自动并段 → 颜色随之并，仍符合"可视范围平均"。
+    for (int x = 0; x < W; )
+    {
+        if (! colAny[(size_t) x]) { ++x; continue; }
+        const int x0 = x;
+        int64_t a = 0, r = 0, g = 0, b = 0;
+        while (x < W && colAny[(size_t) x])
+        {
+            a += sumA[(size_t) x]; r += sumR[(size_t) x];
+            g += sumG[(size_t) x]; b += sumB[(size_t) x];
+            ++x;
+        }
+        const juce::Colour c = (a > 0)
+            ? juce::Colour::fromRGB (
+                (uint8) juce::jlimit (0, 255, (int) (r * 255 / a)),
+                (uint8) juce::jlimit (0, 255, (int) (g * 255 / a)),
+                (uint8) juce::jlimit (0, 255, (int) (b * 255 / a)))
+            : fallbackUniform;
+        plan.segStart.push_back (x0);
+        plan.segEnd.push_back   (x - 1);
+        plan.segColour.push_back (c);
+    }
+
+    if (plan.segColour.empty())
+        return plan;                                   // 无电平 → 保持 fallback
+
+    if (plan.segColour.size() == 1 || cfg.outlineMode != "perbar")
+    {
+        int64_t A = 0, R = 0, G = 0, B = 0;
+        for (size_t s = 0; s < plan.segColour.size(); ++s)   // 按段宽加权 = 全可视区平均
+        {
+            const int64_t w = plan.segEnd[s] - plan.segStart[s] + 1;
+            A += w;
+            R += (int64_t) plan.segColour[s].getRed()   * w;
+            G += (int64_t) plan.segColour[s].getGreen() * w;
+            B += (int64_t) plan.segColour[s].getBlue()  * w;
+        }
+        plan.uniform = (A > 0) ? juce::Colour::fromRGB ((uint8)(R/A), (uint8)(G/A), (uint8)(B/A))
+                               : fallbackUniform;
+        return plan;                                   // perColumn=false
+    }
+
+    plan.perColumn = true;
+    plan.colWidth  = W;
+    bakeColumns (plan);
+    return plan;
+}
+
+const SpectrumMask::StrokePlan&
+SpectrumMask::PreviewPaletteCache::update (double nowSec,
+                                           const StrokePlan& fresh,
+                                           const MaskImageLayer& cfg)
+{
+    const bool throttled = cfg.outlinePreviewFps > 0.01f;
+    const bool due = ! throttled || (nowSec - lastCompute) >= 1.0 / (double) cfg.outlinePreviewFps;
+
+    if (due || ! primed)
+    {
+        if (! primed)
+        {
+            target = shown = fresh;
+            prevSeg = fresh.segColour;
+            lastCompute = lastLerp = nowSec;
+            primed = true;
+            return shown;
+        }
+        const bool sameBands = (fresh.segStart == target.segStart
+                                && fresh.segEnd == target.segEnd);
+        target = fresh;
+        lastCompute = nowSec;
+        if (! sameBands)          // 柱数/形状变了：索引不可跨帧混合，直接吸附
+        {
+            shown = target;
+            prevSeg = target.segColour;
+            bakeColumns (shown);
+            return shown;
+        }
+    }
+
+    // 指数逼近：每秒收敛率 = previewFps（关节流时按 30 计）。
+    const double rate = throttled ? cfg.outlinePreviewFps : 30.0;
+    const double dt = nowSec - lastLerp;
+    lastLerp = nowSec;
+    if (! cfg.outlineTemporal || dt <= 0.0)
+    {
+        shown = target;
+        prevSeg = target.segColour;
+        bakeColumns (shown);
+        return shown;
+    }
+    const float k = (float) juce::jmin (1.0, 1.0 - std::exp (-dt * rate));
+
+    if (target.perColumn)
+    {
+        shown.perColumn = true;
+        shown.colWidth  = target.colWidth;
+        shown.segStart  = target.segStart;
+        shown.segEnd    = target.segEnd;
+        shown.segColour.resize (target.segColour.size());
+        for (size_t s = 0; s < shown.segColour.size(); ++s)
+        {
+            const juce::Colour from = (s < prevSeg.size()) ? prevSeg[s] : target.segColour[s];
+            shown.segColour[s] = lerpColour (from, target.segColour[s], k);
+        }
+        prevSeg = shown.segColour;
+        bakeColumns (shown);
+    }
+    else
+    {
+        shown.perColumn = false;
+        shown.uniform = lerpColour (shown.uniform, target.uniform, k);
+        prevSeg.clear();
+    }
+    return shown;
 }

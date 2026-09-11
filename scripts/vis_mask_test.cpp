@@ -4,6 +4,9 @@
 #include "source/core/SpectrumMask.h"
 #include "source/core/VisTransform.h"
 #include <cstdio>
+#include <vector>
+#include <cmath>
+#include <tuple>
 
 namespace
 {
@@ -36,6 +39,70 @@ namespace
             }
         }
         return b;
+    }
+
+    juce::Image makeBars (int W, int H, const std::vector<juce::Rectangle<int>>& bars)
+    {
+        juce::Image img (juce::Image::ARGB, W, H, true);
+        juce::Graphics g (img);
+        g.setColour (juce::Colours::white);
+        for (auto& b : bars) g.fillRect (b.toFloat());
+        return img;
+    }
+    juce::Image solidImg (int W, int H, juce::Colour c)
+    {
+        juce::Image img (juce::Image::ARGB, W, H, true);
+        juce::Graphics g (img);
+        g.fillAll (c);
+        return img;
+    }
+    // 找描边像素（与轮廓内图片色区分的独特色）：按"与 rim 色距离<80、与底色距离>80"判
+    std::vector<int> rimPerRow (const juce::Image& im, juce::PixelARGB rim)
+    {
+        std::vector<int> rows (im.getHeight(), 0);
+        juce::Image::BitmapData bd (im, juce::Image::BitmapData::readOnly);
+        for (int y = 0; y < im.getHeight(); ++y)
+        {
+            const auto* line = reinterpret_cast<const juce::PixelARGB*> (bd.getLinePointer (y));
+            for (int x = 0; x < im.getWidth(); ++x)
+            {
+                const auto p = line[x];
+                if (p.getAlpha() < 200) continue;
+                const int dr = std::abs ((int) p.getRed()   - (int) rim.getRed());
+                const int dg = std::abs ((int) p.getGreen() - (int) rim.getGreen());
+                const int db = std::abs ((int) p.getBlue()  - (int) rim.getBlue());
+                if (dr + dg + db < 90) ++rows[(size_t) y];
+            }
+        }
+        return rows;
+    }
+    // 矩形并集内的"描边色像素"计数（列过滤：左右缘纵贯全高，顶/底缘判定必须排除）
+    int countRimInRects (const juce::Image& im, juce::PixelARGB rim,
+                         const std::vector<juce::Rectangle<int>>& rects)
+    {
+        int n = 0;
+        juce::Image::BitmapData bd (im, juce::Image::BitmapData::readOnly);
+        for (auto& r : rects)
+            for (int y = r.getY(); y < r.getBottom() && y < im.getHeight(); ++y)
+            {
+                const auto* line = reinterpret_cast<const juce::PixelARGB*> (bd.getLinePointer (y));
+                for (int x = r.getX(); x < r.getRight() && x < im.getWidth(); ++x)
+                {
+                    const auto p = line[x];
+                    if (p.getAlpha() < 200) continue;
+                    const int d = std::abs ((int) p.getRed()   - (int) rim.getRed())
+                                + std::abs ((int) p.getGreen() - (int) rim.getGreen())
+                                + std::abs ((int) p.getBlue()  - (int) rim.getBlue());
+                    if (d < 90) ++n;
+                }
+            }
+        return n;
+    }
+    int sumRange (const std::vector<int>& v, int a, int b)
+    {
+        int s = 0;
+        for (int i = a; i <= b && i < (int) v.size(); ++i) s += v[(size_t) i];
+        return s;
     }
 
     int failures = 0;
@@ -198,6 +265,154 @@ int main()
         check (! interiorDiff, "rim does not touch deep interior");
         check (! outsideDiff,  "rim does not leak outside contour");
         check (tot < (SW + SH) * 40, "rim is a thin band, not whole-shape repaint");
+    }
+
+
+
+    // ============ 用例 7：四边独立开关（v0.5.5 #5c）============
+    {
+        const int CW = 200, CH = 40;
+        auto base = makeBars (CW, CH, { {10, 4, 60, 32}, {80, 4, 60, 32} });
+        auto img  = solidImg (CW, CH, juce::Colours::red);
+        const juce::Colour rimC = juce::Colours::white;
+        MaskImageLayer cfg; cfg.enabled = true;
+        cfg.strokeEnabled = true; cfg.strokeWidth = 5.0f;
+        cfg.outlineMode = "image";
+        cfg.outWTop = cfg.outWBottom = cfg.outWLeft = cfg.outWRight = 5.0f;
+
+        // 两柱 x=[10,69] 与 [80,139]，y=[4,35]。柱体**中段列**（排除左右缘 ±8）专测顶/底缘。
+        const std::vector<juce::Rectangle<int>> topR { {18, 4, 44, 5}, {88, 4, 44, 5} };
+        const std::vector<juce::Rectangle<int>> botR { {18, 31, 44, 5}, {88, 31, 44, 5} };
+        const std::vector<juce::Rectangle<int>> lefR { {10, 12, 5, 16}, {80, 12, 5, 16} };   // 纵中段，专测左缘
+        const std::vector<juce::Rectangle<int>> rigR { {65, 12, 5, 16}, {135, 12, 5, 16} };  // 专测右缘
+        auto rimsOf = [&] (const MaskImageLayer& c)
+        {
+            auto im = SpectrumMask::compose (base, img, c, rimC);
+            return std::make_tuple (countRimInRects (im, rimC.getPixelARGB(), topR),
+                                    countRimInRects (im, rimC.getPixelARGB(), botR),
+                                    countRimInRects (im, rimC.getPixelARGB(), lefR),
+                                    countRimInRects (im, rimC.getPixelARGB(), rigR));
+        };
+        int tA, bA, lA, rA;
+        std::tie (tA, bA, lA, rA) = rimsOf (cfg);
+        check (tA > 80 && bA > 80 && lA > 80 && rA > 80,
+               "edges all-on: all four rims present (top/bot/left/right)");
+
+        cfg.outTop = false;   cfg.outWTop = 0.0f;
+        int t2, b2, l2, r2;
+        std::tie (t2, b2, l2, r2) = rimsOf (cfg);
+        check (t2 == 0 && b2 > 80 && l2 > 80 && r2 > 80, "outTop=false kills ONLY the top edge");
+
+        cfg.outTop = true;    cfg.outWTop = 5.0f;
+        cfg.outBottom = false; cfg.outWBottom = 0.0f;
+        std::tie (t2, b2, l2, r2) = rimsOf (cfg);
+        check (t2 > 80 && b2 == 0 && l2 > 80 && r2 > 80, "outBottom=false kills ONLY the bottom edge");
+
+        cfg.outBottom = true; cfg.outWBottom = 5.0f;
+        cfg.outLeft = false;  cfg.outWLeft = 0.0f;
+        std::tie (t2, b2, l2, r2) = rimsOf (cfg);
+        check (t2 > 80 && b2 > 80 && l2 == 0 && r2 > 80, "outLeft=false kills ONLY the left edge");
+
+        cfg.outLeft = true;   cfg.outWLeft = 5.0f;
+        cfg.outRight = false; cfg.outWRight = 0.0f;
+        std::tie (t2, b2, l2, r2) = rimsOf (cfg);
+        check (t2 > 80 && b2 > 80 && l2 > 80 && r2 == 0, "outRight=false kills ONLY the right edge");
+    }
+
+    // ============ 用例 8：perBar 每柱独立可视区平均色（#5a）============
+    {
+        const int CW = 200, CH = 60;
+        auto base = makeBars (CW, CH, { {10, 5, 30, 50}, {90, 5, 30, 50}, {150, 5, 30, 50} });
+        juce::Image img (juce::Image::ARGB, CW, CH, true);
+        { juce::Graphics g (img);
+          g.fillAll (juce::Colours::blue);
+          g.setColour (juce::Colours::green); g.fillRect (66, 0, 68, CH);
+          g.setColour (juce::Colours::red);   g.fillRect (134, 0, 66, CH); }
+        MaskImageLayer cfg; cfg.enabled = true;
+        cfg.strokeEnabled = true; cfg.strokeWidth = 3.0f; cfg.outlineMode = "perbar";
+        MaskImageLayer cfgNoS = cfg; cfgNoS.strokeEnabled = false;   // 无描边 out（= 描边前的中间态）
+        auto out = SpectrumMask::compose (base, img, cfgNoS, juce::Colours::white);
+        {
+            juce::Image::BitmapData bdd (out, juce::Image::BitmapData::readOnly);
+            for (int x : {20, 100, 160}) {
+                const auto* ln = reinterpret_cast<const juce::PixelARGB*>(bdd.getLinePointer(30));
+                auto q = ln[x];
+                std::printf("      [dbg-out] x=%d y=30 a=%d r=%d g=%d b=%d\n", x, q.getAlpha(), q.getRed(), q.getGreen(), q.getBlue());
+            }
+        }
+        auto plan = SpectrumMask::makeStrokePlan (out, cfg, juce::Colours::white);
+        check (plan.perColumn, "perBar: per-column palette");
+        check (plan.segColour.size() == 3, "perBar: 3 bars -> 3 segments");
+        for (size_t s = 0; s < plan.segColour.size(); ++s)
+            std::printf ("      [dbg] seg%u x[%d..%d] = %08x\n", (unsigned) s,
+                         plan.segStart[s], plan.segEnd[s], plan.segColour[s].getARGB());
+        if (plan.segColour.size() == 3)
+        {
+            check (plan.segColour[0].getBlue() > 150 && plan.segColour[0].getRed() < 80,
+                   "perBar bar0 (over blue band) avg is blue");
+            check (plan.segColour[1].getGreen() > 100
+                  && plan.segColour[1].getGreen() > plan.segColour[1].getRed()
+                  && plan.segColour[1].getGreen() > plan.segColour[1].getBlue(),
+               "perBar bar1 (straddles blue|green) avg leans green (channel-wise)");
+            check (plan.segColour[2].getRed() > 150, "perBar bar2 (over red band) avg is red");
+        }
+    }
+
+    // ============ 用例 9：uniform（#5d）与 image（#5f）模式 ============
+    {
+        const int CW = 200, CH = 60;
+        auto base = makeBars (CW, CH, { {10, 5, 30, 50}, {90, 5, 30, 50} });
+        auto img  = solidImg (CW, CH, juce::Colours::red);
+        MaskImageLayer cfg; cfg.enabled = true;
+        cfg.strokeEnabled = true; cfg.strokeWidth = 3.0f;
+        cfg.outlineMode = "uniform";
+        MaskImageLayer cfgNoS = cfg; cfgNoS.strokeEnabled = false;
+        auto out = SpectrumMask::compose (base, img, cfgNoS, juce::Colours::blue);
+        auto plan = SpectrumMask::makeStrokePlan (out, cfg, juce::Colours::blue);
+        check (! plan.perColumn, "uniform: one colour for all bars");
+        check (plan.uniform.getRed() > 150 && plan.uniform.getBlue() < 60,
+               "uniform: = all-bars visible-region average (red)");
+        cfg.outlineMode = "image";
+        auto planImg = SpectrumMask::makeStrokePlan (out, cfg, juce::Colours::blue);
+        check (planImg.uniform == juce::Colours::blue,
+               "image mode keeps legacy resolvedStroke semantics (#5f)");
+    }
+
+    // ============ 用例 10：预览节流 + 指数插值（#5e）============
+    {
+        const int CW = 100, CH = 40;
+        auto base = makeBars (CW, CH, { {5, 5, 40, 30} });
+        auto imgA = solidImg (CW, CH, juce::Colours::red);
+        auto imgB = solidImg (CW, CH, juce::Colours::blue);
+        MaskImageLayer cfg; cfg.enabled = true;
+        cfg.strokeEnabled = true; cfg.strokeWidth = 3.0f;
+        cfg.outlineMode = "uniform"; cfg.outlinePreviewFps = 4.0f; cfg.outlineTemporal = true;
+        MaskImageLayer cfgNoS = cfg; cfgNoS.strokeEnabled = false;
+        auto outA = SpectrumMask::compose (base, imgA, cfgNoS, juce::Colours::white);
+        auto outB = SpectrumMask::compose (base, imgB, cfgNoS, juce::Colours::white);
+        const auto freshA = SpectrumMask::makeStrokePlan (outA, cfg, juce::Colours::white);
+        const auto freshB = SpectrumMask::makeStrokePlan (outB, cfg, juce::Colours::white);
+        check (freshA.uniform.getRed() > 150 && freshB.uniform.getBlue() > 150,
+               "makeStrokePlan reads clipped pre-stroke out (no white contamination)");
+
+        SpectrumMask::PreviewPaletteCache cache;
+        const auto& p0 = cache.update (0.0,  freshA, cfg);
+        check (p0.uniform.getRed() > 150, "cache primes immediately at t=0 (no garbage fade)");
+        const auto& p1 = cache.update (0.1,  freshB, cfg);
+        check (p1.uniform.getRed() > 150,
+               "throttle: within 1/fps window stale value is KEPT (no recompute)");
+        const auto& p2 = cache.update (0.30, freshB, cfg);
+        check (p2.uniform.getBlue() > p2.uniform.getRed(),
+               "after window elapses: lerp heads toward blue");
+        for (double s = 0.4; s < 3.0; s += 0.05) cache.update (s, freshB, cfg);
+        const auto& pEnd = cache.update (3.1, freshB, cfg);
+        check (pEnd.uniform.getBlue() > 240 && pEnd.uniform.getRed() < 8,
+               "temporal smoothing converges within ~3s");
+        cfg.outlineTemporal = false;
+        SpectrumMask::PreviewPaletteCache c2;
+        c2.update (0.0, freshA, cfg);
+        const auto& q = c2.update (0.5, freshB, cfg);
+        check (q.uniform.getBlue() > 240, "outlineTemporal=false: snaps straight to target");
     }
 
     std::printf (failures ? "FAILURES: %d\n" : "ALL PASS\n", failures);

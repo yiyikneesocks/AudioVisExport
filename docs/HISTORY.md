@@ -372,6 +372,32 @@
 - 验证：Linux 全量 0 error；**四套回归 ALL PASS**（含两处新负对照）；Windows 交叉构建
   `WinDragCompat.cpp.obj` 正常编译（该文件 Linux 不编译，Windows 构建才是真验证）→ 部署 `AudioVisGUI_09112345.exe`。
 
+**INBOX #5（2026-09-12 02:1x）· 描边实时平均色四件套（发版后首个 v0.5.5 增量）**：
+- **四边独立开关 + 厚度（#5c）**：旧描边是一个各向同性 erosion 环（`m − erode(r)`）。改为**四个方向各做单调队列滑窗最小值**
+  （top 窗 [y−rT,y]、bottom [y,y+rB]、left [x−rL,x]、right [x,x+rR]），`rim = max` 四方向之差（角部自然拼合）。
+  复杂度从旧 O(W·H·r) 两趟降到 **O(W·H) 四趟**（与 r 无关）。`MaskImageLayer.out{Top,Bottom,Left,Right}` + `outW*`。
+  ⚠️ 关键正确性点：方向窗未算时（该缘关闭）buf 里是**上一帧的脏值**，绘制循环必须 `if (rX!=0)` 守卫再读，
+  否则 `mv − 脏值` 会把整块形状涂成描边（测试"kills ONLY the top edge"即锁这个）。
+- **实时平均色四模式（#5a/b/d/f）** `outlineMode`（存**小写** token image/uniform/perbar/perframe）：
+  `makeStrokePlan(out, cfg, fallback)` 对**裁剪后、描边前**的 `out` 按列扫描：连续可见列=一个"可视段"
+  （bar 之间是全零列 → 逐柱一段；折线单段；gap=0 粘连自动并段，语义仍成立）。
+  用 **预乘"sum(预乘通道)/sum(alpha)"** 技巧直接得 alpha 加权的未预乘平均色，零解预乘开销。
+  - `perbar`：逐段各色（compose 按 x O(1) 查 `colColour[x]`）；
+  - `uniform`/`perframe`：所有段按段宽加权成一个总色（"所有 bar 内部可视区平均，全柱一致"）；
+  - `image`：**保留** v0.5.4 行为（读已算好的 strokeColor，#5f）。
+  ⚠️ 踩坑修正：`juce::Colour (255, r, g, b)` 我按 (a,r,g,b) 写、实际是 **(r,g,b,a)** → 蓝柱算成红；
+  又 `Colour(r,g,b,255)` **重载歧义**编译失败 → 最终用 **`Colour::fromRGB(r,g,b)`**。四套测试当时"假绿"
+  正是因为该处编译失败、跑的是旧对象（教训：**改完必 `grep` 产物确认 + 看有没有编译错误被 tail 吞**）。
+- **预览降频 + 指数插值（#5e，防崩 + 平滑）** `PreviewPaletteCache`（**仅 GUI 预览**）：
+  `composeWithPlan(..., cache, nowSec)` 里对描边前的 out 现算 fresh 计划 → 喂 cache；cache 按
+  `outlinePreviewFps` 节流重算、`outlineTemporal` 时按真实 dt 指数逼近（每秒收敛率=fps）。
+  段边界变化（柱数/形状变）→ 直接吸附不跨帧混合索引。**导出侧 cache=nullptr → 每帧真算保精确**，两路径同源。
+  默认值（替用户拍定，PLAN 已记理由）：`outlinePreviewFps=8`、`outlineTemporal=true`、`outlineLookaheadFrames=0`
+  （真·未来帧预渲染收益小、成本高，默认关；用户可后续要）。
+- **测试**：`vis_mask_test` 用例 7~10（四缘独立"关一个只杀一条"、perbar 三柱三色、uniform/image 语义、
+  节流+插值收敛、关插值即跳变）。四套 ALL PASS；CLI 五模式 + 四缘 + JSON 往返全 OK。
+  Windows 交叉 34/34 → 部署 `AudioVisGUI_09120209.exe`（等用户实测 #5；#6/#7 待用户回 A/B）。
+
 **验证记录**：
 - Linux + Win 交叉双构建 0 error（`ninja AudioVisGUI AudioVisExport`）。
 - `vis_mask_test`：3 断言 ALL PASS（contain 居中 / 漂移=0 / 手柄=渲染）。

@@ -103,6 +103,29 @@
 
 ---
 
+## 开发中（v0.5.5 起累积，未发版）— 描边实时平均色四件套（INBOX #5）
+
+> v0.5.4 发版后按用户指示直接开工的下一版内容。实测包 `AudioVisGUI_09120209.exe`。
+
+### 新功能
+- **描边"实时按内容平均色"**（`Outline colour` 下拉四模式）：
+  - `perbar`：每根柱的描边 = **该柱可视区**的图片平均色（各柱不同）；
+  - `uniform`：所有柱共用一个色 = 全部可视区的平均；
+  - `perframe`：折线类用，本帧整个可视区平均色；
+  - `image`：保留原"整图平均色"（加载/Use average 时算一次，不随帧）。
+- **描边四边独立**：上/下/左/右缘各自可开关 + 各自厚度；"Outline width" 主滑块统一预设四边，
+  再想单独调某一缘用分缘滑块。
+- **预览自动降负载**：描边实时平均色在**预览**里默认按 ~8 次/秒重算并在帧间平滑逼近（颜色连续变化不跳、
+  不逐帧硬算防崩）；**导出**始终逐帧精确。`Outline fps (preview)` 与 `Outline smoothing` 可调。
+
+### 升级注意事项
+- 旧预设的 `maskImage` 无 `outlineMode` 字段 → 默认 `image`，描边观感与 v0.5.4 一致（四边默认全开、默认厚 2）。
+- CLI 键：`--set mask.outlineMode=perbar|uniform|perframe|image`、`mask.outTop/outBottom/outLeft/outRight=0/1`、
+  `mask.outWTop/…`、`mask.outlinePreviewFps`、`mask.outlineTemporal`。
+- 模式 token 用小写（`perbar`/`perframe`）。
+
+---
+
 ## v0.5.3 — 2026-09-09（锚定缩放修复 + CAD 吸附辅助线 + 范围内外视觉 + 空格播放）
 
 ### 新功能

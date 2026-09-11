@@ -52,6 +52,21 @@ struct MaskImageLayer
     float brightness = 1.0f;       // 0..2，RGB × b（sRGB 空间近似）
     float contrast   = 1.0f;       // 0..2，以 0.5 为轴 (v−0.5)×c+0.5
     float saturation = 1.0f;       // 0..2，向灰度 lerp：luma+(v−luma)×s
+
+    // ---- v0.5.5 INBOX #5：描边实时平均色 + 四边独立开关/厚度 + 预览降频/插值 ----
+    // 描边色模式（默认 image = v0.5.4 行为，旧 JSON/预设零变化）：
+    //   "image"    整图平均色（加载/Use average 按钮时算一次；不随帧，向后兼容）
+    //   "uniform"  本帧所有柱可视区**并集**的平均色（一色描所有边）
+    //   "perBar"   每根柱各算本柱可视区的平均色（bar 系才有意义；折线自动退化为 uniform）
+    //   "perFrame" 本帧整个可视区一色（line 系；bar 系效果同 uniform 的另一叫法）
+    juce::String outlineMode = "image";
+    bool  outTop = true, outBottom = true, outLeft = true, outRight = true;
+    float outWTop = 2.0f, outWBottom = 2.0f, outWLeft = 2.0f, outWRight = 2.0f;
+    // 预览降频/插值（**只 GUI**；离线导出默认关，逐帧真算保精确）
+    //   默认 8fps：视频 30fps 但描边色每 8 次/秒刷新已够"跟手"；指数逼近窗口 ≈ 8 帧（≤0.35s）无跳变。
+    float outlinePreviewFps = 8.0f;   // 0 = 关节流（每帧真算）
+    bool  outlineTemporal = true;      // 帧间把当前色向目标色指数逼近（=用户说的"平滑渐变到下一秒"）
+    int   outlineLookaheadFrames = 0;  // 真·未来帧预渲染：默认关（见 PLAN 讨论）
 };
 
 struct SpectrumParams

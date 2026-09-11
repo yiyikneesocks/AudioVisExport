@@ -18,6 +18,7 @@
 #include "../core/SpectrumParams.h"
 #include "../core/VisTransform.h"
 #include "../core/SpectrumStyle.h"
+#include "../core/SpectrumMask.h"
 #include "../core/BandFrame.h"
 #include <array>
 #include <map>
@@ -72,6 +73,8 @@ private:
     DragMode dragMode = DragMode::None;
     int selectedImage = -1;             // 当前选中元素：-1 = 频谱，>=0 = params.images 下标
     bool editMaskImage = false;         // v0.5.4：蒙版图片编辑模式
+    // v0.5.5 #5e：描边实时平均色的**预览**节流+插值缓存（导出不用它，逐帧真算）
+    SpectrumMask::PreviewPaletteCache maskPalette;
     bool dragBaseline  = false;         // v0.5.4 #4：基线轴拖拽中
     float baselineScreenY = -1e9f;      // #4：轴线的画布 y（paint 时更新，命中测试用）
     float dragStartOffX = 0.0f, dragStartOffY = 0.0f;   // 拖图起始 offset

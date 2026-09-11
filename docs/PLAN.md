@@ -70,8 +70,8 @@
   → `392a18d`/`da31217`（#6 Layers 改名 + #7 报告 + #5 下一轮设计）。
   公告正文＝`docs/RELEASE_NOTES.md` v0.5.4 节；版本号四处同步
   （CMake project+target ×2 / CLI --help / GUI `getApplicationVersion`——后者此前长期停在 0.3.1，一并修正）。
-  **v0.5.5 首项＝INBOX #5 蒙版描边实时平均色四件套**（设计/默认值见下方专项节；
-  唯一待用户确认＝要不要真·未来帧预渲染）。
+  **v0.5.5 首项 #5 已实现**（描边四边独立 + 实时平均色四模式 + 预览降频插值；见下方专项节；
+  部署 `AudioVisGUI_09120209.exe` 待用户实测；唯一未做＝真·未来帧预渲染，默认关）。
   - ✅ 已完成：A1 ColorMap / A2 bar-mirror（**后于 #3.1 删除**，改为 bar + 基线轴 50%）/ A3 CrystalStyle v2 bloom / A4 频谱蒙版图片
     （BUG1 漂移修复 + BUG2 独立拉伸）/ Tabbed UI（4 tab）/ Baseline axis（baselineY）
     / Bar 布局 pitch 模型重做（#25 + #1' + #3''）/ Bar-line 峰帽 v3（连贯分段）
@@ -173,11 +173,12 @@
   - ⏳ 导出侧范围内裁剪回归待用户复测（v0.5.3 遗留）。
   - P-verify 缩放/旋转时的吸附辅助线（v0.5.3 可选项）。
 
-## 下一轮专项：#5 蒙版描边"按内容实时平均色"四件套（设计已定，含默认值）
+## ✅ 已完成：#5 蒙版描边"按内容实时平均色"四件套（2026-09-12 已实现）
 
-> 用户 INBOX #5（a~f）。本轮因体量最大（跨 core 描边算法 + 参数模型 + UI + 序列化 + 预览性能）
-> 且刚吃过 #2 那种"急着塞导致回归"的教训，**单列下一轮实现**；设计先行、默认值已替用户拍定，
-> 只有一处需用户确认（见 ⚠️）。#6/#7 已在上一提交完成。
+> 用户 INBOX #5（a~f）**已全部实现**（`vis_mask_test` 用例 7~10 锁死；部署 `AudioVisGUI_09120209.exe` 待实测）。
+> 默认值（我替用户拍定）：`outlinePreviewFps=8`、`outlineTemporal=true`、`outlineLookaheadFrames=0`。
+> ⚠️ 唯一未做＝真·未来帧预渲染（5e 的一种实现，默认关，收益小成本高）；若用户要再加。
+> 下面原设计记录保留（实现即按其执行；模式 token 因简化统一存**小写** `perbar`/`perframe`）。
 
 ### 数据模型（`SpectrumParams::MaskImageLayer` 追加）
 - `outlineColorMode`（String，默认 `perBar`）四选一，覆盖 a/b/d/f：
