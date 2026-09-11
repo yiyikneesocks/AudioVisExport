@@ -326,6 +326,40 @@
 - ⚠️ 记录一个文档与现实的差异：`PYTHON_ENVIRONMENT.md` 决策树把"一次性临时脚本"指向 `uv`，
   但本机**尚未安装 uv**——文档先行、工具未到位；需要时说一声即装。
 
+**INBOX 1~4（2026-09-11 23:3x）· 填充渐变跟随轴 + 图层列表黑盒回归 + GUI 中文乱码根因**：
+- **#1 填充渐变改"从轴出发向上下淡出"**：盘点全仓库竖向渐变只有 3 处（`grep ColourGradient`）——
+  bar / bar-line / crystal，且**都锚在柱体几何外缘**（底浓 0.85 → 顶淡 0.35/0.40），所以轴在中间时
+  最浓处落在下缘、观感仍是"固定从下往上"。改法：bar 拆两臂各一条以 `axisY` 为起点的渐变；
+  bar-line 的梯形天然横跨轴（`baselineTop≥a`、`baselineBottom≤a` 恒成立）→ 按 `axisY` 切成上下两块各画各的；
+  crystal 上臂本已正确（渐变起点就是轴），**下臂误复用同一条渐变**——轴以下落在渐变线段之外，被 JUCE
+  钳到端点色 → 整片 0.50 实色 → 给它独立的"轴→画布底"渐变。三者 **a=0 时全部退化为旧几何 → 零回归**。
+  `vis_peaks_test` 新用例量化"最浓行在轴附近"（轴处 alpha=216、柱底缘 109），负对照（BarStyle 退回旧码）
+  → 精准 2 FAIL（161 vs 212）。注：y2k-line / polyline 填充是平涂 tint，无竖向渐变可改（已回问是否也要加淡出）。
+- **#2 图层列表全黑 = 我上轮引入的回归**：`ListBox` 把行数缓存在 `totalItems`，**只有 `updateContent()`
+  会重新问 `model->getNumRows()`**；JUCE 头文件对 `ListBox::repaint()` 明示 "does not invoke updateContent()"。
+  我第一次 `updateContent` 发生在 `layerRows` 仍为空时 → 缓存 0 行 → 此后永远不绘制任何行，只剩深色底。
+  修复＝`refreshLayerList` 末尾补 `updateContent()`；顺带修掉 `ListBox layerList {"LayerStack", this}`
+  ——成员初始化列表里外泄 `this` 且 `layerList` 声明早于 `layerRows`，改为构造函数体内 `setModel (this)`。
+  **新增无头渲染回归**（`vis_tabs_test` 用例 4）：`paintEntireComponent` 把 ListBox 画进 Image 后统计
+  亮色（文字）像素 → 修复后 463；**负对照删掉 `updateContent()` → 0 亮像素 + FAIL**（复现用户所见）。
+  另加用例 5：行颜色串必须解析为不透明（防"颜色串写错→字透明看不见"同类问题）。
+- **#3 GUI 中文乱码（根因＝解码，不是字体）**：`WinDragCompat::relayDrop` 用 `DragQueryFile`（TCHAR 宏）
+  + `std::vector<TCHAR>`，而**本工程未定义 UNICODE**（JUCE CMake 不注入，`build.ninja` 实测无 `-DUNICODE`）
+  → `TCHAR=char` → 实际调用 **`DragQueryFileA`，返回系统 ANSI（中文 Windows=GBK）字节**；再交
+  `juce::String(const char*)` 时其构造用 **`CharPointer_ASCII`**（JUCE 源码自带断言："8-bit data 含 >127
+  的值 can NOT be correctly converted to unicode"）→ 中文路径乱码。
+  修复＝**显式 `DragQueryFileW` + `std::vector<wchar_t>` + `String(const wchar_t*)`**（UTF-16 无损），
+  与 UNICODE 宏是否定义彻底解耦。**渲染侧无需改动**：`FontOptions::fallbackEnabled` 默认 true，
+  JUCE 的 `SimpleShapedText` 在缺字形时调 `Font::findSuitableFontForText` → Windows 走 DirectWrite
+  `createSystemFallback`（命中微软雅黑），所以解码修好后中文自然显示。
+  ⚠️ 我一度在 `Main.cpp` 加全局 `Font::setPreferredFallbackFamilies({...})`，**Linux 编译直接报错**
+  （它是 `Font` 成员函数、非静态）→ 撤回并在原处留注释解释为何不需要。**教训：本地"能编过"不等于
+  跨平台编译通过；改 Windows-only 文件（`#if JUCE_WINDOWS`）必须靠 Windows 交叉构建验证，Linux 构建是假绿。**
+  为何症状是"有时候"：正常非提权走 OLE（JUCE 自己用宽字符 API，无此问题），只有走 WM_DROPFILES 兜底链才发作。
+- **#4 遵从用户指示**：`🅿 频带三问` 报告保留在 REPLY；本轮收尾已按用户要求重读 INBOX 检查更新。
+- 验证：Linux 全量 0 error；**四套回归 ALL PASS**（含两处新负对照）；Windows 交叉构建
+  `WinDragCompat.cpp.obj` 正常编译（该文件 Linux 不编译，Windows 构建才是真验证）→ 部署 `AudioVisGUI_09112323.exe`。
+
 **验证记录**：
 - Linux + Win 交叉双构建 0 error（`ninja AudioVisGUI AudioVisExport`）。
 - `vis_mask_test`：3 断言 ALL PASS（contain 居中 / 漂移=0 / 手柄=渲染）。

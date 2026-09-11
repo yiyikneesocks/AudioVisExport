@@ -58,7 +58,7 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-11 20:2x）
+## 当前状态（最后更新：2026-09-11 23:3x）
 
 - **v0.5.3 已完整发版**（2026-09-09，tag `v0.5.3` + GitHub Release 已发）。
 - **v0.5.4 编码中（重点＝频谱样式 + 蒙版图片 + 基线轴 + 崩溃报告）**：
@@ -87,6 +87,37 @@
       新增常驻 `scripts/vis_peaks_test.cpp`（16 断言 + 负对照精准 5 FAIL）。
     - ✅ **#F 末柱斜面 / 频带高度三问报告** → 已写入 `INBOX_REPLY.md`「📣 关键汇报」首节（用户点名位置）。
     - ⏳ 待用户实测：#3 全量（bar 双侧帽 / line 开关 / crystal 下侧）+ #9 汇报是否已看到。
+  - 🔧 **本轮 2026-09-11 23:3x 新增（用户实测反馈 INBOX 1~4）**：
+    - ✅ **#1 填充渐变改为"从轴出发向上下淡出"**：三处有竖向渐变的样式（bar / bar-line / crystal）
+      原先都锚在柱体**外缘**（底浓顶淡），轴拖到中间时最浓处落在下缘而非轴上。
+      bar = 拆上下臂各一条渐变；bar-line = 梯形按 axisY 一刀切两块（a=0 时下块零面积 → 与原图完全一致）；
+      crystal = 上臂本就以轴为起点（正确），但**下臂直接复用同一条渐变** → 轴以下落在渐变线之外被
+      JUCE 钳到端点色 → 整片均匀 0.50 实色（与上臂淡出不称）→ 给它单独一条"轴→画布底"的渐变。
+      `vis_peaks_test` 新增断言"最浓行必须在轴附近"（bar/bar-line 各 2 条；实测轴处 alpha=216=0.85×255、
+      柱底缘 109），**负对照**（BarStyle 退回单条旧渐变）→ 精准 2 FAIL（161 vs 212，浓在柱底缘）。
+      注：y2k-line / polyline 的填充是**平涂 tint**（无竖向渐变），本次无物可改；已在 REPLY 问是否也要加同款淡出。
+    - ✅ **#2 图层列表"一直是黑的"= 我上轮引入的回归，已修**：根因＝`ListBox` 把行数缓存在 `totalItems`，
+      **只有 `updateContent()` 会重新问 `model->getNumRows()`**，而 JUCE 头文件对 `repaint()` 明示
+      "does not invoke updateContent()"。我首次 `updateContent` 发生在 `layerRows` 还为空时 → 缓存 0 行 →
+      之后永远不画行，只剩我设的深色底。修复＝`refreshLayerList` 里补 `layerList.updateContent()`；
+      顺带把 `ListBox layerList{"LayerStack", this}`（成员初始化器里外泄 this、且早于 layerRows 构造）
+      改成构造体内 `setModel (this)`。
+      **新增无头渲染回归**（`vis_tabs_test` 用例 4）：把 ListBox 用 `paintEntireComponent` 画进 Image，
+      数"文字亮度像素"——修复后 463 px 有字；**负对照**（删掉 updateContent）→ **0 px 纯黑盒 + FAIL**，
+      正是用户所见。另加用例 5 断言行颜色串解析为不透明（防"颜色写错→透明字"这一类）。
+    - ✅ **#3 GUI 中文乱码：根因是解码不是字体**（用户说"尽可能修复"，我按证据定性）：
+      `WinDragCompat::relayDrop` 用 `DragQueryFile`（TCHAR 宏）+ `std::vector<TCHAR>`，而**本工程 CMake 不定义
+      UNICODE**（JUCE 不注入；`build.ninja` 实测无 `-DUNICODE`）→ `TCHAR=char` → 走 **A 版返回系统 ANSI
+      （中文 Windows=GBK）字节** → 再交 `juce::String(const char*)`，而它按 **`CharPointer_ASCII`** 解析
+      （JUCE 源码对 >127 字节自带断言 "can NOT be correctly converted to unicode"）→ 中文路径乱码。
+      修复＝**强制 `DragQueryFileW` + `std::vector<wchar_t>` + `String(const wchar_t*)`**（UTF-16 无损）。
+      渲染侧确认**无需改**：`FontOptions::fallbackEnabled` 默认 true，JUCE 文本布局缺字形时自动走
+      `findSuitableFontForText` → DirectWrite 系统回退（命中微软雅黑）。我一度加全局
+      `Font::setPreferredFallbackFamilies(...)`，**Linux 编译即报错——它是 Font 成员函数不是静态**，已撤回并
+      在 Main.cpp 留注释说明为何不需逐字体处理。OLE 正常路径由 JUCE 自己用宽字符 API，本来就没这问题
+      ——所以症状是"有时候"（仅 WM_DROPFILES 兜底链发作）。
+    - ⏳ **#4**：用户要求 `🅿 频带三问` 报告**暂留 REPLY**，并要我做完回头检查 INBOX 是否更新（本轮已执行）。
+    - ⏳ 用户挂起项：某个文件"拖不进来提示文件不存在"（已明确报错，暂搁置待其多轮测试）。
   - 🔧 **本轮 17:5x 新增（用户实测反馈 A~H）**：
     - ✅ 用户确认通过：A（outline 不再崩溃）/ B（bar-mirror 已删）/ C（bar 帽跟轴双侧）/ D（line 系开关）。
     - ✅ **#E crystal 两侧亮度不一致**：pass1 实体描边与 pass2 高光原先**只画上臂**，下臂只剩辉光+填充

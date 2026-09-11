@@ -119,9 +119,25 @@ void BarStyle::render (juce::Graphics& g,
             bottom = rp.primary.withAlpha (0.85f);
             top    = rp.secondary.withAlpha (0.35f);
         }
-        juce::ColourGradient grad (bottom, x, yBtm, top, x, y, false);
-        g.setGradientFill (grad);
-        g.fillRect (x, y, barW, h);
+
+        // v0.5.4 #1：渐变**以轴为起点向上下各自淡出**（旧写法整根柱一条"底浓顶淡"，
+        //   轴拖到中间时最浓处落在柱底外缘而不是轴上，看起来仍像固定从下往上）。
+        //   拆成两臂各一条渐变：a=0 时下臂高度 0、上臂 ≡ 旧几何 → 零回归。
+        const float axisY = normalizedToY_ (a, canvas);
+        const float hUp = axisY - y;
+        if (hUp >= 1.0f)
+        {
+            juce::ColourGradient gUp (bottom, x, axisY, top, x, y, false);
+            g.setGradientFill (gUp);
+            g.fillRect (x, y, barW, hUp);
+        }
+        const float hDn = yBtm - axisY;
+        if (hDn >= 1.0f)
+        {
+            juce::ColourGradient gDn (bottom, x, axisY, top, x, yBtm, false);
+            g.setGradientFill (gDn);
+            g.fillRect (x, axisY, barW, hDn);
+        }
     }
     // 重置 gradient（JUCE 需手动清除，否则影响后续绘制）
     g.setColour (juce::Colours::white);

@@ -50,7 +50,12 @@ namespace
         {
             auto& lf = juce::LookAndFeel::getDefaultLookAndFeel();
             lf.setDefaultSansSerifTypefaceName ("Segoe UI");
-            // JUCE 8 API: setDefaultSansSerifFont also accepts options
+            // 中文渲染：无需在此特殊处理。JUCE 文本布局在主字体缺字形时会自动走
+            // Font::findSuitableFontForText → 系统回退（Windows 上 DirectWrite 命中微软雅黑等），
+            // 且 FontOptions::fallbackEnabled 默认 true。之前的"中文乱码"根因是**解码**而非字体：
+            // WM_DROPFILES 兜底用了 DragQueryFile A 版返回 GBK 字节再按 CharPointer_ASCII 解析
+            // （见 WinDragCompat.cpp 的 v0.5.4 修复）——解码修好后回退链自然生效。
+            // 注：setPreferredFallbackFamilies 是 Font 成员函数、非全局静态，故不在此逐字体设置。
         }
 
         void initialise (const juce::String&) override

@@ -76,6 +76,8 @@ public:
                                bool spectrumPresent);
     // v0.5.4 #H：图层列表数据刷新（MainComponent 每 tick 在选中变化时调；内部按内容哈希去抖）
     void refreshLayerList (int selectedImage, bool maskEditMode);
+    // v0.5.4 #H：图层行数（诊断/测试用；vis_tabs_test 靠它验证列表真的被填过）
+    int layerRowCount() const noexcept { return (int) layerRows.size(); }
 
     // ---- v0.5.4 #G：切页残留自检（安全网与 vis_tabs_test 共用同一判据）----
     //   返回"既不属于任何行、也不是行标签、又没登记为常驻"的直接子组件。
@@ -120,7 +122,9 @@ private:
 
     std::vector<juce::Component*> widgetOrder;                // 仅布局顺序参考
     // v0.5.4 #H：可见图层栈
-    juce::ListBox layerList { "LayerStack", this };
+    // 注意：构造时**不**把 this 传进 ListBox（成员声明顺序上 layerList 先于 layerRows，
+    // 且在完整对象构造完成前外泄 this 是隐患）；改在构造函数体里 setModel (this)。
+    juce::ListBox layerList { "LayerStack" };
     struct LayerRow { int tag = layerTagSpectrum; juce::String text, colour; bool selected = false; };
     std::vector<LayerRow> layerRows;
     juce::String layerListHash;                       // 内容哈希：没变就不重建（每 tick 调也便宜）

@@ -47,13 +47,19 @@ namespace avx::winDragCompat
             }
 
             juce::ComponentPeer::DragInfo info;
-            const UINT numFiles = DragQueryFile (hDrop, (UINT) -1, nullptr, 0);
+            // v0.5.4 中文乱码修复：必须用 DragQueryFile**W**（UTF-16）。
+            //   旧代码用 DragQueryFile（TCHAR 宏）+ std::vector<TCHAR>，而本工程 CMake 未定义
+            //   UNICODE（JUCE 不注入、build.ninja 实测无 -DUNICODE）→ TCHAR=char → 走 A 版返回
+            //   **系统 ANSI（中文 Windows = GBK）** 字节；再喂给 juce::String(const char*) 时它按
+            //   CharPointer_ASCII 解析（源码里对 >127 字节自带断言："can NOT be correctly converted
+            //   to unicode"）→ 中文文件路径乱码。W 版经 String(const wchar_t*) 无损转 UTF-16。
+            const UINT numFiles = DragQueryFileW (hDrop, (UINT) -1, nullptr, 0);
             for (UINT i = 0; i < numFiles; ++i)
             {
-                const UINT len = DragQueryFile (hDrop, i, nullptr, 0);
-                std::vector<TCHAR> buf ((size_t) len + 1, 0);
-                DragQueryFile (hDrop, i, buf.data(), (UINT) buf.size());
-                info.files.add (juce::String (buf.data()));
+                const UINT len = DragQueryFileW (hDrop, i, nullptr, 0);
+                std::vector<wchar_t> buf ((size_t) len + 1, 0);
+                DragQueryFileW (hDrop, i, buf.data(), (UINT) buf.size());
+                info.files.add (juce::String (buf.data()));   // wchar_t* → 走 UTF-16 重载
             }
             DragFinish (hDrop);
 

@@ -88,6 +88,56 @@ int main()
         panel.removeChildComponent (probe);
     }
 
+    // ---- 4) #H 图层栈真的有内容、真的画得出字（回归"列表一直黑"）----
+    {
+        panel.refreshLayerList (-1, false);          // 无图片：至少该有 Spectrum + Mask image 两行
+        const int rows = panel.layerRowCount();
+        std::printf ("      layer rows = %d\n", rows);
+        check (rows >= 2, "layer stack is populated (Spectrum + Mask image rows at minimum)");
+
+        juce::ListBox* lb = nullptr;
+        for (auto* c : panel.getChildren())
+            if (auto* p = dynamic_cast<juce::ListBox*> (c)) { lb = p; break; }
+        check (lb != nullptr, "layer ListBox exists as a child component");
+        if (lb != nullptr)
+        {
+            lb->setBounds (0, 0, 300, 160);
+            juce::Image shot (juce::Image::ARGB, 300, 160, true);
+            {
+                juce::Graphics g (shot);
+                lb->paintEntireComponent (g, true);
+            }
+            int light = 0, dark = 0;
+            juce::Image::BitmapData bd (shot, juce::Image::BitmapData::readOnly);
+            for (int y = 0; y < shot.getHeight(); ++y)
+            {
+                const auto* line = reinterpret_cast<const juce::PixelARGB*> (bd.getLinePointer (y));
+                for (int x = 0; x < shot.getWidth(); ++x)
+                {
+                    const int lum = line[x].getRed() + line[x].getGreen() + line[x].getBlue();
+                    if (line[x].getAlpha() > 40)
+                        { if (lum > 330) ++light; else if (lum < 120) ++dark; }
+                }
+            }
+            std::printf ("      painted ListBox: light(text) px=%d  dark px=%d\n", light, dark);
+            // 曾经的 bug：只调 repaint() 未调 updateContent() → ListBox 缓存 0 行 →
+            //   画出来是一整块深色底、零文字像素（用户报"看不到图层显示，一直是黑的"）。
+            check (light > 200, "layer stack actually paints readable text (not an all-black box)");
+            check (dark > 0, "layer stack background is drawn (sanity: widget is not blank/transparent)");
+        }
+    }
+
+    // ---- 5) #H 行颜色串必须是**不透明**的（防"颜色串写错 → 文字透明看不见"这一类）----
+    {
+        bool allOpaque = true;
+        for (const char* s : { "ffffffff", "ffb8b8c4", "ffffa8d4", "ff8fd4ff" })
+        {
+            const auto c = juce::Colour::fromString (s);
+            if (c.getAlpha() < 250) { allOpaque = false; std::printf ("      bad colour %s\n", s); }
+        }
+        check (allOpaque, "layer row colour strings parse to opaque colours");
+    }
+
     std::printf ("\n%s\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT");
     return failures == 0 ? 0 : 1;
 }

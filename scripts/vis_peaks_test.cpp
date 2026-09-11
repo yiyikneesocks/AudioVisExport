@@ -211,6 +211,36 @@ int main()
         check (dn >= up * 4 / 5, "crystal #E: lower arm stroke as strong as upper (both sides lit)");
     }
 
+    // ================= #1 填充渐变以轴为起点向上下淡出 =================
+    //   判据：填充最浓处（alpha 最大的一行）必须落在**轴**附近，而不是柱底外缘。
+    //   primary(255,0,0)@0.85 在轴 → alpha≈216；secondary(0,255,0)@0.35 在外缘 → alpha≈89。
+    {
+        auto f = makeFrame (-40.0f, -40.0f);       // n=0.5，柱跨 y=100..300，轴在 y=200
+        auto rp = baseRp(); rp.baselineY = 0.5f; rp.barParticles = false;
+        for (const char* st : { "bar", "bar-line" })
+        {
+            auto img = render (st, f, rp);
+            int bestAxis = 0, bestEdge = 0;
+            juce::Image::BitmapData bd (img, juce::Image::BitmapData::readOnly);
+            auto rowAlphaAt = [&bd] (int y, int x) {
+                return (int) reinterpret_cast<const juce::PixelARGB*> (bd.getLinePointer (y))[x].getAlpha();
+            };
+            const int xc = 12;                     // 落在第 1 根柱体内（x0≈4.2，barW≈21.6）
+            int mx = 0;
+            for (int y = 0; y < H; ++y) mx = std::max (mx, rowAlphaAt (y, xc));
+            // 轴附近 ±12 行 vs 柱底外缘附近（y≈292..300 内侧 8 行，避开 1px 缘线）
+            for (int y = 188; y <= 212; ++y) bestAxis = std::max (bestAxis, rowAlphaAt (y, xc));
+            for (int y = 284; y <= 292; ++y) bestEdge = std::max (bestEdge, rowAlphaAt (y, xc));
+            std::printf ("      [%s #1] maxAlpha=%d  nearAxis=%d  nearBottomEdge=%d\n",
+                         st, mx, bestAxis, bestEdge);
+            char buf[160];
+            std::snprintf (buf, sizeof buf, "%s: fill is densest at the axis, not the bottom edge", st);
+            check (bestAxis > bestEdge + 30, buf);
+            std::snprintf (buf, sizeof buf, "%s: axis row carries the dense primary colour", st);
+            check (bestAxis > 170, buf);
+        }
+    }
+
     std::printf ("\n%s\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT");
     return failures == 0 ? 0 : 1;
 }

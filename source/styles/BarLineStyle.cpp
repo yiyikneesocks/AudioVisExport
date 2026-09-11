@@ -76,20 +76,43 @@ void BarLineStyle::render (juce::Graphics& g,
         const float yPeak  = juce::jmin (yEdgeL, yEdgeR);   // 顶边最高点
         if (yBotL - yPeak < 1.0f && yBotR - yPeak < 1.0f) continue;
 
-        juce::Path bar;
-        bar.startNewSubPath (xL, yEdgeL);
-        bar.lineTo          (xR, yEdgeR);
-        bar.lineTo          (xR, yBotR);
-        bar.lineTo          (xL, yBotL);
-        bar.closeSubPath();
-
         const juce::Colour bottom = useMap ? cm.colourForBand (i, N, n[(size_t) i]).withAlpha (0.85f)
                                            : rp.primary.withAlpha (0.85f);
         const juce::Colour top    = useMap ? cm.colourForBand (i, N, n[(size_t) i]).withAlpha (0.40f)
                                            : rp.secondary.withAlpha (0.35f);
-        juce::ColourGradient grad (bottom, 0.0f, (yBotL + yBotR) * 0.5f, top, 0.0f, yPeak, false);
-        g.setGradientFill (grad);
-        g.fillPath (bar);
+
+        // v0.5.4 #1：渐变以**轴为起点**向上下各自淡出（旧写法一条渐变从柱底外缘打到柱顶，
+        //   轴在中间时最浓处落在下缘而不是轴上）。梯形本来就横跨轴
+        //   （baselineTop≥a、baselineBottom≤a 恒成立），按 axisY 一刀切成上下两块各画各的；
+        //   a=0 时 axisY 与柱底重合 → 下块零面积、上块 ≡ 原梯形 → 零回归。
+        const float axisY = normalizedToY_ (a, canvas);
+        {
+            juce::Path up;
+            up.startNewSubPath (xL, yEdgeL);
+            up.lineTo          (xR, yEdgeR);
+            up.lineTo          (xR, axisY);
+            up.lineTo          (xL, axisY);
+            up.closeSubPath();
+            juce::ColourGradient grad (bottom, 0.0f, axisY, top, 0.0f, yPeak, false);
+            g.setGradientFill (grad);
+            g.fillPath (up);
+        }
+        {
+            const float yBotMid = (yBotL + yBotR) * 0.5f;
+            if (yBotMid - axisY >= 1.0f)
+            {
+                juce::Path dn;
+                dn.startNewSubPath (xL, axisY);
+                dn.lineTo          (xR, axisY);
+                dn.lineTo          (xR, yBotR);
+                dn.lineTo          (xL, yBotL);
+                dn.closeSubPath();
+                juce::ColourGradient grad (bottom, 0.0f, axisY, top, 0.0f, yBotMid, false);
+                g.setGradientFill (grad);
+                g.fillPath (dn);
+            }
+        }
+        g.setColour (juce::Colours::white);   // 清渐变，别污染后面的描边
 
         // 顶边斜面描边（宽度随 lineWidth）
         juce::Path topEdge;

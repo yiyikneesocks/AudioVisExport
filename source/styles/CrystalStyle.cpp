@@ -232,7 +232,17 @@ void CrystalStyle::renderPass (juce::Graphics& g, int pass,
                 for (size_t i = 1; i < dnPts.size(); ++i) fillDn.lineTo (dnPts[i]);
                 fillDn.lineTo (dnPts.back().getX(), yBot);
                 fillDn.closeSubPath();
-                g.setGradientFill (grad);
+                // v0.5.4 #1：下臂必须用它**自己**那条渐变（轴→画布底，由浓到淡）。
+                //   原先直接复用 grad（轴→画布顶），轴以下落在渐变线之外 → JUCE 钳到端点色
+                //   → 下臂整片均匀的 0.50 实色，与上臂的淡出效果不对称。
+                juce::ColourGradient gradDn (rp.primary.withAlpha (0.50f),
+                                             0.0f, yBot,
+                                             rp.secondary.withAlpha (0.15f),
+                                             0.0f, (float) inner.getBottom(),
+                                             false);
+                gradDn.point1 = juce::Point<float> ((float) inner.getX(), yBot);
+                gradDn.point2 = juce::Point<float> ((float) inner.getX(), (float) inner.getBottom());
+                g.setGradientFill (gradDn);
                 g.fillPath (fillDn);
             }
             g.setColour (juce::Colours::white);  // 清除 gradient

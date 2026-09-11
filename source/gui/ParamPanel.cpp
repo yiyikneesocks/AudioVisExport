@@ -301,6 +301,7 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     addHeader ("Layers");
     // v0.5.4 #H：可见图层栈。把每层的 z 序 / 文件是否还在 / 能否解码 / 变换倍数额摊开显示，
     //   专治"拖进去没反应""手柄框跑到画布外"这类**状态看不见**的问题（用户建议）。
+    layerList.setModel (this);   // 见 .h 注释：对象构造完成后再挂 model
     layerList.setRowHeight (22);
     layerList.setMultipleSelectionEnabled (false);
     layerList.setColour (juce::ListBox::outlineColourId, juce::Colour (0xff3a3a44));
@@ -934,6 +935,11 @@ void ParamPanel::refreshLayerList (int selectedImage, bool maskEditMode)
         layerRows.push_back (lr);
     }
 
+    // ⚠️ 必须 updateContent()：ListBox 把行数缓存在 totalItems，**只有 updateContent() 会重新问
+    //   model->getNumRows()**；JUCE 头文件对 repaint() 明示 "does not invoke updateContent()"。
+    //   首次 updateContent 发生在 layerRows 还是空的时候 → 缓存 0 行 → 之后永远不画行，
+    //   只剩我们设的深色底 —— 用户实测所见"图层列表一直是黑的"。
+    layerList.updateContent();
     for (int i = 0; i < (int) layerRows.size(); ++i)
         if (layerRows[(size_t) i].selected)
         {
