@@ -18,6 +18,7 @@
 > | 某任务的决策细节 / 指纹 | `docs/inbox/INBOX_WORKLOG.md` |
 > | 已知 bug / 限制 | 本文档 §4.5 已知限制（L1-L11） |
 | 崩溃转储怎么定位 / 辅助工具环境 | 本文档 §5.9 + `tools/dmp_report.py`（python venv，非构建依赖） |
+| Python 环境该用哪个 / 怎么避免污染 | 本文档 §5.10（三场景速查 + 踩坑清单）；权威文档 `~/CodingProgram/PYTHON_ENVIRONMENT.md` |
 > | 发版公告（用户视角） | `docs/RELEASE_NOTES.md` |
 > | 长期方向 / 候选功能 | `docs/ROADMAP.md` |
 > 注意：你后续推进任何操作以后都要按下方「文档地图」分工更新对应文档——**任务进展写 `PLAN.md`，发版写 `HISTORY.md` + `RELEASE_NOTES.md` + 本文档版本映射表**。先读相关文档，和 GUI 源码实际内容交叉比对，避免“把推断当事实写入文档”。
@@ -719,6 +720,41 @@ tools/.../python tools/dmp_report.py <exe目录>/crash/crash_YYYYmmdd_HHMMSS.dmp
 两个实现坑（都踩过并修）：① 判断"是否已在 venv 内"**不能用 `realpath` 比较**——venv 的 `bin/python`
 是指向 seeding 解释器的符号链接，realpath 会把两者判成同一个、导致永不跳转（改为比较 `bin` 目录）；
 ② `os.execv` 前必须 `sys.stdout.flush()`，否则跳转提示随缓冲丢失。
+
+---
+
+### 5.10 Python 环境指南（本工程用法）
+
+> **权威文档**：`~/CodingProgram/PYTHON_ENVIRONMENT.md`（用户维护，那里定义了全部环境与选型决策树）。
+> 本节只记**本工程实际遇到的坑与正确用法**，不重复用户文档的完整架构。
+
+#### 本工程用 Python 的场景（三个，都不是"项目的运行时"——项目是纯 C++）
+
+| 场景 | 正确做法 | 命令 |
+|---|---|---|
+| **一次性查个东西**（读个 .dmp、探一下 map、画个图试尺寸）| `uv run --with <pkg>`（文档决策树首选；零安装、缓存在 `~/.cache/uv`） | `uv run --with minidump python tools/dmp_report.py <dmp> --map build_win/AudioVisGUI.map` |
+| **本项目的固定工具**（`tools/*.py`，按需反复用） | `tools-venv`（建在仓库**外面** `~/CodingProgram/AudioVisualizer/tools-venv`，基于系统 python 3.10，与 conda 无关） | `bash tools/setup_env.sh`（幂等）→ `python tools/dmp_report.py` 或 `python tools/gen_icon.py` |
+| **不要做的事** | ❌ 直接用 base 的 `python`（3.13，仅供 conda 自己用）跑工具 → `ModuleNotFoundError: No module named 'minidump'`；但 tools/*.py 内建了自动跳转：缺包时会 execv 到 venv 重跑 | 不用管，脚本自己跳 |
+
+#### 关键坑（按时间顺序踩过的，都在 §5.9 / §7.8 有详细记录）
+
+| 坑 | 现象 | 避法 |
+|---|---|---|
+| **conda base 自动激活** | 用户终端 `python` = base 的 3.13（无 minidump/pillow）；AI shell 是非交互的、`python` = 系统的 3.10。**两个 shell 里同一命令版本不同** | 不要拿自己的 shell 推断用户的；看 §5.9 "AI shell vs 用户终端" |
+| **`realpath` 比较永远失败** | venv 的 `bin/python` 是指向 seeding 解释器的符号链接 → `realpath(venv/python) == realpath(base/python)` → 跳转逻辑认为"已在 venv"而跳过 | 比较 `dirname(abspath(cand)) != dirname(sys.executable)`（目录不同就是不同环境） |
+| **`os.execv` 不刷缓冲** | 跳转提示写进 stdout 后直接 exec 替换进程镜像 → 消息丢失 | `sys.stdout.flush()` 放在 `os.execv` 前 |
+| **宽 `except ImportError` 吞掉用法错误** | `from minidump import MinidumpFile`（包顶层不 re-export，应该是 `from minidump.minidumpfile import`）→ 被 except 吃掉 → 表现成"venv 也缺包"，差点误判为卸载失误 | `except ImportError as e:` + `print(type(e).__name__, e)` 先看真实原因再动手 |
+| **文本模式改文件转行尾** | python `open(p, 'r')` + `open(p, 'w')` 把 CRLF 文件变成 LF → `git diff --numstat` 暴露整文件重写 | `open(p, newline='')` 读 + `open(p, newline='')` 写，或全程 `rb/wb` |
+| **venv 放在仓库内** | `find . -name "*.py"` 把 venv 的几千个第三方 `.py` 倒出来 → 协作 AI 搜代码分不清哪些是自己的 | 建在仓库外面（本项目用 `~/CodingProgram/AudioVisualizer/tools-venv`）；`.gitignore` 有防御兜底 |
+
+#### `tools/*.py` 加新工具的规矩
+
+如果将来再加 python 工具到 `tools/`：
+1. **头部写清用途、依赖、不改项目构建**（零 python 运行时依赖是本工程硬约束——CMake/Ninja/clang-cl 全程不碰 python）。
+2. `import` 失败时调 `_reexec_into_tools_venv("<pkg>")`（已抽成公共片段，照抄 dmp_report.py 头部即可）。
+3. **加进 `tools/requirements.txt`**（一行一个包名，不锁版本——这些工具不在 CI 跑、锁版本没有意义但固定包名有价值）。
+4. `tools/setup_env.sh` 不用改（它读 `requirements.txt`）。
+5. **不要把包装进 conda base**（`~/CodingProgram/PYTHON_ENVIRONMENT.md` 原则："base 只管理 conda"）。
 
 ---
 
