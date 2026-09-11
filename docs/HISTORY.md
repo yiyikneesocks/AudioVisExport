@@ -368,7 +368,7 @@
   为何症状是"有时候"：正常非提权走 OLE（JUCE 自己用宽字符 API，无此问题），只有走 WM_DROPFILES 兜底链才发作。
 - **#4 遵从用户指示**：`🅿 频带三问` 报告保留在 REPLY；本轮收尾已按用户要求重读 INBOX 检查更新。
 - 验证：Linux 全量 0 error；**四套回归 ALL PASS**（含两处新负对照）；Windows 交叉构建
-  `WinDragCompat.cpp.obj` 正常编译（该文件 Linux 不编译，Windows 构建才是真验证）→ 部署 `AudioVisGUI_09112323.exe`。
+  `WinDragCompat.cpp.obj` 正常编译（该文件 Linux 不编译，Windows 构建才是真验证）→ 部署 `AudioVisGUI_09112345.exe`。
 
 **验证记录**：
 - Linux + Win 交叉双构建 0 error（`ninja AudioVisGUI AudioVisExport`）。
