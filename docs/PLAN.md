@@ -87,7 +87,7 @@
       新增常驻 `scripts/vis_peaks_test.cpp`（16 断言 + 负对照精准 5 FAIL）。
     - ✅ **#F 末柱斜面 / 频带高度三问报告** → 已写入 `INBOX_REPLY.md`「📣 关键汇报」首节（用户点名位置）。
     - ⏳ 待用户实测：#3 全量（bar 双侧帽 / line 开关 / crystal 下侧）+ #9 汇报是否已看到。
-  - 🔧 **本轮 2026-09-11 23:3x 新增（用户实测反馈 INBOX 1~4）**：
+  - 🔧 **本轮新增（用户实测反馈 INBOX 1~4；5~8 见下方专项）**：
     - ✅ **#1 填充渐变改为"从轴出发向上下淡出"**：三处有竖向渐变的样式（bar / bar-line / crystal）
       原先都锚在柱体**外缘**（底浓顶淡），轴拖到中间时最浓处落在下缘而非轴上。
       bar = 拆上下臂各一条渐变；bar-line = 梯形按 axisY 一刀切两块（a=0 时下块零面积 → 与原图完全一致）；
@@ -167,6 +167,49 @@
 - **发版后遗留**：
   - ⏳ 导出侧范围内裁剪回归待用户复测（v0.5.3 遗留）。
   - P-verify 缩放/旋转时的吸附辅助线（v0.5.3 可选项）。
+
+## 下一轮专项：#5 蒙版描边"按内容实时平均色"四件套（设计已定，含默认值）
+
+> 用户 INBOX #5（a~f）。本轮因体量最大（跨 core 描边算法 + 参数模型 + UI + 序列化 + 预览性能）
+> 且刚吃过 #2 那种"急着塞导致回归"的教训，**单列下一轮实现**；设计先行、默认值已替用户拍定，
+> 只有一处需用户确认（见 ⚠️）。#6/#7 已在上一提交完成。
+
+### 数据模型（`SpectrumParams::MaskImageLayer` 追加）
+- `outlineColorMode`（String，默认 `perBar`）四选一，覆盖 a/b/d/f：
+  - `perBar`（a）：每根柱的描边色＝该柱**可视区**（蒙版命中的图片像素）的平均色；
+  - `perFrameRegion`（b）：line 系用，本帧整个可视区一个平均色；
+  - `uniformAllBars`（d）：所有柱共用一个色＝全部可视区（并集）的平均色；
+  - `imageAvg`（f）：**保留**现状——图片本身平均色（加载/按钮时算一次，不随帧）。
+- 四边独立（c，bar 与 line 各一套，全局作用非逐柱）：
+  `outlineTop/Bottom/Left/Right`（bool，默认 **true/true/true/true**）
+  `outlineWTop/Bottom/Left/Right`（float px，默认 **2/2/2/2**；line 默认 **1.5/1.5/1.5/1.5**）。
+- 预览性能（e）：
+  - `outlinePreviewFps`（float，默认 **8**）：描边平均色每帧不必重算，节流到 ≤8 次/秒（视频仍 30fps）；
+  - `outlineTemporalSmooth`（bool，默认 **true**）：每次节流刷新后，用指数插值把当前色**平滑逼近**目标色，
+    8Hz 刷新 + 30fps 显示看起来连续（就是用户说的"平滑渐变到下一秒"）；
+  - `outlineLookaheadFrames`（int，默认 **0 = 关**）：真正的"预渲染未来几帧"。
+
+### 计算/渲染改动
+- `SpectrumMask` 加 `averageColourInRegion(baseAlpha, image, rect|bandSlots, ...)`（预乘安全，复用现有 un/pre-multiply 逻辑）；
+  bar 逐带 = 该带柱形覆盖的像素框；line = 整块可视区。
+- `compose()` 描边段：按 mode 解析每段/每柱的 resolvedStroke；四边各自开关/厚度（erosion 环拆成 top/bottom/left/right 四条，
+  受 `outline*` 控制）；**保留 scratch buffer + null guard + 已修的 `e[x]` 不越界**（绝不回退 #1b）。
+- GUI `SpectrumCanvas::paint` 与 `VisPipeline::renderFrame` 同一份 `SpectrumMask::compose`，预览即所得不变。
+
+### 参数面板 / 序列化
+- Mask 页新增：`Color mode` 下拉 + "Edges" 子区（4 开关 + 4 厚度，用 #G 的 `addRowGroup` 整行登记防残留）。
+- JSON `mask.outline.{mode,top,bottom,left,right,wTop,...}`；CLI `--set mask.outline.mode=perBar` 等。
+- 旧 JSON 无这些字段 → 全部走上面的默认值（向后兼容）。
+
+### 测试
+- `vis_mask_test` 扩：① 只开 top 边 → 上缘有描边、其余三缘 0 描边像素；② `perBar` 两柱取不同底色 → 两柱描边色不同；
+  ③ `uniformAllBars` → 所有柱同色；④ 节流+插值：连续帧色单调逼近目标、无跳变；⑤ 负对照：关掉某缘开关该缘消失。
+
+### ⚠️ 需你（用户）确认的一处范围收敛
+- #5e 的字面要求是"实时预览提前渲染未来几帧"。我把它拆成**两层**：
+  - **本轮先做**：`outlinePreviewFps` 降频 + `outlineTemporalSmooth` 插值（成本可控、直接达到"负担更低 + 观感平滑 + 防崩"）；
+  - **`outlineLookaheadFrames` 预渲染未来帧**需要预览端"只跑频谱不合成"地超前解码若干帧，改动大、收益（对描边色而言）有限
+    ——建议**默认 0（关）**，若你坚持要真·预渲染我再单独做。请回"降频+插值够了"或"要未来帧预渲染"。
 
 ## 候选下一版（v0.5.4 → 重点：频谱样式，草案待用户拍板）
 

@@ -298,7 +298,7 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
 
     // ---- Layers（Image 页，v0.5.4 #6）----
     setBuildingTab (1);
-    addHeader ("Layers");
+    addHeader ("Layers");   // v0.5.4 #6：原 "Image" 页改名 Layers（频谱/图片/蒙版都在这里选）
     // v0.5.4 #H：可见图层栈。把每层的 z 序 / 文件是否还在 / 能否解码 / 变换倍数额摊开显示，
     //   专治"拖进去没反应""手柄框跑到画布外"这类**状态看不见**的问题（用户建议）。
     layerList.setModel (this);   // 见 .h 注释：对象构造完成后再挂 model
@@ -309,8 +309,8 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     addRow ("", &layerList, 150);
     addAndMakeVisible (layerList);
     addRow ("Add image", &addImageBtn);
-    addRow ("Move up",   &layerUpBtn);
-    addRow ("Move down", &layerDownBtn);
+    addRow ("Up",   &layerUpBtn);
+    addRow ("Down", &layerDownBtn);
     addRow ("Remove",    &layerRemoveBtn);
     addRow ("", &addSpectrumBtn);
     addRow ("", &selectSpectrumBtn);
@@ -328,7 +328,7 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     selectSpectrumBtn.onClick = [this] { if (onSelectSpectrumClicked) onSelectSpectrumClicked(); };
     addSpectrumBtn.setTooltip ("Restore deleted spectrum layer");
     selectSpectrumBtn.setTooltip ("Select spectrum layer (useful when covered by images)");
-    auto* opacitySlider = addSlider ("Img opacity %", 0, 100, 1, 1.0,
+    auto* opacitySlider = addSlider ("Layer opacity", 0, 100, 1, 1.0,
                [this] { return onReadLayerOpacity ? onReadLayerOpacity() : 100.0; },
                [this] (double v) { if (onWriteLayerOpacity) onWriteLayerOpacity (v); });
     layerOpacitySliderPtr = opacitySlider;

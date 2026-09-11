@@ -113,7 +113,7 @@ private:
     int currentTab = 0;
     int activeTabHeight() const noexcept
     { return (currentTab >= 0 && currentTab < (int) tabHeights.size()) ? tabHeights[(size_t) currentTab] : 0; }
-    juce::TextButton tabSpectrumBtn{ "Spectrum" }, tabImageBtn{ "Image" },
+    juce::TextButton tabSpectrumBtn{ "Spectrum" }, tabImageBtn{ "Layers" },
                      tabMaskBtn{ "Mask" }, tabExportBtn{ "Export" };
     void styleTabButton (juce::TextButton& b);
     void showTab (Tab t, bool pinned);               // 内部：切页 + 高亮 + 回调
