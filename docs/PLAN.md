@@ -58,7 +58,7 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-11 18:0x）
+## 当前状态（最后更新：2026-09-11 18:4x）
 
 - **v0.5.3 已完整发版**（2026-09-09，tag `v0.5.3` + GitHub Release 已发）。
 - **v0.5.4 编码中（重点＝频谱样式 + 蒙版图片 + 基线轴 + 崩溃报告）**：
@@ -111,6 +111,20 @@
       `[ok | FILE MISSING | NO DECODER]` + `scale x…`，点击行 = 选中该元素，蒙版行进出"编辑图片位置"；
       内容哈希去抖，每 tick 调用也便宜）。
     - ⏳ 用户新提"具体样式我还想进一步优化" → 等其指名样式与期望（已列待办，不阻塞）。
+  - 🧰 **主机侧辅助工具已隔离（2026-09-11 18:4x，用户要求"别装 base"）**：
+    核查确认**工程零 python 依赖**（构建只用 CMake/Ninja/clang-cl/xwin；仓库内无 `.py`，
+    `find -L` 查到的 5 个都在符号链接指向的 JUCE 里）。原先装进 conda base 的
+    `minidump`（崩溃符号化）与 `pillow`（画图标）已**卸出 base**，改由
+    `~/CodingProgram/AudioVisualizer/tools-venv`（venv 而非 conda env：conda 会复制整套解释器，
+    只有需要非 python 二进制时才值，比如 §7.5 的 gitenv）承载，并落成仓库内脚本：
+    `tools/setup_env.sh`（幂等一键重建）+ `tools/requirements.txt` +
+    `tools/dmp_report.py`（dmp+/MAP → 函数与偏移；四个历史 dump 实测全部落在
+    `SpectrumMask::compose`，`ExceptionInformation[0]=0` 即 **READ**、目标地址是野生值而非 NULL，
+    从硬证据上否掉了"分配失败返回 NULL"的旧猜测）+ `tools/gen_icon.py`
+    （`assets/icon.png` 原先**只有成品没有源**，现补上设计复刻脚本；默认不覆盖成品，均值差已如实记录）。
+    文档：`ARCHITECTURE.md` 新增 §5.9；`.gitignore` 挡住误建在仓库内的 venv。
+    ⚠️ 遗留待你定夺：base 里还有一个 pip 版 `cmake 4.4.3`，构建完全没用它（实测走 apt `/usr/bin/cmake` 3.22.1），
+    是工具不是库、影响面更大，所以没擅自卸载。
   - 📋 协作机制：INBOX 三件套 + status gate + #0/#0+/#10/#11 轮次节奏协议，
     REPLY 三固定子节结构。全部写入 PLAN.md「文档更新触发点」。
   - 🛠 **崩溃报告器已两次立功**（#1b 与本轮排查）：用户只需照常闪退，`exe/crash/*.dmp`

@@ -56,3 +56,10 @@ desktop.ini
 
 # === 人机协作收件箱（本地对话用，无需推送）===
 /docs/inbox/
+
+# 主机侧辅助工具的 venv（正常应由 tools/setup_env.sh 建在仓库**外面**；
+# 万一有人建在里面，这里挡住，别让上万个第三方 .py 污染 find/grep）
+/tools-venv/
+/.venv*/
+__pycache__/
+*.pyc

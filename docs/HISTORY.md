@@ -271,6 +271,34 @@
   (b) #G 首版用了 `std::erase_if`（C++20）与 `ListBox::setScrollbarAutoHide/updateViewport/listItemClicked` 等
   **不存在的 API**，均由编译期暴露后改正（记入 §7.8）。
 
+**主机侧辅助工具隔离（2026-09-11 18:4x）· 用户要求"别装进 base"**：
+- 核查结论：**工程本身零 python 依赖**（`scripts/*.sh` + `CMakeLists.txt` + `cmake/` 无任何 python 调用；
+  仓库内无 `.py`；`find -L` 的 5 个都在符号链接指向的 `third_party/JUCE` 内，属上游 CI 脚本）。
+- 原先落在 **conda base** 的两个包（按 dist-info mtime 追溯到本项目的两次使用）已卸出：
+  `minidump 0.0.24`（09-10 04:46，#1b 崩溃符号化）、`pillow 12.3.0`（09-06 19:21，生成 exe 图标）。
+  两者 `Requires:` 均为空 → 零传递依赖，卸载无连带。`~/.local/lib/python3.10/` 本就干净。
+- 改由 **venv**（非 conda env，理由：conda 会复制整套解释器+库，几百 MB；venv 只是薄壳。
+  需要非 python 二进制才该用 conda —— 参见 `gitenv` 那个 openssl 版 git）承载，
+  位置在**仓库外** `~/CodingProgram/AudioVisualizer/tools-venv`（放仓库内会用上万个第三方 `.py`
+  污染协作 AI 的 find/grep）。实测 venv 的 `sys.path` 不含 base 的 site-packages（隔离有效）。
+- 落库脚本：`tools/setup_env.sh`（幂等；Ubuntu 系统 python 缺 `ensurepip` 时自动回退用 conda python 建）、
+  `tools/requirements.txt`、`tools/dmp_report.py`、`tools/gen_icon.py`。
+- `dmp_report.py` 固化了此前手工做过两次的符号化链路：解析 dmp（`logging.disable` 抑制库对 PEB 的
+  traceback 噪音）→ 异常码/地址 → 模块基址 → RVA → 二分查 `/MAP` → 函数名 + 偏移 + obj；
+  并**用链接时间戳硬比对** map 与出事 exe 是否同一次构建（不同就醒目警告，避免采信错位符号）。
+  实测四个历史 dump 全部落在 `SpectrumMask::compose`，`ExceptionInformation[0] = 0` = **READ** 违例、
+  目标地址 `0x1ee58b89000` 一类野生值（**非 NULL**）→ 从硬证据否掉"Windows 分配失败返回 NULL"的早期猜测，
+  与 #1b 的 `tmp[2·y·W+x]` 越界读结论一致。
+- `gen_icon.py` 补上"图标只有成品没有源"的缺口（原 PIL 脚本从未入库）。**设计复刻而非逐位复原**：
+  均值 新 (70,47,72,244) vs 现存 (76,62,90,229)，差异（右半蓝色更多、边缘更柔）已如实写进脚本头；
+  **默认不覆盖** `assets/icon.png`，要换设计才 `--write`。
+- 文档：`ARCHITECTURE.md` 新增 §5.9（工具/环境/两个坑/证据补充）+ 速查表加一行 + §7.8 第 1 条补
+  「脚本改文件必须二进制/`newline=''`，改完查 `git diff --numstat`」；`.gitignore` 挡住误建在仓库内的 venv。
+- ⚠️ 本轮自查又踩一次行尾坑：用 python 文本模式改 `VisTransform.h`/`MainComponent.h`/`SpectrumCanvas.h`
+  把 CRLF 转成了 LF（`numstat` 显示整文件重写）→ 按 HEAD 风格还原后 diff 回到 16/3、7/0、0/0。
+- 遗留待用户定夺：base 里 pip 版 `cmake 4.4.3`（构建实测走 apt `/usr/bin/cmake` 3.22.1，完全没用它）——
+  属工具而非库，卸载影响面更大，未擅自动。
+
 **验证记录**：
 - Linux + Win 交叉双构建 0 error（`ninja AudioVisGUI AudioVisExport`）。
 - `vis_mask_test`：3 断言 ALL PASS（contain 居中 / 漂移=0 / 手柄=渲染）。

@@ -1,0 +1,11 @@
+# AudioVisExport 主机侧辅助工具（**不属于工程构建**，CMake/Ninja/clang 全程不碰 python）
+#
+# 用途分两类，都是"人工排障/做素材"时才需要：
+#   dmp_report.py  解析 Windows 崩溃转储（exe/crash/*.dmp）→ 定位到函数与偏移
+#   gen_icon.py    重新生成 assets/icon.png（CMake 的 ICON_BIG/ICON_SMALL 输入）
+#
+# 装法（一次性，别装进 conda base / 系统 python）：
+#   bash tools/setup_env.sh
+#   source ~/CodingProgram/AudioVisualizer/tools-venv/bin/activate
+minidump>=0.0.24      # dmp_report.py：纯 python、零传递依赖
+pillow>=10            # gen_icon.py：画图标（自带 wheel，无需系统库）

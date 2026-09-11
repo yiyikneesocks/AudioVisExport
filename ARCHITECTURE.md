@@ -17,6 +17,7 @@
 > | 用户最新反馈 / 待办 | `docs/inbox/INBOX_REPLY.md` |
 > | 某任务的决策细节 / 指纹 | `docs/inbox/INBOX_WORKLOG.md` |
 > | 已知 bug / 限制 | 本文档 §4.5 已知限制（L1-L11） |
+| 崩溃转储怎么定位 / 辅助工具环境 | 本文档 §5.9 + `tools/dmp_report.py`（python venv，非构建依赖） |
 > | 发版公告（用户视角） | `docs/RELEASE_NOTES.md` |
 > | 长期方向 / 候选功能 | `docs/ROADMAP.md` |
 > 注意：你后续推进任何操作以后都要按下方「文档地图」分工更新对应文档——**任务进展写 `PLAN.md`，发版写 `HISTORY.md` + `RELEASE_NOTES.md` + 本文档版本映射表**。先读相关文档，和 GUI 源码实际内容交叉比对，避免“把推断当事实写入文档”。
@@ -648,6 +649,50 @@ ffmpeg -framerate 30 -i out_bar/frame_%06d.png -i PUPA_10s.wav -c:v libx264 -pix
 ffmpeg -framerate 30 -i out_bar/frame_%06d.png -i PUPA_10s.wav -c:v libvpx-vp9 -pix_fmt yuva420p -auto-alt-ref 0 -c:a libvorbis -shortest output.webm
 ```
 
+### 5.9 主机侧辅助工具（python venv，**不是构建依赖**）
+
+> 2026-09-11 新增。核查结论先说清楚：**工程本身零 python 依赖**——`scripts/*.sh`、`CMakeLists.txt`、
+> `cmake/` 里没有任何 python/pip 调用（工具链＝CMake + Ninja + clang-cl + lld-link + xwin）；
+> 仓库内也没有 `.py`（`find` 直查为 0；`find -L` 跟符号链接能查到 5 个，全在 `third_party/JUCE` 里，
+> 是 JUCE 自己的 CI 脚本，不属于本工程）。`tools/*.py` 只是**人工排障/做素材**时的手边工具。
+
+| 工具 | 干什么 | 依赖 |
+|---|---|---|
+| `tools/dmp_report.py` | 把 `crash/*.dmp` + 链接期 `/MAP` 翻成「函数名 + 偏移」；v0.5.4 的 compose 描边越界读（#1b）就是这条路定位的 | `minidump` |
+| `tools/gen_icon.py` | 重新生成 `assets/icon.png`（CMake `ICON_BIG/ICON_SMALL` 输入）。**原生成脚本曾丢失**（图标只有成品没有源），此脚本是设计复刻，默认不覆盖成品 | `pillow` |
+| `tools/setup_env.sh` | 一键建/修那个 venv（幂等；`--print` 只打印激活路径） | — |
+
+**环境放在仓库外面**：默认 `~/CodingProgram/AudioVisualizer/tools-venv`（可用 `AVX_TOOLS_VENV` 覆盖）。
+故意不放工程目录内——venv 里成千上万个 `.py` 会污染 `find`/`grep`，让协作 AI 每次搜代码都要分辨哪些是自己的。
+`.gitignore` 另有一条防御（万一建在里面）。
+
+**为什么是 venv 而不是再开一个 conda env**（用户 2026-09-11 定的方向）：conda 环境会复制整套解释器+库目录
+（几百 MB 起），venv 只是薄壳、装多少算多少；**只有需要非 python 二进制时才值得用 conda**
+（例：§7.5 的 `gitenv` 里那个 openssl 版 git，那是系统级二进制，venv 装不了）。
+
+```bash
+bash tools/setup_env.sh                                   # 建 venv + 装 requirements.txt
+source ~/CodingProgram/AudioVisualizer/tools-venv/bin/activate
+tools/.../python tools/dmp_report.py <exe目录>/crash/crash_YYYYmmdd_HHMMSS.dmp \
+     --map build_win/AudioVisGUI.map                      # map 必须来自出事那一次构建
+```
+
+**踩过的两个坑（脚本已内置修正，别再手搓）**：
+1. Ubuntu 的 `python3` 常缺 `ensurepip`（`python3 -m venv` 直接失败）→ `setup_env.sh` 会自动回退到
+   conda 的 python 来建 venv（venv 的 site-packages 与 base **隔离**，实测 `base site-packages in path = False`，
+   只是 stdlib 仍复用 seeding 解释器，正常）。
+2. `minidump` 库解析时会为 PEB 打印整段 traceback（`Memory address ... is not in process memory space`），
+   **那是被库自己 catch 掉的日志噪音**，模块表/异常记录照常解析——脚本顶部 `logging.disable` 静音即可，
+   不要因此以为 dump 坏了而退回手工解字节流。
+
+**崩溃证据补充**：现存 4 个 dump 用 `dmp_report.py` 全部落在 `SpectrumMask::compose` 内，
+且 `ExceptionInformation[0]=0` = **READ** 违例、目标地址是 `0x1ee58b89000` 一类的野生值（**不是 NULL**）——
+从硬证据上排除了当初"分配失败返回 NULL"的猜测，指向 `tmp[2·y·W+x]` 越界读（与 #1b 修复一致）。
+
+**遗留待用户定夺**：conda base 里还有一个 pip 版 `cmake 4.4.3`（2026-09-06 装），构建**完全没用它**
+（实测用的是 apt 的 `/usr/bin/cmake 3.22.1`）。它是工具而非库，卸不卸影响面更大，所以没擅自动；
+要清就 `~/miniconda3/bin/python -m pip uninstall -y cmake`。
+
 ---
 
 ## 6. 关键设计决策记录
@@ -737,6 +782,10 @@ PATH=/home/azulores/miniconda3/envs/gitenv/bin:$PATH git -c http.version=HTTP/1.
     open(p,"wb").write(body)
     ```
   - **改完必查** `git diff --stat`：某文件行数远超你的逻辑改动 → 十有八九被行尾搅了，按上法还原。
+  - **用脚本改文件时，python 一律 `open(...,'rb')`/`'wb'` 或 `open(..., newline='')`**：
+    文本模式读会把 `\r\n` 折成 `\n`、写回就静默把整个 CRLF 文件转成 LF（2026-09-11 一次改 3 个 `.h` 就中招，
+    `git diff --numstat` 显示 300+/300- 才发现，只能按 HEAD 风格逐文件还原）。
+    改完 **`git diff --numstat` 逐个看**，行数与你的逻辑改动不匹配就是行尾被搅。
 
 **2. `edit` 工具锚点必须唯一**
 - 插入函数时用 `return xxx;\n}` 这类短尾锚点，易命中文件里**更早的同名片段**（曾把 `horizontalGradient`
