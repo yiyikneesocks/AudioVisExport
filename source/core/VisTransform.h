@@ -50,8 +50,21 @@ inline VisTransform makeContainTransform (float elemW, float elemH,
 {
     VisTransform t;
     t.set      = true;
-    t.scaleX   = t.scaleY = juce::jmin (outW / juce::jmax (1.0f, elemW),
-                                        outH / juce::jmax (1.0f, elemH));
+    // v0.5.4 #H 护栏：elemW/elemH <= 0 说明图片**根本没解码成功**（ImageCache 返回空图 → 尺寸为 0）。
+    //   旧写法 jmax(1.0f, elemW) 会把 0 当 1 → scale 静默变成 outH（如 720 倍）；再叠加画布侧
+    //   "图片无效时退化成用画布尺寸"的回退，手柄框被放大上千倍 → 用户所见"边框范围远超画布"。
+    //   现在非正尺寸一律退回 1:1 居中（绝不可能炸框），并由调用方负责报告加载失败。
+    if (! (elemW > 0.0f) || ! (elemH > 0.0f) || ! (outW > 0.0f) || ! (outH > 0.0f))
+    {
+        t.scaleX = t.scaleY = 1.0f;
+        t.centerX  = juce::jmax (0.0f, elemW) * 0.5f;
+        t.centerY  = juce::jmax (0.0f, elemH) * 0.5f;
+        t.posX     = outW * 0.5f - t.centerX;
+        t.posY     = outH * 0.5f - t.centerY;
+        t.rotationDeg = 0.0f;
+        return t;
+    }
+    t.scaleX   = t.scaleY = juce::jmin (outW / elemW, outH / elemH);
     t.centerX  = elemW * 0.5f;
     t.centerY  = elemH * 0.5f;
     t.posX     = outW * 0.5f - t.centerX;

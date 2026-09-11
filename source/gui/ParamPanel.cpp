@@ -7,6 +7,8 @@
 //   · Special rows: color row (4 colour buttons tiled), width-height row (2 editors)
 //   · Export section: hand-laid out below the scrollable rows block
 // =============================================================================
+#include <algorithm>
+#include <set>
 #include "ParamPanel.h"
 #include <juce_gui_extra/juce_gui_extra.h>
 
@@ -50,6 +52,7 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     {
         styleTabButton (*b);
         addAndMakeVisible (b);
+        keepVisibleOnAllTabs (b);          // #G：页签行常驻
     }
     tabSpectrumBtn.onClick = [this] { setActiveTab (Tab::Spectrum); };
     tabImageBtn.onClick    = [this] { setActiveTab (Tab::Image); };
@@ -217,7 +220,7 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
 
     // ---- Color row (4 buttons tiled, moved to top of Appearance in v0.5.0:
     //      it used to sit at the bottom of the section and required scrolling) ----
-    addRow ("Colors", &primaryBtn);
+    addRowGroup ("Colors", { &primaryBtn, &secondaryBtn, &peakBtn, &bgBtn });   // #G：四按钮同行
 
     swatchPrimary   = params.primaryColor;
     swatchSecondary = params.secondaryColor;
@@ -296,6 +299,14 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     // ---- Layers（Image 页，v0.5.4 #6）----
     setBuildingTab (1);
     addHeader ("Layers");
+    // v0.5.4 #H：可见图层栈。把每层的 z 序 / 文件是否还在 / 能否解码 / 变换倍数额摊开显示，
+    //   专治"拖进去没反应""手柄框跑到画布外"这类**状态看不见**的问题（用户建议）。
+    layerList.setRowHeight (22);
+    layerList.setMultipleSelectionEnabled (false);
+    layerList.setColour (juce::ListBox::outlineColourId, juce::Colour (0xff3a3a44));
+    layerList.setColour (juce::ListBox::backgroundColourId, juce::Colour (0xff1a1a20));
+    addRow ("", &layerList, 150);
+    addAndMakeVisible (layerList);
     addRow ("Add image", &addImageBtn);
     addRow ("Move up",   &layerUpBtn);
     addRow ("Move down", &layerDownBtn);
@@ -348,7 +359,7 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     addRow ("", &maskOnToggle);
     addRow ("", &maskChooseBtn);
     addRow ("", &maskStrokeToggle);
-    addRow ("", &maskColorBtn);          // #7: 描边色按钮行（两按钮平铺）
+    addRowGroup ("", { &maskColorBtn, &maskAvgBtn });   // #7/#G：描边色两按钮同行（旧码只登记了第一个 → 切页残留）
     addAndMakeVisible (maskOnToggle);
     addAndMakeVisible (maskChooseBtn);
     addAndMakeVisible (maskStrokeToggle);
@@ -426,7 +437,7 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
         auto v = heightEditor.getText().getIntValue();
         if (v >= 64) { params.height = v; notify(); }
     };
-    addRow ("W x H", &widthEditor);
+    addRowGroup ("W x H", { &widthEditor, &heightEditor });   // #G：两个输入框同行
 
     addCombo ("Encoder", { "png-seq", "mov-qtrle (alpha)", "webm-vp9 (no alpha)" }, 1,
               [this] (int id)
@@ -446,6 +457,9 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     addAndMakeVisible (browseBtn);
     addAndMakeVisible (exportBtn);
     addAndMakeVisible (exportVideoBtn);
+    keepVisibleOnAllTabs (&browseBtn);           // #G：底部导出条所有页常驻（一键导出不隔页）
+    keepVisibleOnAllTabs (&exportBtn);
+    keepVisibleOnAllTabs (&exportVideoBtn);
 
     // 一键视频导出按钮（醒目色 + tooltip 说明行为）
     exportVideoBtn.setColour (juce::TextButton::buttonColourId, juce::Colour (0xffbe185d));
@@ -459,11 +473,13 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     outputDirLabel.setFont (juce::FontOptions (11.0f));
     outputDirLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (outputDirLabel);
+    keepVisibleOnAllTabs (&outputDirLabel);      // #G
 
     progressLabel.setColour (juce::Label::textColourId, juce::Colours::lightgreen);
     progressLabel.setFont (juce::FontOptions (12.0f));
     progressLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (progressLabel);
+    keepVisibleOnAllTabs (&progressLabel);       // #G：导出状态行常驻
 }
 
 void ParamPanel::addHeader (const juce::String& text)
@@ -474,14 +490,31 @@ void ParamPanel::addHeader (const juce::String& text)
     l->setJustificationType (juce::Justification::centredLeft);
     widgets.add (l);
     addAndMakeVisible (l);
-    rows.push_back ({ text, l, 24, buildingTab });
+    rows.push_back ({ text, { l }, 24, buildingTab });
     tabHeights[(size_t) buildingTab] += 24 + 4;
 }
 
 void ParamPanel::addRow (const juce::String& label, juce::Component* editor, int h)
 {
-    rows.push_back ({ label, editor, h, buildingTab });
+    addRowGroup (label, { editor }, h);
+}
+
+// v0.5.4 #G：一行多控件。整行的显隐由 rows 统一驱动 → 并排控件不可能"漏登记而残留"。
+void ParamPanel::addRowGroup (const juce::String& label, std::vector<juce::Component*> editors, int h)
+{
+    // 去掉空指针，防止某页少建一个控件时把 nullptr 带进布局/显隐循环
+    editors.erase (std::remove_if (editors.begin(), editors.end(),
+                                   [] (juce::Component* c) { return c == nullptr; }),
+                   editors.end());
+    if (editors.empty()) return;
+    rows.push_back ({ label, std::move (editors), h, buildingTab });
     tabHeights[(size_t) buildingTab] += h + 4;
+}
+
+// v0.5.4 #G：常驻部件登记（页签行 / 底部导出条）
+void ParamPanel::keepVisibleOnAllTabs (juce::Component* c)
+{
+    if (c != nullptr) { c->setVisible (true); chrome.push_back (c); }
 }
 
 juce::Slider* ParamPanel::addSlider (const juce::String& label,
@@ -526,7 +559,7 @@ juce::ToggleButton* ParamPanel::addToggle (const juce::String& label, bool curre
     t->onClick = [apply, t] { apply (t->getToggleState()); };
     widgets.add (t);
     addAndMakeVisible (t);
-    rows.push_back ({ "", t, 24, buildingTab });
+    rows.push_back ({ "", { t }, 24, buildingTab });
     tabHeights[(size_t) buildingTab] += 24 + 4;
     return t;
 }
@@ -538,7 +571,7 @@ juce::TextButton* ParamPanel::addButton (const juce::String& text,
     b->onClick = std::move (onClick);
     widgets.add (b);
     addAndMakeVisible (b);
-    rows.push_back ({ juce::String(), b, 26, buildingTab });
+    rows.push_back ({ juce::String(), { b }, 26, buildingTab });
     tabHeights[(size_t) buildingTab] += 26 + 4;
     return b;
 }
@@ -691,14 +724,16 @@ void ParamPanel::resized()
     area.removeFromTop (4);
 
     // ---- 只布局当前页的 rows（其余页隐藏，防误触 + 防绘制穿透）----
+    // v0.5.4 #G：一行可能挂多个控件（Colors 四按钮 / 描边色两按钮 / W×H 两输入框），
+    //   必须整行一起显隐——旧码只处理 r.editor 一个，同行其余控件切页后残留。
     for (auto& r : rows)
     {
         const bool on = (r.tab == currentTab);
-        if (r.editor != nullptr)
-            r.editor->setVisible (on);
-        if (! r.label.isEmpty())
+        for (auto* ed : r.editors)
+            if (ed != nullptr) ed->setVisible (on);
+        if (! r.label.isEmpty() && r.primary() != nullptr)
         {
-            auto it = rowLabels.find (r.editor);
+            auto it = rowLabels.find (r.primary());
             if (it != rowLabels.end())
                 it->second->setVisible (on);
         }
@@ -707,66 +742,55 @@ void ParamPanel::resized()
         auto rowBounds = area.removeFromTop (r.height);
         area.removeFromTop (4);
 
-        // v0.5.4 #7: 描边色两按钮平铺
-        if (r.editor == &maskColorBtn)
+        // v0.5.4 #G：一行多控件 = 等宽平铺（取代原先三处手写特例；
+        //   以后并排新控件走 addRowGroup，自动获得布局 + 显隐，不需要再改这里）。
+        if (r.editors.size() > 1)
         {
-            auto w = rowBounds.getWidth() / 2;
-            maskColorBtn.setBounds (rowBounds.removeFromLeft (w).reduced (2));
-            maskAvgBtn.setBounds  (rowBounds.reduced (2));
-            continue;
-        }
-        // Special: color row — 4 tiled buttons (v0.5.0: added BG)
-        if (r.editor == &primaryBtn)
-        {
-            auto w = rowBounds.getWidth() / 4;
-            primaryBtn.setBounds   (rowBounds.removeFromLeft (w).reduced (2));
-            secondaryBtn.setBounds (rowBounds.removeFromLeft (w).reduced (2));
-            peakBtn.setBounds      (rowBounds.removeFromLeft (w).reduced (2));
-            bgBtn.setBounds        (rowBounds.reduced (2));
-            continue;
-        }
-        // Special: width/height — 2 editors
-        if (r.editor == &widthEditor)
-        {
-            auto w = rowBounds.getWidth() / 2;
-            widthEditor.setBounds (rowBounds.removeFromLeft (w).reduced (2));
-            heightEditor.setBounds (rowBounds.reduced (2));
+            const int each = rowBounds.getWidth() / (int) r.editors.size();
+            for (size_t e = 0; e < r.editors.size(); ++e)
+            {
+                auto cell = (e + 1 == r.editors.size())
+                                ? rowBounds                              // 末格吃掉取整余数
+                                : rowBounds.removeFromLeft (each);
+                r.editors[e]->setBounds (cell.reduced (2));
+            }
             continue;
         }
         // Full-width button (no side label)
-        if (r.label.isEmpty() && dynamic_cast<juce::TextButton*> (r.editor) != nullptr)
+        if (r.label.isEmpty() && (dynamic_cast<juce::TextButton*> (r.primary()) != nullptr
+                                  || dynamic_cast<juce::ListBox*> (r.primary()) != nullptr))
         {
-            r.editor->setBounds (rowBounds.reduced (2, 2));
+            r.primary()->setBounds (rowBounds.reduced (2, 2));
             continue;
         }
         // Header label editor (no side label)
-        if (auto* asLabel = dynamic_cast<juce::Label*> (r.editor))
+        if (auto* asLabel = dynamic_cast<juce::Label*> (r.primary()))
         {
             asLabel->setBounds (rowBounds);
             continue;
         }
         // ToggleButton carries its own text
-        if (auto* asToggle = dynamic_cast<juce::ToggleButton*> (r.editor))
+        if (auto* asToggle = dynamic_cast<juce::ToggleButton*> (r.primary()))
         {
             asToggle->setBounds (rowBounds);
             continue;
         }
         // Regular row: label + editor
         auto labelBounds = rowBounds.removeFromLeft (kLabelWidth);
-        if (r.editor != nullptr)
-            r.editor->setBounds (rowBounds);
+        if (r.primary() != nullptr)
+            r.primary()->setBounds (rowBounds);
 
         if (! r.label.isEmpty())
         {
             juce::Label* rowLabel = nullptr;
-            auto it = rowLabels.find (r.editor);
+            auto it = rowLabels.find (r.primary());
             if (it == rowLabels.end())
             {
                 rowLabel = new juce::Label (r.label, r.label);
                 rowLabel->setFont (juce::FontOptions (12.0f));
                 rowLabel->setColour (juce::Label::textColourId, juce::Colours::white);
                 rowLabel->setJustificationType (juce::Justification::centredLeft);
-                rowLabels[r.editor] = std::unique_ptr<juce::Label> (rowLabel);
+                rowLabels[r.primary()] = std::unique_ptr<juce::Label> (rowLabel);
                 addAndMakeVisible (rowLabel);
             }
             else
@@ -786,7 +810,157 @@ void ParamPanel::resized()
     exportVideoBtn.setBounds (videoLine.reduced (2));
     outputDirLabel.setBounds (exp.removeFromTop (26));
     progressLabel.setBounds (exp.removeFromTop (24));
+
+    // ---- v0.5.4 #G 安全网：漏登记的控件一律隐藏（判据见 findUnownedChildren）----
+    //   曾经的失效模式是"忘记登记 → 控件残留在别的页面上"（静默 bug，用户看得见）。
+    //   现在反过来：只要不是 chrome、也不属于任何一行，就直接藏掉（开发期一眼就能发现"控件不见了"），
+    //   并在 debug 下 jassert 指出是哪个组件漏登记。
+    for (auto* leaked : findUnownedChildren())
+    {
+        leaked->setVisible (false);                     // 漏登记 → 隐藏，绝不残留
+        jassertfalse;                                   // debug 下提醒：补 addRow/addRowGroup/keepVisibleOnAllTabs
+    }
 }
+
+// =============================================================================
+// v0.5.4 #H：可见图层栈（ListBox）
+//   行序 = 顶→底（数组下标大 = 更靠上；频谱插在 spectrumIndex 处），末行是蒙版图片。
+//   每行附带"文件在不在 / 能不能解码 / 变换倍数"，所以图片没显示时一眼能看出是哪种失败。
+// =============================================================================
+int ParamPanel::getNumRows() { return (int) layerRows.size(); }
+
+void ParamPanel::paintListBoxItem (int row, juce::Graphics& g, int w, int h, bool rowIsSelected)
+{
+    if (row < 0 || row >= (int) layerRows.size()) return;
+    if (rowIsSelected)
+        { g.setColour (juce::Colour (0xff3a2430)); g.fillRect (0, 0, w, h); }
+    const LayerRow& lr = layerRows[(size_t) row];
+    g.setColour (lr.colour.isEmpty() ? juce::Colours::white : juce::Colour::fromString (lr.colour));
+    g.setFont (juce::FontOptions (11.5f));
+    g.drawText (lr.text, 6, 0, w - 10, h, juce::Justification::centredLeft, false);
+}
+
+void ParamPanel::listBoxItemClicked (int row, const juce::MouseEvent&)
+{
+    if (row >= 0 && row < (int) layerRows.size() && onSelectLayerRow)
+        onSelectLayerRow (layerRows[(size_t) row].tag);
+}
+
+void ParamPanel::listBoxItemDoubleClicked (int row, const juce::MouseEvent& e)
+{
+    listBoxItemClicked (row, e);
+}
+
+void ParamPanel::refreshLayerList (int selectedImage, bool maskEditMode)
+{
+    // 内容哈希去抖：MainComponent 每 tick 都会调，只有真的变了才重建 + 重绘
+    juce::String hash = juce::String (selectedImage) + "|"
+                      + juce::String ((int) maskEditMode) + "|"
+                      + juce::String (params.spectrumIndex) + "|"
+                      + juce::String ((int) params.spectrumPresent) + "|"
+                      + juce::String ((int) params.images.size()) + "|"
+                      + params.style + "|"
+                      + (params.maskImage.enabled ? "M" : "-") + params.maskImage.path;
+    for (const auto& im : params.images)
+        hash += "#" + im.path;
+    if (hash == layerListHash)
+        return;
+    layerListHash = hash;
+
+    const int N = (int) params.images.size();
+    const int k = juce::jlimit (0, juce::jmax (0, N), params.spectrumIndex);
+
+    auto describe = [] (const juce::String& path, const VisTransform& tr, const juce::String& name)
+    {
+        const juce::File f (path);
+        juce::String status;
+        if (path.isEmpty())                                      status = "no file";
+        else if (! f.existsAsFile())                             status = "FILE MISSING";
+        else if (juce::ImageFileFormat::findImageFormatForFileExtension (f) == nullptr)
+                                                                 status = "NO DECODER";
+        else                                                     status = "ok";
+        juce::String line = name;
+        if (! f.getFileName().isEmpty())
+            line += "  " + f.getFileName();
+        line += "  [" + status + "]  scale x" + juce::String (tr.scaleX, 2);
+        return line;
+    };
+
+    layerRows.clear();
+    // 频谱之上：下标 N-1（最顶）→ k
+    for (int i = N - 1; i >= k; --i)
+    {
+        LayerRow lr;
+        lr.tag = i;
+        lr.text = "  " + describe (params.images[(size_t) i].path,
+                                   params.images[(size_t) i].transform,
+                                   "Image " + juce::String (i + 1))
+                + (selectedImage == i ? "   < selected" : "");
+        lr.selected = (selectedImage == i);
+        lr.colour = lr.selected ? "ffffffff" : "ffb8b8c4";
+        layerRows.push_back (lr);
+    }
+    {
+        LayerRow lr;
+        lr.tag = layerTagSpectrum;
+        lr.text = params.spectrumPresent ? ("  Spectrum  [" + params.style + "]")
+                                         : "  Spectrum  [DELETED]";
+        lr.selected = (selectedImage < 0 && ! maskEditMode);
+        lr.colour = lr.selected ? "ffffffff" : "ffffa8d4";
+        layerRows.push_back (lr);
+    }
+    for (int i = k - 1; i >= 0; --i)
+    {
+        LayerRow lr;
+        lr.tag = i;
+        lr.text = "  " + describe (params.images[(size_t) i].path,
+                                   params.images[(size_t) i].transform,
+                                   "Image " + juce::String (i + 1))
+                + (selectedImage == i ? "   < selected" : "");
+        lr.selected = (selectedImage == i);
+        lr.colour = lr.selected ? "ffffffff" : "ffb8b8c4";
+        layerRows.push_back (lr);
+    }
+    {
+        LayerRow lr;
+        lr.tag = layerTagMask;
+        lr.text = "  Mask image  "
+                + (params.maskImage.path.isEmpty() ? "[none]"
+                                                   : juce::File (params.maskImage.path).getFileName()
+                                                     + (params.maskImage.enabled ? "" : " [off]"))
+                + (maskEditMode ? "   < editing position" : "");
+        lr.selected = maskEditMode;
+        lr.colour = maskEditMode ? "ffffffff" : "ff8fd4ff";
+        layerRows.push_back (lr);
+    }
+
+    for (int i = 0; i < (int) layerRows.size(); ++i)
+        if (layerRows[(size_t) i].selected)
+        {
+            layerList.selectRow (i);
+            break;
+        }
+    layerList.repaint();
+}
+
+// v0.5.4 #G：安全网判据（单一事实源——resized 与 vis_tabs_test 都走这里）
+std::vector<juce::Component*> ParamPanel::findUnownedChildren() const
+{
+    std::set<juce::Component*> claimed (chrome.begin(), chrome.end());
+    for (const auto& r : rows)
+        for (auto* ed : r.editors)
+            claimed.insert (ed);
+    for (const auto& kv : rowLabels)
+        claimed.insert (kv.second.get());
+
+    std::vector<juce::Component*> leaks;
+    for (auto* child : getChildren())
+        if (child != nullptr && claimed.find (child) == claimed.end())
+            leaks.push_back (child);
+    return leaks;
+}
+
+
 
 // v0.5.4 #3：样式专属控件置灰
 void ParamPanel::refreshStyleDependentControls()

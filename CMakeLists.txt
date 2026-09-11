@@ -233,6 +233,24 @@ target_compile_definitions(vis_peaks_test PRIVATE JUCE_USE_CURL=0)
 target_include_directories(vis_peaks_test PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/source)
 target_link_libraries(vis_peaks_test PRIVATE juce::juce_graphics juce::juce_events)
 
+# v0.5.4 #G：选项卡控件归属不变式（漏登记必被安全网隐藏，杜绝切页残留）
+add_executable(vis_tabs_test EXCLUDE_FROM_ALL
+    scripts/vis_tabs_test.cpp
+    source/gui/ParamPanel.cpp
+    source/core/SpectrumParams.cpp
+    source/core/ColorMap.cpp
+    source/core/FreqMap.cpp
+    source/core/SpectrumCore.cpp
+    source/core/SpectrumStyle.cpp
+    source/styles/Y2KLineStyle.cpp
+    source/styles/BarStyle.cpp
+    source/styles/BarLineStyle.cpp
+    source/styles/PolylineStyle.cpp
+    source/styles/CrystalStyle.cpp)
+target_compile_definitions(vis_tabs_test PRIVATE JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0)
+target_include_directories(vis_tabs_test PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/source)
+target_link_libraries(vis_tabs_test PRIVATE juce::juce_gui_extra juce::juce_graphics juce::juce_events juce::juce_dsp)
+
 add_executable(vis_mask_test EXCLUDE_FROM_ALL
     scripts/vis_mask_test.cpp
     source/core/SpectrumMask.cpp)

@@ -164,7 +164,7 @@
 - SpectrumCanvas：scaleSnap 拖拽角/边时正确应用 `applyScaleSnap()`。
 - makeContainTransform pos 公式修正影响所有图片图层的默认定位（含蒙版图片）。
 
-**用户实测进度（滚动更新，截至 2026-09-11 02:2x，明细见 `docs/inbox/INBOX_REPLY.md`）**：
+**用户实测进度（滚动更新，截至 2026-09-11 18:0x，明细见 `docs/inbox/INBOX_REPLY.md`）**：
 - ✅ **compose() 平均色描边崩溃 → 已根除**（渲染不再逐帧算均色；均色只在加载图片/Use average 按钮时算一次写入描边色，见下方收尾补丁）。
 - ✅ **mp3 解码失败 → 已修复**（开启 `JUCE_USE_MP3AUDIOFORMAT` 软件解码 + PcmSource 注册 `MP3AudioFormat`）。
 - ✅ **#2 基线轴与频谱底部/左缘重合 → 用户确认通过**（"4.基线轴与频谱底部/左缘完全重合已通过"）。
@@ -175,7 +175,11 @@
 - ❌ **勾 Outline 必崩 → 用户重报，根因并非均色**：真根因＝compose 描边越界读（见下方 #1b 小节，已修，待用户复测）。
 - ✅ **新 #3 peak-caps 四件套 + #5 派生项 → 已修**（3.1 删除 bar-mirror 样式（别名向后兼容）/ 3.2 bar 峰帽跟随基线轴且双侧 / 3.3 "Peak caps" 对 line 系取消置灰并真正门控峰线 / 3.4 y2k 下臂描边着色 + 三样式下臂峰线 + crystal 下臂填充不再溢出半屏；新增 `vis_peaks_test` 16 断言 + 负对照，见下方 #3 小节）→ 待用户复测。
 - ✅ **新 #6 蒙版图片本体 → 用户确认"没问题"，已按用户要求从 INBOX 删除**；双按钮（Border colour 手选 / Use average 一次算色）已随 #1/#1b 落地可用。
-- ⏳ **#9 峰帽 v3 + 末柱斜面**：用户反馈"我没看到关键汇报在哪" → 已在 INBOX_REPLY 待办速览点名指路，等待实测。
+- ✅ **用户 09-11 实测确认通过**：勾 Outline 不再崩溃（A）/ bar-mirror 确已删除（B）/ bar 双侧帽跟随轴（C）/ line 系 Peak caps 开关可用（D）。
+- ✅ **新 #E crystal 两侧亮度不一致 → 已修**（下臂此前只吃到辉光+填充，实体描边与高光都只画上臂），待复测。
+- ✅ **新 #G 切页残留 → 结构性消除**（一行多控件 + 未登记即隐藏的安全网），待复测。
+- ✅ **新 #H 拖放两现象 → 三处根因已修**（图片被当音频加载 / 状态先写后验证 / 0 尺寸 contain 炸框）+ 采纳图层栈建议，待复测。
+- ✅ **#F 频带高度三问** → 报告已写入 INBOX_REPLY「关键汇报」首节（用户点名位置）。
 
 **v0.5.4 收尾补丁（INBOX #1/#2/#7/#8/#9，commit `f45eaa5`，HEAD `22a966f` 后）**：
 - **#1 平均色描边崩溃根除**：SpectrumCanvas 渲染路径删除逐帧 `maskAverageColourCached`，渲染统一读 `strokeColor`；均色只在 `applyMaskImageFile`（加载图）/ `onUseMaskAvgColour`（Use average 按钮）时算一次写入；VisPipeline 导出保留首帧缓存（CLI 参数固定，实际只算一次）。
@@ -224,6 +228,48 @@
   y2k 下臂 primary 描边存在且高度正确；crystal 下半屏填充不超 25% 面积。**负对照**（逐个还原 3 个 bug）→ 精准 5 条 FAIL，证明用例有效。
 - **验证**：Linux 全量 0 error；`vis_peaks_test` / `vis_mask_test` / `vis_anchor_test` 三套 ALL PASS；
   6 样式 `--preview-frame`（baselineY=0.5）出图全 OK；Windows 交叉构建 34/34 → 部署 `AudioVisGUI_09110217.exe`。
+
+**INBOX #E/#F/#G/#H（2026-09-11 17:5x）· crystal 两侧亮度 + 频带三问报告 + 选项卡结构保证 + 拖放三根因**：
+- **#E crystal 下臂比上臂暗**：`CrystalStyle::renderPass` 只有 pass0 辉光覆盖了下臂曲线，pass1 的双层实体描边
+  （0.40f/0.90f）与 pass2 的 2.5× 高光都只作用于上臂 `pts` → 下臂亮度必然低。修复＝两处都补
+  `buildMirrorPoints_` 下臂路径，颜色参数与上臂**逐字相同**（不是"调亮一点"）。
+- **#F 三问答复（核实过的代码事实）**：带内取 **max**（`peakInRange`，`SpectrumCore.cpp:206-228`），不是平均；
+  91 个 mappedEdges **无缝首尾相接**铺满 [minHz,maxHz]（`FreqMap.cpp:96-101`）→ 末带上缘恰为 20000，不存在"缺下一根"；
+  唯一的加权平均是**跨带** `[1,2,1]/4`（`SpectrumCore.cpp:371-383`，掺入比＝`temporalSmoothing`，**首末带显式豁免**）；
+  斜面端点共享 `edge[k]=(n[k-1]+n[k])/2`，末点 `edge[N]=max(n[N-1], n[N-2]/2)`（`BarLineStyle.cpp:50-57`）。
+  默认（log、90 带、20–20000）实测数字：每带比上一带宽 7.98%（比例 1.07978）、含 1000Hz 的带＝[928,1002]、末带＝[18522,20000]。
+- **#G 选项卡残留（用户点名"以后着重注意这种不消失问题"）**：根因不是漏了一个按钮，而是
+  `Row{label, editor, h, tab}` 结构上**一行只能挂一个 editor**；Colors(4 按钮)/描边色(2)/W×H(2) 都是并排多控件，
+  `showTab`+`resized` 只认 `r.editor` → `maskAvgBtn`/`secondaryBtn`/`peakBtn`/`bgBtn`/`heightEditor` 五个控件
+  **从来没有被隐藏过**。修法（结构性）＝`Row::editors` 改向量 + `addRowGroup(label,{…})` 整行统一驱动布局与显隐 +
+  `keepVisibleOnAllTabs()` 登记常驻件（页签行/底部导出条）+ `resized()` 末尾**安全网**：
+  不属于任何行且非常驻的直接子组件一律 `setVisible(false)`（判据 `findUnownedChildren()` 公开化，
+  供安全网与测试共用一份实现）。**失败方向由此翻转**：漏登记的表现从「静默残留在别的页」变成「控件不出现」。
+- **#H 拖放三处根因**（"有时候"＝只对某类文件/某条投递链发作，故此前难复现）：
+  1. **兜底拖放目标把图片当音频加载**：`MainComponent::filesDropped` 的 `isAudio` 判定里混进了 png/jpg/… 扩展名，
+     命中后一律 `loadFile()` → 拖到面板（非 Mask 页）的图片永远建不出图层。
+  2. **先写状态后验证（蒙版）**：`applyMaskImageFile` 无条件 `maskImage.path=…; enabled=true`，之后才
+     `if (im.isValid())` 算均色 → 解不开的图留下"已设置但画面毫无变化"的死状态，
+     下次拖入只会弹 "Mask image already set"（用户原话"没反应，但提示里已经加载过图片"）。
+  3. **0 尺寸 contain 炸框**：`addImageLayer` 不验证解码结果（且 `ImageCache::getFromFile` 调两次），
+     图无效时尺寸 0 → `makeContainTransform(0,0,…)` 内 `jmax(1.0f, elemW)` 把 0 当 1 → **scale 静默 = 720**；
+     画布画手柄时元素尺寸又走"图片无效则退化为画布尺寸"的分支 → 1280×720 被放大 720 倍 →
+     **框跑到画布上千倍外**（用户原话"提示的边框范围远超画布，原因不明"）。
+  修复＝`loadValidatedImage()`（文件不存在/解不开 → 弹具体原因：文件名 + 字节数 + 可读格式清单，且**不改任何状态**）；
+  `routeDroppedFile(file, 屏幕落点)` 成为 OLE 兜底链与 WM_DROPFILES 直连链**共用**的唯一路由（两链原先各写一份规则）；
+  `makeContainTransform` 非正尺寸退回 1:1 居中（数学上不可能再炸框）；`onUseMaskAvgColour` 原先解不开静默 return → 改为弹提示；
+  每次成功拖入在底部状态行写明目的地（`Image layer #N added: 名 (WxH)` / `Mask image set: …`）。
+- **#H 用户建议采纳 → 可见图层栈**：Image 页顶部 `ListBox`（ParamPanel 兼任 `ListBoxModel`），
+  按**顶→底**列出上方图片 / Spectrum（带样式名或 `[DELETED]`）/ 下方图片 / Mask image；
+  每行附 `[ok | FILE MISSING | NO DECODER]`（后者用 `ImageFileFormat::findImageFormatForFileExtension` **不解码**探测）
+  + `scale x…`（异常倍数一眼看穿）；点击行 = 选中该元素，蒙版行 = 进出"编辑图片位置"；内容哈希去抖。
+- **测试**：`vis_tabs_test`（新）+ `vis_anchor_test` 情形 11 + `vis_peaks_test` #E 断言；三处**负对照**均精准 FAIL
+  （tabs 点名 `Use average` ×4 页；anchor 4 条；peaks 1 条），证明用例真的能抓到这类 bug。
+  四套回归 ALL PASS；Linux 全量 0 error；GUI 8s 冒烟存活无断言；Windows 交叉 34/34 → `AudioVisGUI_09111811.exe`。
+- ⚠️ **自查两笔**：(a) 上一轮我改 `docs/PLAN.md` 时有一条 `t.replace()` **静默没命中**（脚本无断言仍打印 OK），
+  本轮 grep 逐项核验才发现并补上——纪律条款里"改完必查"要包含**按关键词反查落地**，不能只看 diff stat；
+  (b) #G 首版用了 `std::erase_if`（C++20）与 `ListBox::setScrollbarAutoHide/updateViewport/listItemClicked` 等
+  **不存在的 API**，均由编译期暴露后改正（记入 §7.8）。
 
 **验证记录**：
 - Linux + Win 交叉双构建 0 error（`ninja AudioVisGUI AudioVisExport`）。

@@ -25,7 +25,7 @@
 >
 > | 文档 / 项目版本 | 日期 | tag（可）| 里程碑 |
 > |---|---|---|---|
-> | v0.5.4 | 2026-09-10 | （未发版，代码已推 main）| **ColorMap**（gradient/rainbow/solid 全管线）+ ~~bar-mirror 镜像柱~~（#3.1 又删除：与"bar + 基线轴 50%"重复，保留别名兼容）+ **CrystalStyle v2 真 bloom**（Gaussian blur）+ **频谱蒙版图片**（独立 VisTransform + 平均色描边 + 编辑模式 + vis_mask_test）+ **Tabbed UI**（4 tab）+ **Baseline axis**（baselineY 可拖动+snap）+ **Bar 布局 pitch 模型**（gap=pitch−width + bandCount 联动）+ **Bar-line 峰帽 v3**（连贯分段+capPull+双面 cap）+ **Line-only 切换** + **Scale snapping** + **Crash reporter**（MiniDump+txt，Windows）+ **mp3 软件解码**（`JUCE_USE_MP3AUDIOFORMAT`，5 格式实测通过）+ **peak-caps 全样式跟随基线轴**（#3，`vis_peaks_test`）+ **compose 描边越界读根除**（#1b）+ **makeContainTransform pos 修正** + **收件箱三文件协议** + **style proposals + Y2Kmeter audit docs** |
+> | v0.5.4 | 2026-09-10 | （未发版，代码已推 main）| **ColorMap**（gradient/rainbow/solid 全管线）+ ~~bar-mirror 镜像柱~~（#3.1 又删除：与"bar + 基线轴 50%"重复，保留别名兼容）+ **CrystalStyle v2 真 bloom**（Gaussian blur）+ **频谱蒙版图片**（独立 VisTransform + 平均色描边 + 编辑模式 + vis_mask_test）+ **Tabbed UI**（4 tab）+ **Baseline axis**（baselineY 可拖动+snap）+ **Bar 布局 pitch 模型**（gap=pitch−width + bandCount 联动）+ **Bar-line 峰帽 v3**（连贯分段+capPull+双面 cap）+ **Line-only 切换** + **Scale snapping** + **Crash reporter**（MiniDump+txt，Windows）+ **mp3 软件解码**（`JUCE_USE_MP3AUDIOFORMAT`，5 格式实测通过）+ **peak-caps 全样式跟随基线轴**（#3，`vis_peaks_test`）+ **compose 描边越界读根除**（#1b）+ **makeContainTransform pos 修正** + **收件箱三文件协议** + **style proposals + Y2Kmeter audit docs** + **（09-11 追加）peak-caps 双侧跟随轴 #3 / crystal 两侧亮度 #E / 选项卡一行多控件 + 未登记即隐藏安全网 #G / 拖放三根因 + 可见图层栈 #H / `vis_tabs_test`** |
 > | v0.5.3 | 2026-09-09 | `v0.5.3`（已 push + Release）| **锚定缩放修正**（旋转后非等比拉伸不再斜切成平行四边形：合成序 S·R→R·S；对角漂移修复）+ **CAD 吸附辅助线 + 9 特征点对齐**（边对边/角对角）+ **范围内外视觉区分**（超范围内容变暗发灰）+ **空格播放/暂停** + 峰值帽二阶下落 `peakDecayAccelDbPerSec2` + 键盘删除兜底/面板实时刷新 + 移除 Above spectrum 按钮 + 频谱自吸附修复 |
 > | v0.5.2 | 2026-09-07 | `v0.5.2`（已 push + Release）| **统一图层模型**（频谱=真图层：可删除/一键恢复/参与 z 序，严格命中序修复"加图后频谱无法拖放"）+ 对边锚定缩放（拖角对角钉死/拖边对边钉死）+ 吸附系统（旋转 90°×n / 移动边缘对齐，可开关）+ Delete/Backspace 删除图层 |
 > | v0.5.1 | 2026-09-07 | `v0.5.1`（已 push + Release）| **图片图层系统重构**：图片按自身宽高比等比显示（contain 居中不变形），手柄框贴图片实际边缘，GUI 分组渲染与导出同源（修"图片永远盖住频谱"），Above spec 开关，默认频谱下方 |
@@ -785,6 +785,34 @@ PATH=/home/azulores/miniconda3/envs/gitenv/bin:$PATH git -c http.version=HTTP/1.
 - 另：绘制序列里 `setGradientFill/setColour` 是**有状态**的，紧接其后的 `strokePath`/`fillPath` 若忘了重设，
   会静默沿用上一段的颜色与 alpha（y2k 下臂描边"看不见"的真实原因就是继承了 fill 的 0.25f）。
 
+**8. "先改状态、后验证"与"一行只挂一个控件"（v0.5.4 #G/#H 教训：都是静默失效类 bug）**
+- **验证必须发生在任何状态写入之前**。反例（都真实存在过）：`applyMaskImageFile` 先无条件写
+  `maskImage.path/enabled`、再 `if (im.isValid())` 算均色 → 解不开时留下"已设置但看不见"的死状态，
+  下次操作只会撞见"already set"分支；`addImageLayer` 同样不验证就 `images.insert`。
+  判据：**任何"失败"分支都不许留下副作用**，且失败要弹**具体**原因（文件名 / 字节数 / 支持清单），
+  成功要写明**去向**（图片成了第几层 / 成了蒙版）——"没反应"的观感多半来自静默 return。
+- **同一行并排多个控件时，显隐与布局必须整行驱动**。`Row{label, editor}` 单 editor 的结构缺陷是：
+  Colors(4)/描边色(2)/W×H(2) 只登记了第一个，其余五个控件**永远不参与切页隐藏** → 用户看到的
+  "Use average 切页不消失"只是最显眼的一个。现在 `Row::editors` 是 vector + `addRowGroup`，
+  `resized()` 末尾还有**安全网**（不属于任何行、又没登记为常驻 `keepVisibleOnAllTabs()` 的子组件一律隐藏）。
+  设计取向：让漏登记的后果是「控件不出现」（开发当场发现）而不是「残留在别的页」（用户替你发现）。
+- **两条拖放链（OLE `FileDragAndDropTarget` 与 WM_DROPFILES 直连）不要各写一份路由规则**，
+  否则必然漂移：本项目就出现过兜底链把 png/jpg 当作"音频白名单"成员 → 对图片调 `loadFile()`。
+  统一入口 `MainComponent::routeDroppedFile(file, 屏幕落点)`。
+  另注意 `filesDropped(files, x, y)` 给的 (x,y) 是**本组件内坐标**，与 `Viewport::getScreenBounds()` 比较前要
+  `getScreenBounds().getTopLeft() + Point(x,y)` 换成屏幕坐标。
+- **别用 `jmax(1.0f, x)` 当"防除零"**：x=0（典型＝解码失败的 0 尺寸图）会被静默当成 1，
+  于是 `out/x` 算出画布高度级的荒谬倍数，错误被放大到可视区外而不是被报告。要么显式判 `x<=0` 并退回安全值，
+  要么让调用方先验证——两处都做才算闭环。
+- **JUCE 8.0.12 里没有的东西**（本轮编译期撞过）：`juce::File::getFileSizeDescription` /
+  `getDescriptionForValue`（自己 `String::formatted("%lld bytes")`）、`ListBox::setScrollbarAutoHide` /
+  `updateViewport`、`Component::getNumChildren`（用 `getChildren().size()`）、`ListBoxModel::drawRowBackground` /
+  `listItemClicked`（真名 `listBoxItemClicked(int, const MouseEvent&)`、`listBoxItemDoubleClicked`）、
+  `juce::ImageFileLoader`（廉价探测改图能力用 `ImageFileFormat::findImageFormatForFileExtension`）。
+- **脚本改文档必须"按关键词反查落地"**：`str.replace()` 没命中是**静默无操作**，
+  只打印脚本自己的 OK 或只看 `git diff --stat` 都发现不了（本轮 PLAN.md 就漏过一整段）。
+  正确姿势：`assert old in t` 再 replace，写完后 `grep -c 关键词` 逐条验证。
+
 ---
 
 ## 8. 完整可调参数表（~50 个，供 AI 快速查询）
@@ -913,9 +941,14 @@ SpectrumParams.h 默认值
 
 （后续 AI 若要"改某 GUI 控件"，直接对照此表即可找到参数字段 / 回调位置）
 
+> **加控件的唯一姿势（v0.5.4 #G）**：`setBuildingTab (Tab::X)` 之后调 `addSlider/addCombo/addToggle/addButton`，
+> 同行并排多个控件用 **`addRowGroup (label, { a, b, ... }, h)`**；需要跨页常驻的（页签行、底部导出条）
+> 用 **`keepVisibleOnAllTabs (&comp)`**。三者都会自动进入 `rows`/`chrome`，因此切页显隐由 `resized()` 统一驱动。
+> **不要**直接 `addAndMakeVisible` 就完事——那样会被安全网隐藏（`findUnownedChildren()` 非空，debug 下 jassert）。
+
 | GUI section | GUI label | 控件类型 | 写入的字段 | 备注 |
 |---|---|---|---|---|
-| Style | Render style | Combo | params.style | 4 选项 |
+| Style | Render style | Combo | params.style | 5 选项（`bar-mirror` 已于 #3.1 删除，工厂仍收该别名→bar） |
 | Style | Band count | Slider (int) | params.bandCount | 16..512 |
 | Style | Bar width % | Slider (int, %) | params.setBarWidth | 2..250 → ×slot；联动：pitch 不动 gap 变 |
 | Style | Bar gap % | Slider (int, %) | params.setBarGap | -248..248；可为负=重叠；联动：pitch 不动 width 变 |
@@ -943,7 +976,8 @@ SpectrumParams.h 默认值
 | Appearance | Primary | Color picker | params.primaryColor | alpha 可改 |
 | Appearance | Secondary | Color picker | params.secondaryColor | |
 | Appearance | Peak | Color picker | params.peakColor | |
-| Export | W / H | Int-only editors | params.width / height | ≥64 |
+| Layers（Image 页）| **Layer stack（图层栈）** | **ListBox**（ParamPanel 兼任 `ListBoxModel`）| 只读展示 params.images / spectrumPresent / spectrumIndex / style / maskImage | v0.5.4 #H：顶→底列每层 + `[ok\|FILE MISSING\|NO DECODER]` + `scale x…`；点击行 → `onSelectLayerRow(tag)`：`layerTagMask(-2)`=切"编辑图片位置"、`layerTagSpectrum(-1)`=选频谱、`>=0`=选第 N 张图；内容哈希去抖 |
+| Export | W / H | Int-only editors | params.width / height | ≥64（#G：与宽度框同属一行 `addRowGroup`） |
 | Export | Encoder | Combo | params.encoder | PngSeq/MovQtrle(alpha)/WebmVp9(no alpha) |
 | Export | Browse | Button | exportDir (GUI state, not param) | 设置输出目录 |
 | Export | Export | Button | (后台 VisPipeline::run) | 按 Encoder 下拉选择导出；进度 % 显示在 progressLabel |

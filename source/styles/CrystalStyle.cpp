@@ -255,6 +255,25 @@ void CrystalStyle::renderPass (juce::Graphics& g, int pass,
         else        g.setColour (rp.primary.withAlpha (0.90f));
         g.strokePath (curvePath, juce::PathStrokeType (rp.lineWidth));
         g.setColour (juce::Colours::white);   // 清渐变
+
+        // v0.5.4 #E：下臂此前只吃到 pass0 辉光 + pass1 填充，**实体描边从未画过** →
+        //   轴拖高后下半部分明显比上半暗（用户报"描边颜色没有上半部分亮，不一致"）。
+        //   现在两侧用完全相同的双层描边参数，亮度一致。
+        const float aS = juce::jlimit (0.0f, 1.0f, rp.baselineY);
+        if (aS > 0.001f)
+        {
+            const auto dnPts = buildMirrorPoints_ (pts, aS, canvas, rp);
+            juce::Path curveDn;
+            curveDn.startNewSubPath (dnPts[0]);
+            for (size_t i = 1; i < dnPts.size(); ++i) curveDn.lineTo (dnPts[i]);
+            if (useMap) g.setGradientFill (cm.horizontalGradient (gx0, gx1, yBot, 0.40f));
+            else        g.setColour (rp.primary.withAlpha (0.40f));
+            g.strokePath (curveDn, juce::PathStrokeType (2.5f));
+            if (useMap) g.setGradientFill (cm.horizontalGradient (gx0, gx1, yBot, 0.90f));
+            else        g.setColour (rp.primary.withAlpha (0.90f));
+            g.strokePath (curveDn, juce::PathStrokeType (rp.lineWidth));
+            g.setColour (juce::Colours::white);
+        }
         return;
     }
 
@@ -269,6 +288,16 @@ void CrystalStyle::renderPass (juce::Graphics& g, int pass,
         juce::Colour highlight = rp.primary.brighter (2.5f).withAlpha (0.55f);
         g.setColour (highlight);
         g.strokePath (curvePath, juce::PathStrokeType (1.0f));
+        // v0.5.4 #E：下臂同样给一条高光，否则两侧亮度不一致
+        const float aH = juce::jlimit (0.0f, 1.0f, rp.baselineY);
+        if (aH > 0.001f)
+        {
+            const auto dnPts = buildMirrorPoints_ (pts, aH, canvas, rp);
+            juce::Path curveDn;
+            curveDn.startNewSubPath (dnPts[0]);
+            for (size_t i = 1; i < dnPts.size(); ++i) curveDn.lineTo (dnPts[i]);
+            g.strokePath (curveDn, juce::PathStrokeType (1.0f));
+        }
 
         // 峰值虚线（与 Y2KLineStyle 一致，保持功能对等）
         // v0.5.4 #3.3：由 "Peak caps" 开关统一控制；#5/#3.4：跟随基线轴映射 + 轴在中部时下臂也有一条

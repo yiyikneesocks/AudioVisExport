@@ -197,6 +197,20 @@ int main()
         check (low < area, "crystal: lower arm fill no longer floods the whole lower half");
     }
 
+    // ================= #3/#E crystal 上臂 vs 下臂描边亮度一致 =================
+    {
+        auto f = makeFrame (-40.0f, -40.0f);          // n=0.5 → 上臂 y=100，下臂 y=300
+        auto rp = baseRp(); rp.baselineY = 0.5f; rp.barParticles = false;
+        auto img = render ("crystal", f, rp);
+        // 强 primary 描边判定：红通道高且红 >> 绿/蓝（辉光/填充的红要弱得多）
+        auto strong = [] (juce::PixelARGB p) { return p.getRed() > 150 && p.getGreen() < 70 && p.getBlue() < 70; };
+        const int up = scan (img, 88, 112, strong).count;
+        const int dn = scan (img, 288, 312, strong).count;
+        std::printf ("      [crystal #E] strong-stroke px upper=%d lower=%d\n", up, dn);
+        check (up > 100, "crystal #E: upper arm has a strong primary stroke");
+        check (dn >= up * 4 / 5, "crystal #E: lower arm stroke as strong as upper (both sides lit)");
+    }
+
     std::printf ("\n%s\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT");
     return failures == 0 ? 0 : 1;
 }

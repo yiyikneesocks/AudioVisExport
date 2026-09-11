@@ -55,27 +55,8 @@ MainComponent::MainComponent() : canvas (params), panel (params)
     {
         if (files.isEmpty())
             return;
-        const juce::File f (files[0]);
-        const auto ext = f.getFileExtension().toLowerCase();
-        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp"
-            || ext == ".gif" || ext == ".webp")
-        {
-            // #6: 落在面板区域且停在 Mask 页 → 设为蒙版图；否则按原样加图片图层
-            const auto mouse = juce::Desktop::getInstance().getMousePosition();
-            if (panelViewport.getScreenBounds().contains (mouse)
-                && panel.activeTab() == ParamPanel::Tab::Mask)
-                requestMaskImageFile (f);
-            else
-                addImageLayer (f);
-        }
-        else if (ext == ".wav" || ext == ".aif" || ext == ".aiff"
-                 || ext == ".mp3" || ext == ".flac" || ext == ".ogg" || ext == ".wma")
-            loadFile (f);
-        else
-            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
-                                                    "Unsupported file",
-                                                    "Only WAV / AIFF audio or image files can be used:\n"
-                                                        + f.getFullPathName());
+        // v0.5.4 #H：与 OLE 链共用同一套路由规则（以前两条链各写一份，规则会漂）
+        routeDroppedFile (juce::File (files[0]), juce::Desktop::getInstance().getMousePosition());
     };
 
     // 图层（Layers）区：面板按钮 → 主组件操作 params.images + 画布选中态
@@ -88,18 +69,52 @@ MainComponent::MainComponent() : canvas (params), panel (params)
     // v0.5.4: 频谱蒙版图片
     panel.onChooseMaskImage = [this] { chooseMaskImageFile(); };
     panel.onMaskFileDropped = [this] (const juce::File& f) { requestMaskImageFile (f); };   // #6
+    // v0.5.4 #H：图层列表点击 → 画布选中该元素（蒙版行 = 进入/保持"编辑图片位置"）
+    panel.onSelectLayerRow = [this] (int tag)
+    {
+        if (tag == ParamPanel::layerTagMask)
+        {
+            canvas.setEditMaskImage (! canvas.editMaskImageMode());
+            panel.setMaskEditChecked (canvas.editMaskImageMode());
+        }
+        else if (tag == ParamPanel::layerTagSpectrum)
+        {
+            canvas.setEditMaskImage (false);
+            panel.setMaskEditChecked (false);
+            canvas.selectSpectrum();
+        }
+        else if (tag >= 0 && tag < (int) params.images.size())
+        {
+            canvas.setEditMaskImage (false);
+            panel.setMaskEditChecked (false);
+            canvas.selectImage (tag);
+        }
+        panel.refreshLayerList (canvas.selectedImageIndex(), canvas.editMaskImageMode());
+        canvas.repaint();
+    };
     panel.onToggleMaskEdit  = [this] (bool b) { canvas.setEditMaskImage (b); canvas.repaint(); };
     panel.onUseMaskAvgColour = [this]
     {
         // #7：把描边色固定为当前图片平均色
-        const juce::Image im = juce::ImageCache::getFromFile (juce::File (params.maskImage.path));
-        if (im.isValid())
+        // v0.5.4 #H：旧码解不开就静默 return（点了按钮毫无反应 = 又一个"不消失/没反应"类 bug）
+        if (params.maskImage.path.isEmpty())
         {
-            params.maskImage.strokeColor     = SpectrumMask::averageColour (im);
-            params.maskImage.strokeAutoColor = false;
-            panel.syncMaskControls();
-            canvas.repaint();
+            juce::AlertWindow::showMessageBoxAsync (
+                juce::MessageBoxIconType::InfoIcon, "No mask image yet",
+                "Load a mask image first (drag one onto the Mask tab, or use "
+                "\"Choose mask image...\") — then this button fixes the outline colour "
+                "to that image's average colour.",
+                "OK", this);
+            return;
         }
+        const juce::Image im = loadValidatedImage (juce::File (params.maskImage.path),
+                                                   "Use average colour");
+        if (im.isNull())
+            return;
+        params.maskImage.strokeColor     = SpectrumMask::averageColour (im);
+        params.maskImage.strokeAutoColor = false;
+        panel.syncMaskControls();
+        canvas.repaint();
     };
     // v0.5.4 #6: 选中图片图层的色彩调整（只影响选中层）+ 页签高度变化重排
     panel.onReadImageAdjust = [this] (int ch) -> double
@@ -313,6 +328,7 @@ void MainComponent::timerCallback()
                                         imgSel ? params.images[(size_t) selNow].opacity * 100.0
                                                : 100.0,
                                         params.spectrumPresent);
+            panel.refreshLayerList (selNow, canvas.editMaskImageMode());   // v0.5.4 #H
         }
     }
 
@@ -690,41 +706,92 @@ bool MainComponent::isInterestedInFileDrag (const juce::StringArray&)
 
 void MainComponent::filesDropped (const juce::StringArray& files, int x, int y)
 {
-    juce::ignoreUnused (x, y);
 
-    auto isAudio = [] (const juce::String& p)
-    {
-        auto ext = juce::File (p).getFileExtension().toLowerCase();
-        return ext == ".wav" || ext == ".aif" || ext == ".aiff"
-            || ext == ".mp3" || ext == ".flac" || ext == ".ogg" || ext == ".wma"
-            || ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp"
-            || ext == ".gif" || ext == ".webp";
-    };
-
-    for (auto& f : files)
-        if (isAudio (f))
-        {
-            loadFile (juce::File (f));
-            return;
-        }
-
-    if (! files.isEmpty())
-        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
-                                                "Unsupported file",
-                                                "Only WAV / AIFF audio can be used:\n"
-                                                    + juce::File (files[0]).getFullPathName());
+    // v0.5.4 #H 修复：旧码把图片扩展名也塞进 isAudio 判定，于是**拖到面板（非 Mask 页）
+    //   的图片被当成音频去 loadFile()** → 永远建不出图层（= 用户报"拖放图片无法正常显示"的一种）。
+    //   现在统一交给 routeDroppedFile，并且用真实落点坐标决定去向。
+    if (files.isEmpty())
+        return;
+    // JUCE 给我们的 (x,y) 是**本组件内坐标**，路由判据要的是屏幕坐标 → 加上窗口原点
+    const juce::Point<int> screenPos = getScreenBounds().getTopLeft() + juce::Point<int> (x, y);
+    routeDroppedFile (juce::File (files[0]), screenPos);
 }
 
 // ---------------------------------------------------------------------------
 // 图片图层（拖入图片 / 面板按钮操作；z 序 = params.images 顺序，频谱固定最底）
 // ---------------------------------------------------------------------------
+juce::Image MainComponent::loadValidatedImage (const juce::File& f, const juce::String& what)
+{
+    if (! f.existsAsFile())
+    {
+        juce::AlertWindow::showMessageBoxAsync (
+            juce::MessageBoxIconType::WarningIcon, what + ": file not found",
+            "Nothing was changed — the file does not exist (or was moved/deleted):\n  "
+                + f.getFullPathName(),
+            "OK", this);
+        return {};
+    }
+
+    const juce::Image im = juce::ImageCache::getFromFile (f);
+    if (! im.isValid() || im.getWidth() <= 0 || im.getHeight() <= 0)
+    {
+        juce::AlertWindow::showMessageBoxAsync (
+            juce::MessageBoxIconType::WarningIcon, what + ": image not readable",
+            "This program could not decode the file, so nothing was changed:\n  "
+                + f.getFileName()
+                + "\n\nsize: " + juce::String::formatted ("%lld bytes", (long long) f.getSize())
+                + "\nreadable formats: PNG, JPG/JPEG, GIF, BMP"
+                  " (WEBP depends on the build — it may silently fail)."
+                + "\n\nIf this file *should* open (e.g. HEIC / a corrupted export / a file with a "
+                  "misleading extension), tell me the exact file name and I'll add a decoder for it.",
+            "OK", this);
+        return {};
+    }
+    return im;
+}
+
+void MainComponent::routeDroppedFile (const juce::File& f, const juce::Point<int>& pos)
+{
+    const auto ext = f.getFileExtension().toLowerCase();
+
+    if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp"
+        || ext == ".gif" || ext == ".webp")
+    {
+        // 落在面板视口里、并且当前停在 Mask 页 → 当作蒙版图；其余情况一律做图片图层。
+        const bool overPanel = panelViewport.getScreenBounds().contains (pos);
+        if (overPanel && panel.activeTab() == ParamPanel::Tab::Mask)
+            requestMaskImageFile (f);
+        else
+            addImageLayer (f);
+        return;
+    }
+
+    if (ext == ".wav" || ext == ".aif" || ext == ".aiff"
+        || ext == ".mp3" || ext == ".flac" || ext == ".ogg" || ext == ".wma")
+    {
+        loadFile (f);
+        return;
+    }
+
+    juce::AlertWindow::showMessageBoxAsync (
+        juce::MessageBoxIconType::WarningIcon, "Unsupported file",
+        "This file type can't be used here.\n  " + f.getFileName()
+            + "\n\naudio: wav / aif / aiff / mp3 / flac / ogg / wma"
+              "\nimage: png / jpg / jpeg / bmp / gif / webp",
+        "OK", this);
+}
+
 void MainComponent::addImageLayer (const juce::File& f)
 {
+    // v0.5.4 #H：先解码验证；解不开就报错返回，绝不插入"看不见"的图层
+    const juce::Image im = loadValidatedImage (f, "Add image layer");
+    if (im.isNull())
+        return;
+
     ImageLayer layer;
     layer.path    = f.getFullPathName();
     layer.opacity = 1.0f;
-    layer.transform = makeContainTransform ((float) juce::ImageCache::getFromFile (f).getWidth(),
-                                            (float) juce::ImageCache::getFromFile (f).getHeight(),
+    layer.transform = makeContainTransform ((float) im.getWidth(), (float) im.getHeight(),
                                             (float) params.width, (float) params.height);
     // v0.5.2: 插在频谱下方（spectrumIndex 位置）
     const int N = (int) params.images.size();
@@ -734,6 +801,10 @@ void MainComponent::addImageLayer (const juce::File& f)
     for (size_t i = 0; i < params.images.size(); ++i)
         params.images[i].aboveSpectrum = ((int) i >= params.spectrumIndex);
     canvas.selectImage (k);
+    // v0.5.4 #H：把"这个文件到底去了哪儿"说出来——静默正是这类 bug 的温床
+    panel.setProgressText ("Image layer #" + juce::String (k + 1) + " added: " + f.getFileName()
+                           + "  (" + juce::String (im.getWidth()) + "x" + juce::String (im.getHeight()) + ")");
+    panel.refreshLayerList (canvas.selectedImageIndex(), canvas.editMaskImageMode());
     canvas.repaint();
 }
 
@@ -917,18 +988,26 @@ void MainComponent::requestMaskImageFile (const juce::File& f)
 // #7：蒙版图片单槽位的实际应用（chooseMaskImageFile 的确认回调）
 void MainComponent::applyMaskImageFile (const juce::File& f)
 {
+    // v0.5.4 #H：解码优先——旧码先无条件写 path/enabled，再 if(isValid) 算均色；
+    //   于是解不开的图会留下"maskImage 已设置但画面毫无变化"的状态，
+    //   下次拖入又只会弹 "Mask image already set"（= 用户报的"拖到 mask 没反应，
+    //   但提示里已经加载过图片"）。现在失败即返回，状态一律不动。
+    const juce::Image im = loadValidatedImage (f, "Mask image");
+    if (im.isNull())
+        return;
+
     params.maskImage.path    = f.getFullPathName();
     params.maskImage.enabled = true;
     // #7：新图加载即计算平均色作为描边色显示（auto 开，随图动态）
-    if (const juce::Image im = juce::ImageCache::getFromFile (f); im.isValid())
-    {
-        params.maskImage.strokeColor     = SpectrumMask::averageColour (im);
-        params.maskImage.strokeAutoColor = true;
-    }
+    params.maskImage.strokeColor     = SpectrumMask::averageColour (im);
+    params.maskImage.strokeAutoColor = true;
     params.maskImage.transform = VisTransform {};   // set=false = 等比 contain 居中（#3）
     lastDir = f.getParentDirectory();
     panel.syncMaskControls();   // 反映"启用"勾选
     canvas.setEditMaskImage (false);
+    panel.setProgressText ("Mask image set: " + f.getFileName()
+                           + "  (" + juce::String (im.getWidth()) + "x" + juce::String (im.getHeight()) + ")");
+    panel.refreshLayerList (canvas.selectedImageIndex(), canvas.editMaskImageMode());
     canvas.repaint();
 }
 

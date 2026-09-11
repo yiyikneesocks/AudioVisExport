@@ -58,15 +58,15 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-11 02:2x）
+## 当前状态（最后更新：2026-09-11 18:0x）
 
 - **v0.5.3 已完整发版**（2026-09-09，tag `v0.5.3` + GitHub Release 已发）。
 - **v0.5.4 编码中（重点＝频谱样式 + 蒙版图片 + 基线轴 + 崩溃报告）**：
   已推送到 GitHub main（`5d4b42e..14b5104` 20 commits 为 v0.5.4 主体；其后 INBOX 反馈迭代
   `f45eaa5`（五连 #1/#2/#7/#8/#9）→ `c755f73`（#10 y2k 两臂颜色）→ `5877024`（#1b outline 崩溃真根因）
   → `a7ac78b`/`22a966f`（文档同步 + 纪律强化）→ `856f228`（文档补齐 + 写入安全规则）
-  → **本轮 02:2x：#3 peak-caps 四件套（见下方 ✅）**），**尚未发版**
-  （用户 Windows 实测进行中，最新部署 `AudioVisGUI_09110217.exe`）。
+  → `ae6d73c`（#3 peak-caps 四件套）→ **本轮 17:5x：#E/#F/#G/#H**），**尚未发版**
+  （用户 Windows 实测进行中，最新部署 `AudioVisGUI_09111811.exe`）。
   - ✅ 已完成：A1 ColorMap / A2 bar-mirror（**后于 #3.1 删除**，改为 bar + 基线轴 50%）/ A3 CrystalStyle v2 bloom / A4 频谱蒙版图片
     （BUG1 漂移修复 + BUG2 独立拉伸）/ Tabbed UI（4 tab）/ Baseline axis（baselineY）
     / Bar 布局 pitch 模型重做（#25 + #1' + #3''）/ Bar-line 峰帽 v3（连贯分段）
@@ -80,9 +80,37 @@
     - ✅ **mp3 解码 → 已支持**（开启 JUCE_USE_MP3AUDIOFORMAT 软件解码 + PcmSource 注册 MP3AudioFormat）。
     - ✅ **baseline axis 与频谱底部/左缘重合** → 已取消全样式 reduced(2) 缩进 + 左/下内边距归 0。
     - ✅ **pitch 默认 1/90**（与 bandCount=90 联动，默认 90 柱全宽）。
-    - ⏳ #3（grey-out controls）和 #4（bar restored original cap）尚未由用户 Windows 实测。
-    - ⏳ **下一轮**：INBOX 新 #3 peak-caps 四件套（3.1 bar-mirror 删除 / 3.2 bar 双侧帽跟随轴 / 3.3 line 系峰帽开关 / 3.4 下侧异常）+ 新 #6 蒙版双按钮（outline 已解锁）。
-    - ⏳ 末柱斜面决定因素报告 → 已写入 INBOX_REPLY（等用户知悉）。
+    - ✅ **#3 peak-caps 四件套（02:2x）+ 派生 #5**：3.1 删 bar-mirror（工厂保留别名 → bar，旧预设不失效）/
+      3.2 bar 帽过 baseline 映射 + a>0 双侧帽 + 下臂缘线 / 3.3 `refreshStyleDependentControls` 取消 Peak caps 置灰
+      且三 line 样式内部用 `rp.barParticles` 门控峰线 / 3.4 三个独立 bug（y2k 下臂描边漏 setColour、
+      三样式缺下臂镜像峰线、`CrystalStyle::buildMirrorPoints_` 反推漏减 a → 下半屏被填满）。
+      新增常驻 `scripts/vis_peaks_test.cpp`（16 断言 + 负对照精准 5 FAIL）。
+    - ✅ **#F 末柱斜面 / 频带高度三问报告** → 已写入 `INBOX_REPLY.md`「📣 关键汇报」首节（用户点名位置）。
+    - ⏳ 待用户实测：#3 全量（bar 双侧帽 / line 开关 / crystal 下侧）+ #9 汇报是否已看到。
+  - 🔧 **本轮 17:5x 新增（用户实测反馈 A~H）**：
+    - ✅ 用户确认通过：A（outline 不再崩溃）/ B（bar-mirror 已删）/ C（bar 帽跟轴双侧）/ D（line 系开关）。
+    - ✅ **#E crystal 两侧亮度不一致**：pass1 实体描边与 pass2 高光原先**只画上臂**，下臂只剩辉光+填充
+      → 两处都补 `buildMirrorPoints_` 下臂路径，参数与上臂逐字相同；`vis_peaks_test` 新断言（强 primary 像素
+      两侧比）+ 负对照 1 FAIL。
+    - ✅ **#G 切页残留 → 结构性消除**：根因＝`Row{label, editor, h, tab}` 一行只能挂一个 editor，
+      而 Colors(4)/描边色(2)/W×H(2) 都是并排多控件 → `maskAvgBtn`/`secondaryBtn`/`peakBtn`/`bgBtn`/`heightEditor`
+      **从未被隐藏过**（用户只撞见最显眼的 Use average）。修法＝`Row::editors` 向量化 + `addRowGroup(label,{…})`
+      整行统一驱动布局与显隐；`keepVisibleOnAllTabs()` 登记常驻件；`resized()` 末尾**安全网**把
+      "没登记又不属任何行"的直接子件一律隐藏（失败方向从「静默残留」翻转为「控件不出现」）。
+      新增 `vis_tabs_test`：四页切换后 `findUnownedChildren()` 必须为空 + **行为证明**（塞入未登记按钮必须被抓出并隐藏）。
+    - ✅ **#H 拖放三处根因**：① 兜底目标 `filesDropped` 的 `isAudio` 里混进了图片扩展名 → 拖到面板（非 Mask 页）的
+      图片被当音频 `loadFile`，永不成图层；② `applyMaskImageFile` 先无条件写 path/enabled 再验证 →
+      解不开时留下"已设置但看不见"的死状态，下次只弹 "already set"；③ `addImageLayer` 不验证 +
+      `makeContainTransform(0,0,…)` 因 `jmax(1.0f, elemW)` 把 0 当 1 → **scale 静默变 720**，画布侧又用
+      "无效图退化成画布尺寸"画手柄 → **框炸到画布上千倍外**（= 用户原话"提示的边框范围远超画布"）。
+      修法＝`loadValidatedImage()`（失败弹具体原因：文件名+字节数+可读格式清单，且**不改任何状态**）、
+      `routeDroppedFile(file, 屏幕落点)` 让 OLE 链与 WM_DROPFILES 链共用同一套规则、
+      `makeContainTransform` 非正尺寸退回 1:1（`vis_anchor_test` 情形 11 锁死 + 负对照 4 FAIL）、
+      `onUseMaskAvgColour` 的静默 return 也改为弹提示、成功拖入写状态行显示目的地。
+    - ✅ **#H 采纳用户建议**：Image 页顶部新增可见**图层栈**（`ListBox`：顶→底排序 +
+      `[ok | FILE MISSING | NO DECODER]` + `scale x…`，点击行 = 选中该元素，蒙版行进出"编辑图片位置"；
+      内容哈希去抖，每 tick 调用也便宜）。
+    - ⏳ 用户新提"具体样式我还想进一步优化" → 等其指名样式与期望（已列待办，不阻塞）。
   - 📋 协作机制：INBOX 三件套 + status gate + #0/#0+/#10/#11 轮次节奏协议，
     REPLY 三固定子节结构。全部写入 PLAN.md「文档更新触发点」。
   - 🛠 **崩溃报告器已两次立功**（#1b 与本轮排查）：用户只需照常闪退，`exe/crash/*.dmp`

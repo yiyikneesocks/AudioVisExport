@@ -101,6 +101,13 @@ private:
     void requestMaskImageFile (const juce::File& f); // v0.5.4 #6: 选择器/拖放统一入口
     void loadFileInternal (const juce::File& f);     // v0.5.4 #7: 实际加载（替换确认后）
     void addImageLayer (const juce::File& f);   // 拖入/选择图片 → 新建图片图层并选中
+    // v0.5.4 #H：解码优先的取图助手。图片解不开 → 明确弹错并返回空图，调用方**不得改动任何状态**。
+    //   （旧路径先写 maskImage.path / 先 insert 图层，再发现解不开 → 留下"已设置但看不见"的
+    //    死状态，而且下次拖入只会弹"already set"，用户看到的就是"拖放没反应"。）
+    juce::Image loadValidatedImage (const juce::File& f, const juce::String& what);
+    // v0.5.4 #H：拖放文件的**唯一**路由（OLE 兜底链与 WM_DROPFILES 直连链共用，避免两边规则漂移）。
+    //   pos = 落点屏幕坐标；落在面板视口内且停在 Mask 页 → 设蒙版图，否则图片进图层、音频进播放器。
+    void routeDroppedFile (const juce::File& f, const juce::Point<int>& pos);
     void moveSelectedLayer (int delta);         // +1 = 上移一层，-1 = 下移一层（统一 z 序）
     void removeSelectedLayer();                 // 统一删除（图片或频谱）
     void addSpectrumLayer();                    // v0.5.2: 恢复被删除的频谱层

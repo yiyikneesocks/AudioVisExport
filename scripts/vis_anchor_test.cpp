@@ -4,6 +4,7 @@
 #include "../source/core/VisTransform.h"
 #include <cstdio>
 #include <cmath>
+#include <algorithm>
 #include <string>
 
 static int fails = 0;
@@ -218,6 +219,34 @@ int main()
         }
         CHECK (ok, "theta=0: R·S equals legacy S·R (spectrum unaffected)");
     }
+    // 情形 11（v0.5.4 #H）：图片解码失败 → 尺寸为 0 时 contain 变换不得炸框
+    //   旧实现 jmax(1.0f, elemW) 把 0 当 1 → scale=720，画布侧再用"画布尺寸"回退画手柄
+    //   → 框被放大上千倍跑到画布外（用户所见"提示的边框范围远超画布"）。
+    {
+        const float OW = 1280.0f, OH = 720.0f;
+        for (float w : { 0.0f, -5.0f })
+        {
+            const auto c = makeContainTransform (w, 0.0f, OW, OH);
+            CHECK (std::isfinite (c.scaleX) && std::isfinite (c.scaleY),
+                   "contain(<=0 dims): scale stays finite");
+            CHECK (std::abs (c.scaleX - 1.0f) < 1e-4f && std::abs (c.scaleY - 1.0f) < 1e-4f,
+                   "contain(<=0 dims): scale falls back to 1:1, never a huge magnification");
+            auto pts = visCorners (c, OW, OH);   // 画布侧无效图回退用画布尺寸当元素尺寸
+            float maxAbs = 0.0f;
+            for (auto& q : pts)
+            {
+                CHECK (std::isfinite (q.getX()) && std::isfinite (q.getY()),
+                       "contain(<=0 dims): corners finite");
+                maxAbs = std::max ({ maxAbs, std::abs (q.getX()), std::abs (q.getY()) });
+            }
+            CHECK (maxAbs <= 2.0f * std::max (OW, OH),
+                   "contain(<=0 dims): handle frame stays near the canvas (no 1000x blow-up)");
+        }
+        // 正常尺寸仍是严格 contain（零回归）
+        const auto ok = makeContainTransform (4000.0f, 3000.0f, OW, OH);
+        CHECK (std::abs (ok.scaleX - 0.24f) < 1e-4f, "contain(4000x3000 into 1280x720): scale = 0.24");
+    }
+
     printf(fails == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", fails);
     return fails == 0 ? 0 : 1;
 }
