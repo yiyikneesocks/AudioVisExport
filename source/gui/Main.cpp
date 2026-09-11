@@ -43,7 +43,7 @@ namespace
     {
     public:
         const juce::String getApplicationName() override    { return "AudioVisGUI"; }
-        const juce::String getApplicationVersion() override { return "0.3.1"; }
+        const juce::String getApplicationVersion() override { return "0.5.4"; }
         bool moreThanOneInstanceAllowed() override          { return true; }
 
         AVXGuiApplication()

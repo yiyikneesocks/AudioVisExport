@@ -58,15 +58,20 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-11 23:3x）
+## 当前状态（最后更新：2026-09-12 发版日）
 
 - **v0.5.3 已完整发版**（2026-09-09，tag `v0.5.3` + GitHub Release 已发）。
-- **v0.5.4 编码中（重点＝频谱样式 + 蒙版图片 + 基线轴 + 崩溃报告）**：
-  已推送到 GitHub main（`5d4b42e..14b5104` 20 commits 为 v0.5.4 主体；其后 INBOX 反馈迭代
+- **v0.5.4 ✅ 已发版（2026-09-12，tag `v0.5.4` + GitHub Release）**：
+  主体 `5d4b42e..14b5104`（20 commits）+ INBOX 反馈迭代
   `f45eaa5`（五连 #1/#2/#7/#8/#9）→ `c755f73`（#10 y2k 两臂颜色）→ `5877024`（#1b outline 崩溃真根因）
-  → `a7ac78b`/`22a966f`（文档同步 + 纪律强化）→ `856f228`（文档补齐 + 写入安全规则）
-  → `ae6d73c`（#3 peak-caps 四件套）→ **本轮 17:5x：#E/#F/#G/#H**），**尚未发版**
-  （用户 Windows 实测进行中，最新部署 `AudioVisGUI_09111811.exe`）。
+  → `a7ac78b`/`22a966f`/`856f228`（文档同步 + 纪律强化）→ `ae6d73c`（#3 peak-caps 四件套）
+  → `6e3a235`（#E/#G/#H + #F 报告）→ `1913afa`/`a811c99`/`242de7e`（Python 环境隔离 + §5.9/§5.10）
+  → `9c869a9`（INBOX 1~3：渐变跟随轴 / 图层列表黑盒 / 中文乱码）
+  → `392a18d`/`da31217`（#6 Layers 改名 + #7 报告 + #5 下一轮设计）。
+  公告正文＝`docs/RELEASE_NOTES.md` v0.5.4 节；版本号四处同步
+  （CMake project+target ×2 / CLI --help / GUI `getApplicationVersion`——后者此前长期停在 0.3.1，一并修正）。
+  **v0.5.5 首项＝INBOX #5 蒙版描边实时平均色四件套**（设计/默认值见下方专项节；
+  唯一待用户确认＝要不要真·未来帧预渲染）。
   - ✅ 已完成：A1 ColorMap / A2 bar-mirror（**后于 #3.1 删除**，改为 bar + 基线轴 50%）/ A3 CrystalStyle v2 bloom / A4 频谱蒙版图片
     （BUG1 漂移修复 + BUG2 独立拉伸）/ Tabbed UI（4 tab）/ Baseline axis（baselineY）
     / Bar 布局 pitch 模型重做（#25 + #1' + #3''）/ Bar-line 峰帽 v3（连贯分段）

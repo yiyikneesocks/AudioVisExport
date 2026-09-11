@@ -11,7 +11,7 @@
 # 协议：GPL-3.0
 # =============================================================================
 cmake_minimum_required(VERSION 3.22)
-project(AudioVisExport VERSION 0.5.3 LANGUAGES C CXX)
+project(AudioVisExport VERSION 0.5.4 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -151,7 +151,7 @@ endfunction()
 # =============================================================================
 juce_add_console_app(AudioVisExport
     PRODUCT_NAME "AudioVisExport"
-    VERSION "0.5.3"
+    VERSION "0.5.4"
     COMPANY_NAME "AudioVisExport"
 )
 
@@ -179,7 +179,7 @@ avx_configure_target(AudioVisExport)
 # =============================================================================
 juce_add_gui_app(AudioVisGUI
     PRODUCT_NAME "AudioVisGUI"
-    VERSION "0.5.3"
+    VERSION "0.5.4"
     COMPANY_NAME "AudioVisExport"
     ICON_BIG   "${CMAKE_SOURCE_DIR}/assets/icon.png"   # v0.5.4 #1: exe 图标
     ICON_SMALL "${CMAKE_SOURCE_DIR}/assets/icon.png"   # 注意：juceaide winicon 只认 png 输入（ico 会静默失败）
