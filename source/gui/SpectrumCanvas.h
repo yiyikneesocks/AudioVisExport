@@ -46,6 +46,8 @@ public:
 
     // ---- 图层选择 API（ParamPanel / MainComponent 访问）----
     int  selectedImageIndex() const noexcept { return selectedImage; }  // -1 = 频谱元素
+    // v0.5.5 新 #3：任何会改动 transform 的拖拽手势**开始时**回调一次（MainComponent 压 undo 快照）
+    std::function<void ()> onGestureStart;
     void selectSpectrum()    { selectedImage = -1; repaint(); }
     void selectImage (int idx){ selectedImage = idx; repaint(); }
     int  imageCount() const noexcept { return (int) params.images.size(); }
@@ -72,6 +74,7 @@ private:
     };
     DragMode dragMode = DragMode::None;
     int selectedImage = -1;             // 当前选中元素：-1 = 频谱，>=0 = params.images 下标
+    bool gestureReported = false;       // v0.5.5 #3：本次拖拽是否已触发 onGestureStart
     bool editMaskImage = false;         // v0.5.4：蒙版图片编辑模式
     // v0.5.5 #5e：描边实时平均色的**预览**节流+插值缓存（导出不用它，逐帧真算）
     SpectrumMask::PreviewPaletteCache maskPalette;

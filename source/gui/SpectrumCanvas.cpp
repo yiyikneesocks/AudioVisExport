@@ -891,6 +891,11 @@ void SpectrumCanvas::mouseDown (const juce::MouseEvent& e)
 
 void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
 {
+    if (dragMode != DragMode::None && ! gestureReported)
+    {
+        gestureReported = true;
+        if (onGestureStart) onGestureStart ();   // v0.5.5 #3：拖拽起点 = 一次 undo 快照边界
+    }
     if (dragMode == DragMode::None)
         return;
 
@@ -1207,6 +1212,7 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
 void SpectrumCanvas::mouseUp (const juce::MouseEvent&)
 {
     dragMode = DragMode::None;
+    gestureReported = false;            // v0.5.5 #3：下一次拖拽重新计快照
     activeSnapGuides.clear();   // v0.5.3: 松开鼠标清除吸附辅助线
     repaint();
 }

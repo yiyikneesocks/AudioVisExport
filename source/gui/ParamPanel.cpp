@@ -583,6 +583,7 @@ juce::Slider* ParamPanel::addSlider (const juce::String& label,
     s->onValueChange = [apply, s] { apply (s->getValue()); };
     widgets.add (s);
     addAndMakeVisible (s);
+    sliderGetters.push_back ({ s, read });   // v0.5.5 #3
     addRow (label, s);
     return s;
 }
@@ -666,6 +667,26 @@ void ParamPanel::syncBarLayoutSliders()
         barPitchSliderPtr->setValue (params.barPitchRatio * 100.0, juce::dontSendNotification);
     if (bandCountSliderPtr != nullptr)
         bandCountSliderPtr->setValue ((double) params.bandCount, juce::dontSendNotification);
+}
+
+void ParamPanel::syncAllFromParams()
+{
+    // v0.5.5 新 #3：undo 后把面板显示回填。滑块的 read lambda 只在构造时求值一次，
+    //   不主动 setValue 就显示旧值 → 统一按登记的 getter 重刷（覆盖绝大多数数值控件）。
+    for (auto& pr : sliderGetters)
+        if (pr.first != nullptr)
+            pr.first->setValue (pr.second(), juce::dontSendNotification);
+    syncBarLayoutSliders();      // 三联动（width/gap/pitch）互相回填
+    syncMaskControls();          // 蒙版：勾选/颜色/四边开关+厚度/fps/平滑（已含 #5 控件）
+    // 少数独立 toggle 直接读 params（不进 sliderGetters）
+    if (peakCapsTogglePtr  != nullptr) peakCapsTogglePtr ->setToggleState (params.barParticles, juce::dontSendNotification);
+    if (lineOnlyTogglePtr  != nullptr) lineOnlyTogglePtr ->setToggleState (params.lineOnly,    juce::dontSendNotification);
+    gridToggle     .setToggleState (params.drawGrid,       juce::dontSendNotification);
+    axisLabelToggle.setToggleState (params.drawAxisLabels, juce::dontSendNotification);
+    snapToggle     .setToggleState (params.snapEnabled,    juce::dontSendNotification);
+    // v0.5.4 #6 的吸附开关是成员（非指针），构造时赋过一次，undo 后也得回填
+    snapToggle.setToggleState (params.snapEnabled, juce::dontSendNotification);
+    refreshStyleDependentControls();
 }
 
 void ParamPanel::syncMaskControls()
@@ -782,10 +803,18 @@ void ParamPanel::setActiveTab (Tab t)       { showTab (t, true); }   // 显式�
 
 void ParamPanel::syncSelectionTab (bool imageSelected)
 {
+    // 新1-C：只有“选中图片”才值得自动跳 Layers 页（用户看得见的目的）；
+    //   取消“选中频谱自动跳回 Spectrum 页”——用户可能正在 Mask/Export 页操作，跳走纯属打扰。
+    if (imageSelected)
+    {
+        if (imageSelected != lastImageSelected_)
+            showTab (Tab::Image, false);
+        lastImageSelected_ = true;
+        return;
+    }
     if (imageSelected != lastImageSelected_)
     {
-        lastImageSelected_ = imageSelected;
-        showTab (imageSelected ? Tab::Image : Tab::Spectrum, false);
+        lastImageSelected_ = imageSelected;   // 只更新翻转标记；取消选中图片→不主动跳页（新1-C）
     }
 }
 
@@ -930,6 +959,17 @@ void ParamPanel::listBoxItemDoubleClicked (int row, const juce::MouseEvent& e)
     listBoxItemClicked (row, e);
 }
 
+void ParamPanel::deleteKeyPressed (int lastRowSelected)
+{
+    // 新1-B：列表里选中某行直接按 Delete 也要能删（旧行为：键被 ListView 吞掉、无任何反应）。
+    if (lastRowSelected >= 0 && lastRowSelected < (int) layerRows.size()
+        && layerRows[(size_t) lastRowSelected].tag >= 0)   // 只对图片层执行
+    {
+        if (onSelectLayerRow) onSelectLayerRow (layerRows[(size_t) lastRowSelected].tag);
+        if (onLayerRemove)    onLayerRemove();
+    }
+}
+
 void ParamPanel::refreshLayerList (int selectedImage, bool maskEditMode)
 {
     // 内容哈希去抖：MainComponent 每 tick 都会调，只有真的变了才重建 + 重绘
@@ -982,10 +1022,26 @@ void ParamPanel::refreshLayerList (int selectedImage, bool maskEditMode)
     {
         LayerRow lr;
         lr.tag = layerTagSpectrum;
-        lr.text = params.spectrumPresent ? ("  Spectrum  [" + params.style + "]")
-                                         : "  Spectrum  [DELETED]";
+        lr.text = params.spectrumPresent ? ("Spectrum  [" + params.style + "]")
+                                         : "Spectrum  [DELETED]";
+        lr.text = "  " + lr.text;
         lr.selected = (selectedImage < 0 && ! maskEditMode);
         lr.colour = lr.selected ? "ffffffff" : "ffffa8d4";
+        layerRows.push_back (lr);
+    }
+    // 新1-A：Mask image 是 Spectrum 的**子层**（渲染时恒在频谱层内、随频谱一起移动），
+    //   列表里紧贴在 Spectrum 下一行并缩进 └；点击它 = 选中频谱本体（父子算一个图层，
+    //   不进画布选择）；"编辑图片位置"入口保持在 Mask 页按钮。
+    {
+        LayerRow lr;
+        lr.tag = layerTagMask;
+        lr.text = "     \u2514 Mask image  "
+                + (params.maskImage.path.isEmpty() ? "[none]"
+                                                   : juce::File (params.maskImage.path).getFileName()
+                                                     + (params.maskImage.enabled ? "" : " [off]"))
+                + (maskEditMode ? "   < editing position" : "");
+        lr.selected = maskEditMode;
+        lr.colour = maskEditMode ? "ffffffff" : "ff8fd4ff";
         layerRows.push_back (lr);
     }
     for (int i = k - 1; i >= 0; --i)
@@ -1000,19 +1056,6 @@ void ParamPanel::refreshLayerList (int selectedImage, bool maskEditMode)
         lr.colour = lr.selected ? "ffffffff" : "ffb8b8c4";
         layerRows.push_back (lr);
     }
-    {
-        LayerRow lr;
-        lr.tag = layerTagMask;
-        lr.text = "  Mask image  "
-                + (params.maskImage.path.isEmpty() ? "[none]"
-                                                   : juce::File (params.maskImage.path).getFileName()
-                                                     + (params.maskImage.enabled ? "" : " [off]"))
-                + (maskEditMode ? "   < editing position" : "");
-        lr.selected = maskEditMode;
-        lr.colour = maskEditMode ? "ffffffff" : "ff8fd4ff";
-        layerRows.push_back (lr);
-    }
-
     // ⚠️ 必须 updateContent()：ListBox 把行数缓存在 totalItems，**只有 updateContent() 会重新问
     //   model->getNumRows()**；JUCE 头文件对 repaint() 明示 "does not invoke updateContent()"。
     //   首次 updateContent 发生在 layerRows 还是空的时候 → 缓存 0 行 → 之后永远不画行，

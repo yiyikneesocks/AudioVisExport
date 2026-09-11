@@ -14,6 +14,7 @@
 > | 现在做到哪了 / 下一步 | `docs/PLAN.md`「当前状态」 |
 > | 某功能为什么这样做 | `docs/HISTORY.md` 对应版本条目 |
 > | 参数 / 接口 / 构建命令 | 本文档 §8 参数表 / §5 构建 |
+| 有哪些快捷键 / GUI 交互键 | 本文档 §9 末「快捷键总览」（←→ seek / Ctrl+Z / Ctrl+A / Space / Delete） |
 > | 用户最新反馈 / 待办 | `docs/inbox/INBOX_REPLY.md` |
 > | 某任务的决策细节 / 指纹 | `docs/inbox/INBOX_WORKLOG.md` |
 > | 已知 bug / 限制 | 本文档 §4.5 已知限制（L1-L11） |
@@ -76,7 +77,7 @@
 > - `docs/PLAN.md` = **当前迭代下一步计划**（滚动文件，发版后清空重写）
 > - 另有 `docs/RELEASE_NOTES.md`（用户视角发版公告）、`docs/GUI_GUIDE.md`（GUI 使用指南）
 > - `docs/PLAN_v0.5.0.md` 为历史计划快照，原样保留
-> - `docs/inbox/` = **收件箱三件套**（异步对话，防读写抢占；**本地专用，已 gitignore 不分发，缺失时按 WORKLOG 头部模板重建**）：`INBOX.md`（用户输入·首行「状态 0/1」闸门：1=编辑中 AI 完全只读，0=空闲 AI 仅可精确删「已完成且已备份」的编号行）、`INBOX_WORKLOG.md`（AI 台账/备份+每轮流程）、`INBOX_REPLY.md`（AI 给用户）。完整协议见 `docs/PLAN.md`「文档更新触发点」下的说明。
+> - `docs/inbox/` = **收件箱三件套**（异步对话，防读写抢占；**本地专用，已 gitignore 不分发，缺失时按 WORKLOG 头部模板重建**）：`INBOX.md`（用户输入·首行「状态 0/1」闸门：1=编辑中 AI 完全只读，0=空闲 AI 仅可精确删「已完成且已备份」的编号行）、`INBOX_WORKLOG.md`（AI 台账/备份+每轮流程）、`INBOX_REPLY.md`（AI 给用户）。完整协议见 `docs/PLAN.md`「文档更新触发点」下的说明。**INBOX 读/删唯一入口 = `tools/inbox.py`**（`read` / `prune --expect`，把读+删绑成原子操作，见 PLAN §0 与本文件 §5.10）。
 
 > **外部目录使用约定（2026-09-10，#3）**：
 > - `~/CodingProgram/AudioVisualizer/`（工程上一级）= 授权根（opencode `external_directory` 已放行），隔壁 `Y2Kmeter` 工程也在其中；
@@ -1095,10 +1096,27 @@ SpectrumParams.h 默认值
 | Export | Export | Button | (后台 VisPipeline::run) | 按 Encoder 下拉选择导出；进度 % 显示在 progressLabel |
 | Export | Export Video | Button | params.encoder→MovQtrle（若为 PngSeq）+ 自动填 outputVideoPath | 一键透明 MOV 导出；目录未设置会先弹 Browse |
 
+### 快捷键总览（GUI）
+
+| 键 | 作用 | 实现位置 | 备注 |
+|---|---|---|---|
+| `Space` | 播放 / 暂停 | `MainComponent::keyPressed` | 无焦点也可用（v0.5.3） |
+| `←` / `→` | 快进快退 ±1s；**长按逐级加速**（1→2→5→10s） | `MainComponent::keyPressed` + `doSeekStep` | 借 Windows OS 自动重发，120ms 去抖；`Component` 无 `keyUp`，故用时间窗判"新按 vs 长按"（v0.5.5 #3） |
+| `Delete` / `Backspace` | 删除选中图层（图片或频谱） | 画布 `keyPressed` + `MainComponent::keyPressed` 兜底 + 图层列表 `deleteKeyPressed` | 三处入口都能删（v0.5.5 新1-B：列表里删以前没反应） |
+| `Ctrl`/`Cmd` + `Z` | **撤回**上一步 | `MainComponent::undoOnce`（params.toJson 快照栈，≤30 步） | 覆盖删除/加图层/拖动缩放旋转/替换蒙版/恢复频谱（v0.5.5 #3） |
+| `Ctrl`/`Cmd` + `A` | 选中频谱 | `MainComponent::keyPressed` | **语义待用户确认**（见 INBOX_REPLY）；当前=画布唯一"整组"选择 |
+
+### 焦点与路由（做新快捷键前必读）
+
+- 键盘事件优先给持焦组件：画布 `mouseDown` 会 `grabKeyboardFocus()`；图层列表选中行后也主动把焦点转给画布。
+- **`ListBox`/`ListView` 会自己吞 Delete 和方向键**——要响应就实现 `ListBoxModel::deleteKeyPressed` 等，
+  不能指望冒泡到主组件（新1-B 就是这么修的）。
+- 主组件 `keyPressed` 只在"没有任何子组件消费"时被调；空格/Delete 走的是"子组件未消费 → 冒泡到顶层"。
+
 ---
 
 
-*文档版本：v0.5.3  ·  最后更新：2026-09-09（v0.5.3 发版：锚定缩放 R·S 修复 / CAD 吸附辅助线 / 范围内外视觉区分 / 空格播放暂停）*
+*文档版本：v0.5.5  ·  最后更新：2026-09-12（v0.5.4 已发版；v0.5.5 增量：#5 描边实时平均色四件套 / 图层列表三点 / 快捷键 seek·undo·select）*
 *维护者：AudioVisExport 项目（GPL-3.0）*
 *协作规则：任何功能修改后，必须在 `docs/HISTORY.md` §2 变更日志追加一条，并在文档版本号处 bump。*
 *发布规则：见文档开头「验证闸门规则」+「发布规则」+「文档地图」；变更日志在 `docs/HISTORY.md`。*

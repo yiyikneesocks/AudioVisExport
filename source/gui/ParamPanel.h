@@ -91,6 +91,9 @@ public:
     // v0.5.4: 频谱蒙版图片控件同步（MainComponent 调用）
     void setMaskEditChecked (bool b);   // 编辑模式被"点范围外"自动退出时同步勾选
     void syncMaskControls();            // 选图后从 params 回填蒙版控件勾选态
+    // v0.5.5 新 #3：Ctrl+Z 恢复整份 params 后，把所有滑块/开关/下拉**回填显示值**
+    //（滑块的 read lambda 只在构造时求值一次，不主动重设就显示旧值）。
+    void syncAllFromParams();
 
 private:
     SpectrumParams& params;
@@ -134,6 +137,9 @@ private:
     void paintListBoxItem (int row, juce::Graphics&, int w, int h, bool rowIsSelected) override;
     void listBoxItemClicked (int row, const juce::MouseEvent&) override;
     void listBoxItemDoubleClicked (int row, const juce::MouseEvent&) override;
+    // 新1-B：ListView 自己吞掉 Delete 转交 model->deleteKeyPressed()，主组件收不到 →
+    //   列表里选中图层按删除"没反应"。在此实现：先选中该行（同步画布），再走同一删除回调。
+    void deleteKeyPressed (int lastRowSelected) override;
 
     juce::OwnedArray<juce::Component> widgets;                // 统一持有所有动态控件
     std::map<juce::Component*, std::unique_ptr<juce::Label>> rowLabels;
@@ -198,6 +204,9 @@ public:
     std::vector<juce::Component*> chrome;
     void setBuildingTab (int t) noexcept { buildingTab = t; }   // #6: 之后 add* 的行归此页
     int  buildingTab = 0;
+    // v0.5.5 #3：登记 read getter 以便 syncAllFromParams 统一回填
+    std::vector<std::pair<juce::Slider*, std::function<double()>>> sliderGetters;
+
     juce::Slider* addSlider (const juce::String& label,
                              double minValue, double maxValue, double step,
                              double skew,

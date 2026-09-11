@@ -35,6 +35,7 @@ MainComponent::MainComponent() : canvas (params), panel (params)
     canvas.onImageDropped = [this] (const juce::File& f) { addImageLayer (f); };
     canvas.onEmptyClicked = [this] { chooseAudioFile(); };
     canvas.onDeleteRequested = [this] { removeSelectedLayer(); };
+    canvas.onGestureStart = [this] { pushUndoSnapshot(); };   // v0.5.5 #3：拖拽/缩放/旋转/移基线轴 = 一次 undo 边界
     addAndMakeVisible (canvas);
 
     // 参数面板
@@ -89,6 +90,7 @@ MainComponent::MainComponent() : canvas (params), panel (params)
             panel.setMaskEditChecked (false);
             canvas.selectImage (tag);
         }
+        canvas.grabKeyboardFocus();   // 新1-B：焦点给画布 → 列表选完后 Delete/方向键等即时可用
         panel.refreshLayerList (canvas.selectedImageIndex(), canvas.editMaskImageMode());
         canvas.repaint();
     };
@@ -251,6 +253,8 @@ void MainComponent::resized()
 // ---------------------------------------------------------------------------
 void MainComponent::timerCallback()
 {
+    // v0.5.5 新 #3：←/→ seek 走 keyPressed 的 OS 自动重发（不需要 timer，也不需要 keyUp）——
+    //   Windows/Linux 按住方向键会以 ~30ms 间隔重复触发 keyPressed，按时间窗去抖 + 计次即可"逐级加速"。
     // 面板改动过参数：样式变化则重建 style；重建 core 让参数立即生效
     // （不回放历史，曲线在后续帧自然恢复；重建 = 轻 FFT 分配，30fps 下无感）
     if (paramsDirty.exchange (false))
@@ -787,6 +791,7 @@ void MainComponent::addImageLayer (const juce::File& f)
     const juce::Image im = loadValidatedImage (f, "Add image layer");
     if (im.isNull())
         return;
+    pushUndoSnapshot();   // v0.5.5 #3 Ctrl+Z：确实要新增图层了才存档
 
     ImageLayer layer;
     layer.path    = f.getFullPathName();
@@ -813,6 +818,8 @@ void MainComponent::addSpectrumLayer()
 {
     if (params.spectrumPresent)
         return;
+    pushUndoSnapshot();   // v0.5.5 #3
+    pushUndoSnapshot();                   // v0.5.5 #3 Ctrl+Z：恢复频谱前存档
     params.spectrumPresent = true;
     params.transform = VisTransform {};   // 默认铺满画布
     canvas.selectSpectrum();
@@ -908,11 +915,98 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
         togglePlayPause();
         return true;
     }
+    // ---- v0.5.5 新 #3：快进快退 / 撤回 / 全选 ----
+    const int code = key.getKeyCode();
+    if (code == juce::KeyPress::leftKey || code == juce::KeyPress::rightKey)
+    {
+        const int dir = (code == juce::KeyPress::leftKey) ? -1 : 1;
+        const double nowMs = (double) juce::Time::getMillisecondCounter();
+        // 新按（超过 350ms 没键盘事件 或 方向变了）→ 计次清零、走"单次" 1s 步；
+        // 否则是 OS 自动重发 = 长按：120ms 节流一次、步长随时长档递增。
+        if (dir != seekHeldDir || nowMs - seekLastMs > 350.0)
+        {
+            seekHeldDir = dir; seekRepeatCount = 0;
+            doSeekStep (dir * 1.0);
+        }
+        else if (nowMs - seekLastMs >= 120.0)   // 长按去抖：≈ 8 次/秒
+        {
+            ++seekRepeatCount;
+            const double step = seekRepeatCount < 5  ? 1.0
+                              : seekRepeatCount < 12 ? 2.0
+                              : seekRepeatCount < 25 ? 5.0 : 10.0;
+            doSeekStep (dir * step);            // 长按越久，单跳越大（1→2→5→10s）
+        }
+        seekLastMs = nowMs;
+        return true;
+    }
+    if (key == juce::KeyPress ('z', juce::ModifierKeys::ctrlModifier, 0)
+        || key == juce::KeyPress ('z', juce::ModifierKeys::commandModifier, 0))
+    {
+        undoOnce();
+        return true;
+    }
+    if (key == juce::KeyPress ('a', juce::ModifierKeys::ctrlModifier, 0)
+        || key == juce::KeyPress ('a', juce::ModifierKeys::commandModifier, 0))
+    {
+        canvas.selectSpectrum();   // Ctrl+A = 选中频谱（画布唯一"整组"选择语义；含义待用户确认，见 REPLY）
+        canvas.grabKeyboardFocus();
+        canvas.repaint();
+        panel.setProgressText ("Selected spectrum layer");
+        return true;
+    }
     return false;
+}
+
+void MainComponent::doSeekStep (double deltaSec)
+{
+    if (! hasAudio)
+        return;
+    const double dur = transport.getLengthInSeconds();
+    if (dur <= 0.0)
+        return;
+    const double cur = transport.isPlaying() ? transport.getCurrentPosition() : pausedPos;
+    const double tgt = juce::jlimit (0.0, dur, cur + deltaSec);
+    transport.setPosition (tgt);
+    pausedPos = tgt;
+    pendingSeekFrame = (int64_t) (tgt * params.fps);   // 复用既有精确 seek 通路
+}
+
+void MainComponent::pushUndoSnapshot()
+{
+    undoStack.push_back (params.toJson());
+    if (undoStack.size() > 30)                          // 有界，防内存无意义增长
+        undoStack.erase (undoStack.begin());
+}
+
+void MainComponent::undoOnce()
+{
+    if (undoStack.empty())
+    {
+        panel.setProgressText ("Nothing to undo");
+        return;
+    }
+    const juce::String snap = undoStack.back();
+    undoStack.pop_back();
+    juce::String err;
+    const SpectrumParams restored = SpectrumParams::fromJson (snap, err);
+    if (! err.isEmpty())
+    {
+        panel.setProgressText ("Undo failed: " + err);
+        return;
+    }
+    params = restored;                                  // panel/canvas 持同一引用 → 原地替换内容
+    // 快照恢复后，画布选中下标可能越界（图层被撤销回来/删掉）→ 复位到频谱
+    canvas.selectSpectrum();
+    canvas.setEditMaskImage (false);
+    paramsDirty = true;
+    panel.syncAllFromParams();
+    canvas.repaint();
+    panel.setProgressText ("Undo  (剩 " + juce::String ((int) undoStack.size()) + " 步)");
 }
 
 void MainComponent::removeSelectedLayer()
 {
+    pushUndoSnapshot();   // v0.5.5 #3 Ctrl+Z：删除前存档
     const int sel = canvas.selectedImageIndex();
     if (sel >= 0)
     {

@@ -372,6 +372,21 @@
 - 验证：Linux 全量 0 error；**四套回归 ALL PASS**（含两处新负对照）；Windows 交叉构建
   `WinDragCompat.cpp.obj` 正常编译（该文件 Linux 不编译，Windows 构建才是真验证）→ 部署 `AudioVisGUI_09112345.exe`。
 
+**INBOX 第四轮（2026-09-12 02:4x）· 新1（图层列表三点）+ 新3（快捷键）**：
+- **新1-A**：图层栈里 Mask image 变成 **Spectrum 的子行**（缩进 `└`、紧贴 Spectrum 下方），点它 = 选中频谱本体
+  （父子当一个图层；"编辑图片位置"入口留在 Mask 页按钮）。渲染本就随频谱整体移动，列表语义对齐。
+- **新1-B**：列表选中行按 **Delete 没反应** → 根因 `ListView` 吞掉 Delete 转交 `model->deleteKeyPressed()`（旧版未实现）
+  → 实现之（选中该行 + 调 `onLayerRemove`）；并给 `onSelectLayerRow` 补 `canvas.grabKeyboardFocus()`。
+- **新1-C**：**取消"选中频谱自动跳回 Spectrum 页"**（仅保留"选中图片→跳 Layers"）。
+- **新3 快捷键**（`MainComponent::keyPressed`）：←/→ seek 单次±1s、**长按加速**（借 Windows OS 自动重发 +
+  120ms 去抖 + 计次分档 1→2→5→10s）；Ctrl/Cmd+Z **快照撤回**（`params.toJson()` 栈，上限 30，触发点=删除/加图层/
+  恢复频谱/替换蒙版 + canvas `onGestureStart`）；Ctrl/Cmd+A 暂=选中频谱（语义待用户确认）。
+- 配套：`addSlider` 登记 `(slider, read)` → 新 `ParamPanel::syncAllFromParams()` 统一回填
+  （滑块 + 联动 + 蒙版 + grid/axis/snap/peakCaps/lineOnly）。
+- 踩坑两处：① `juce::Component` **没有 `keyUp` 虚函数**（我 override 直接编译失败）→ 改"OS 重发+时间窗"方案，
+  反而不需要释放事件；② 并行两条脚本导致接线重复写入（onGestureStart / pushUndoSnapshot 各双份）→ 已去重，
+  教训：一次一件事、改完即核验，别并行改同一文件。
+
 **INBOX #5（2026-09-12 02:1x）· 描边实时平均色四件套（发版后首个 v0.5.5 增量）**：
 - **四边独立开关 + 厚度（#5c）**：旧描边是一个各向同性 erosion 环（`m − erode(r)`）。改为**四个方向各做单调队列滑窗最小值**
   （top 窗 [y−rT,y]、bottom [y,y+rB]、left [x−rL,x]、right [x,x+rR]），`rim = max` 四方向之差（角部自然拼合）。

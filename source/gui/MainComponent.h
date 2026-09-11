@@ -35,7 +35,7 @@ public:
     ~MainComponent() override;
 
     void resized() override;
-    bool keyPressed (const juce::KeyPress&) override;  // v0.5.3: Delete/Backspace + Space fallback
+    bool keyPressed (const juce::KeyPress&) override;  // v0.5.3: Delete/Backspace + Space fallback；v0.5.5 #3: 方向键/Ctrl+Z/Ctrl+A
 
 private:
     // ---- 音频 ----
@@ -110,6 +110,14 @@ private:
     void routeDroppedFile (const juce::File& f, const juce::Point<int>& pos);
     void moveSelectedLayer (int delta);         // +1 = 上移一层，-1 = 下移一层（统一 z 序）
     void removeSelectedLayer();                 // 统一删除（图片或频谱）
+    // ---- v0.5.5 新 #3：快捷键小功能 ----
+    void doSeekStep (double deltaSec);          // ←/→ 快进快退（含长按加速，配合 timerCallback）
+    void pushUndoSnapshot ();                   // 结构性操作前压入 params 快照
+    void undoOnce ();                           // Ctrl+Z：弹快照恢复
+    std::vector<juce::String> undoStack;        // params.toJson() 历史（上限 30）
+    int    seekHeldDir = 0;                      // -1 左 / +1 右 / 0 未按住
+    double seekLastMs = -1e9;                    // 上一次方向键事件时刻（新按 vs OS 自动重发判定）
+    int    seekRepeatCount = 0;                  // 本次长按已自动 seek 的次数（步长加速用）
     void addSpectrumLayer();                    // v0.5.2: 恢复被删除的频谱层
     void chooseExportDir (bool runAfter);
     void startExport();

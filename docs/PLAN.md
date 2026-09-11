@@ -38,7 +38,7 @@
 
 
 > **📥 收件箱三文件协议（防读写抢占，务必遵守；`docs/inbox/` 已 gitignore，缺失时按 WORKLOG 头部模板重建）**：
-> `docs/inbox/INBOX.md`=**文档1 用户输入箱**（用户写；AI 操作前先读首行「状态」：**1=编辑中→完全只读**；**0=空闲→仅可精确 `edit` 整行删除「已宣布完成且已备份」的编号行，绝不 `write` 重写全文**）；
+> `docs/inbox/INBOX.md`=**文档1 用户输入箱**（用户写；**AI 读/删只能经唯一入口 `tools/inbox.py`**（新4：`read` 先读全文+状态；`prune --expect "编号=读到的原文片段"` = 重读盘→状态1拒删→逐条核对原文匹配才删、用户改过的自动保留→删前自动 `.bak` 备份→回显删了哪几号+删后全文）。把"读+删"绑成**不可分割的一步**，杜绝先删后读/并行改误删；**禁止** `write` 整写或手 `edit` 删编号行）；
 > `docs/inbox/INBOX_WORKLOG.md`=**文档2 AI 台账**（接手前先复制条目做备份、记「已处理指纹」去重、做完归档+commit）；
 > `docs/inbox/INBOX_REPLY.md`=**文档3 AI 给用户的信息**（AI 写、用户只读）。
 > **每完成一条任务立刻重读文档1**（防漏 `!!` 加急）。
@@ -58,7 +58,7 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-12 发版日）
+## 当前状态（最后更新：2026-09-12 02:4x）
 
 - **v0.5.3 已完整发版**（2026-09-09，tag `v0.5.3` + GitHub Release 已发）。
 - **v0.5.4 ✅ 已发版（2026-09-12，tag `v0.5.4` + GitHub Release）**：
@@ -72,6 +72,10 @@
   （CMake project+target ×2 / CLI --help / GUI `getApplicationVersion`——后者此前长期停在 0.3.1，一并修正）。
   **v0.5.5 首项 #5 已实现**（描边四边独立 + 实时平均色四模式 + 预览降频插值；见下方专项节；
   部署 `AudioVisGUI_09120209.exe` 待用户实测；唯一未做＝真·未来帧预渲染，默认关）。
+  - 🔧 **v0.5.5 增量（发版后，待用户实测；部署 `AudioVisGUI_09120241.exe`）**：
+    #5 描边实时平均色四件套 + 新1 图层列表三点（Mask 作 Spectrum 子行 / 列表内 Delete 可删 / 取消选频谱自动跳页）
+    + 新3 快捷键（←→ seek 长按加速 / Ctrl+Z 快照撤回 / Ctrl+A 选频谱，**Ctrl+A 语义待确认**）；
+    配套新增 `ParamPanel::syncAllFromParams()`（undo 后统一回填面板）。
   - ✅ 已完成：A1 ColorMap / A2 bar-mirror（**后于 #3.1 删除**，改为 bar + 基线轴 50%）/ A3 CrystalStyle v2 bloom / A4 频谱蒙版图片
     （BUG1 漂移修复 + BUG2 独立拉伸）/ Tabbed UI（4 tab）/ Baseline axis（baselineY）
     / Bar 布局 pitch 模型重做（#25 + #1' + #3''）/ Bar-line 峰帽 v3（连贯分段）
