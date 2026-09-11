@@ -28,11 +28,29 @@ import os
 import sys
 import tempfile
 
+# --- 依赖缺失时自动改用 tools-venv 的解释器重跑（省得记路径）-----------------
+# 你的交互终端里 conda base 是自动激活的，`python` = base 的 3.13，而 minidump/pillow
+# 按用户要求已从 base 卸出 → 直接 `python tools/xxx.py` 会缺包。这里自动 execv 到 venv。
+def _reexec_into_tools_venv(missing: str) -> None:
+    here = os.path.dirname(os.path.abspath(__file__))
+    for cand in (os.path.join(os.environ.get("AVX_TOOLS_VENV", ""), "bin", "python"),
+                 os.path.expanduser("~/CodingProgram/AudioVisualizer/tools-venv/bin/python"),
+                 os.path.join(here, "..", "tools-venv", "bin", "python"),
+                 os.path.join(here, ".venv", "bin", "python")):
+        if cand and os.path.isfile(cand) and os.access(cand, os.X_OK) \
+                and os.path.dirname(os.path.abspath(cand)) != os.path.dirname(sys.executable):
+            # 别用 realpath 比较：venv 的 bin/python 是指向 seeding 解释器的符号链接，
+            # realpath 会把两者判成同一个 → 自动跳转永远失效。
+            print("[tools] 当前解释器缺 %s，改用 venv 重跑：%s" % (missing, cand))
+            sys.stdout.flush()          # execv 不刷新缓冲，不 flush 这行提示会丢
+            os.execv(cand, [cand] + sys.argv)
+    sys.exit("[tools] 需要 %s：先跑 `bash tools/setup_env.sh` 建虚拟环境" % missing)
+
+
 try:
     from PIL import Image, ImageDraw
 except ImportError:
-    sys.exit("[gen_icon] 需要 pillow：先跑 `bash tools/setup_env.sh`，"
-             "或用该 venv 的 python 运行本脚本")
+    _reexec_into_tools_venv("pillow")
 
 S = 256                          # 边长（CMake 只要 png，尺寸由 JUCE 自行缩放）
 BG = (23, 23, 28, 255)           # 深色圆角底

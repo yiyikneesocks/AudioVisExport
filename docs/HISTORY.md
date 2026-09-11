@@ -296,8 +296,19 @@
   「脚本改文件必须二进制/`newline=''`，改完查 `git diff --numstat`」；`.gitignore` 挡住误建在仓库内的 venv。
 - ⚠️ 本轮自查又踩一次行尾坑：用 python 文本模式改 `VisTransform.h`/`MainComponent.h`/`SpectrumCanvas.h`
   把 CRLF 转成了 LF（`numstat` 显示整文件重写）→ 按 HEAD 风格还原后 diff 回到 16/3、7/0、0/0。
-- 遗留待用户定夺：base 里 pip 版 `cmake 4.4.3`（构建实测走 apt `/usr/bin/cmake` 3.22.1，完全没用它）——
-  属工具而非库，卸载影响面更大，未擅自动。
+- **`cmake 4.4.3` 复核后决定保留**，同时纠正我先前"构建完全没用它"的半句错话：
+  `~/.bashrc` 有 conda 初始化 + `auto_activate_base: True` → **用户交互式终端里 base 是激活的**，
+  `which cmake` = `~/miniconda3/bin/cmake`（4.4.3）；而 AI 工具 shell 非交互、不读 .bashrc，
+  `which cmake` = `/usr/bin/cmake`（apt 3.22.1）。也就是说它恰恰是**用户手动构建时真正生效的那个**。
+  实测用 4.4.3 配置 + `ninja AudioVisExport` 编译全部通过（36/36、exit 0），且本工程与 JUCE 均声明
+  `cmake_minimum_required(VERSION 3.22)` → 不触发 CMake 4 移除 `<3.5` 兼容的坑。故保留不动，
+  并把该 PATH 差异写进 `ARCHITECTURE.md` §5.9，提醒后续 AI 别拿自己 shell 的版本下结论。
+- `tools/*.py` 增加"缺包自动 execv 到 tools-venv 重跑"（用户终端 `python` = base，已无 minidump/pillow）。
+  三个实现坑逐个踩过并修：① `realpath` 比较解释器会**永远判成同一个**（venv 的 `bin/python` 是指向
+  seeding 解释器的符号链接）→ 改为比较 `bin` 目录；② `os.execv` 不刷新 stdout → 提示丢失，补 flush；
+  ③ 我自己把 import 写成 `from minidump import MinidumpFile`（包顶层不 re-export），
+  被 `except ImportError` 吞掉后表现成"venv 里也缺包"的假象，差点误判成卸载失误——
+  教训：**宽 except 会把"我用错了 API"伪装成"环境坏了"**，排障时先打印真实异常类型再动手。
 
 **验证记录**：
 - Linux + Win 交叉双构建 0 error（`ninja AudioVisGUI AudioVisExport`）。

@@ -689,9 +689,24 @@ tools/.../python tools/dmp_report.py <exe目录>/crash/crash_YYYYmmdd_HHMMSS.dmp
 且 `ExceptionInformation[0]=0` = **READ** 违例、目标地址是 `0x1ee58b89000` 一类的野生值（**不是 NULL**）——
 从硬证据上排除了当初"分配失败返回 NULL"的猜测，指向 `tmp[2·y·W+x]` 越界读（与 #1b 修复一致）。
 
-**遗留待用户定夺**：conda base 里还有一个 pip 版 `cmake 4.4.3`（2026-09-06 装），构建**完全没用它**
-（实测用的是 apt 的 `/usr/bin/cmake 3.22.1`）。它是工具而非库，卸不卸影响面更大，所以没擅自动；
-要清就 `~/miniconda3/bin/python -m pip uninstall -y cmake`。
+### ⚠️ 重要环境事实：AI 的 shell 与用户的终端，`cmake` / `python` 不是同一个
+
+`~/.bashrc` 里有 conda 初始化块且 `auto_activate_base: True` → **用户开终端即处于 base**：
+`which cmake` = `~/miniconda3/bin/cmake`（pip 装的 **4.4.3**），`which python` = base 的 3.13。
+而协作 AI 的工具 shell 是**非交互**的（不读 .bashrc）：`which cmake` = `/usr/bin/cmake`（apt **3.22.1**）。
+**别拿自己 shell 里的版本推断用户机器上的版本**（我一开始就据此错判过一回，见下）。
+
+结论：**base 里的 pip `cmake 4.4.3` 保留、不要卸**（2026-09-11 实测）——
+- 它恰恰是用户手动敲 `cmake` 时真正生效的那个，卸掉会悄悄改变用户环境；
+- 用 `~/miniconda3/bin/cmake`（4.4.3）实测**配置 + 编译本工程全部通过**（configure done；
+  `ninja AudioVisExport` 36/36、exit 0），不会踩 CMake 4 移除 `cmake_minimum_required(<3.5)` 兼容的坑
+  ——本工程与 JUCE 都声明 `cmake_minimum_required(VERSION 3.22)`。
+
+顺带：`tools/*.py` 缺包时会**自动 execv 到 tools-venv 重跑**（因为用户终端的 `python` 是 base、
+已不含 minidump/pillow），所以直接 `python tools/dmp_report.py ...` 就能用。
+两个实现坑（都踩过并修）：① 判断"是否已在 venv 内"**不能用 `realpath` 比较**——venv 的 `bin/python`
+是指向 seeding 解释器的符号链接，realpath 会把两者判成同一个、导致永不跳转（改为比较 `bin` 目录）；
+② `os.execv` 前必须 `sys.stdout.flush()`，否则跳转提示随缓冲丢失。
 
 ---
 

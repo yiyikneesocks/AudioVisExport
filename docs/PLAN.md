@@ -123,8 +123,10 @@
     从硬证据上否掉了"分配失败返回 NULL"的旧猜测）+ `tools/gen_icon.py`
     （`assets/icon.png` 原先**只有成品没有源**，现补上设计复刻脚本；默认不覆盖成品，均值差已如实记录）。
     文档：`ARCHITECTURE.md` 新增 §5.9；`.gitignore` 挡住误建在仓库内的 venv。
-    ⚠️ 遗留待你定夺：base 里还有一个 pip 版 `cmake 4.4.3`，构建完全没用它（实测走 apt `/usr/bin/cmake` 3.22.1），
-    是工具不是库、影响面更大，所以没擅自卸载。
+    ✅ base 里的 pip `cmake 4.4.3` **经查保留**（并纠正我先前的误判）：你终端里 base 自动激活，
+    `cmake` 实际就是它；我的工具 shell 非交互才走 apt 3.22.1 —— 这个 PATH 差异已写进 §5.9 提醒后续 AI。
+    实测用 4.4.3 配置 + 编译本工程全通过（36/36、exit 0；工程与 JUCE 都声明 3.22，不踩 CMake 4 的 `<3.5` 坑）。
+    另给 `tools/*.py` 加了"缺包自动 execv 到 venv 重跑"，你直接 `python tools/dmp_report.py` 即可用。
   - 📋 协作机制：INBOX 三件套 + status gate + #0/#0+/#10/#11 轮次节奏协议，
     REPLY 三固定子节结构。全部写入 PLAN.md「文档更新触发点」。
   - 🛠 **崩溃报告器已两次立功**（#1b 与本轮排查）：用户只需照常闪退，`exe/crash/*.dmp`
