@@ -696,11 +696,23 @@ tools/.../python tools/dmp_report.py <exe目录>/crash/crash_YYYYmmdd_HHMMSS.dmp
 而协作 AI 的工具 shell 是**非交互**的（不读 .bashrc）：`which cmake` = `/usr/bin/cmake`（apt **3.22.1**）。
 **别拿自己 shell 里的版本推断用户机器上的版本**（我一开始就据此错判过一回，见下）。
 
-结论：**base 里的 pip `cmake 4.4.3` 保留、不要卸**（2026-09-11 实测）——
-- 它恰恰是用户手动敲 `cmake` 时真正生效的那个，卸掉会悄悄改变用户环境；
-- 用 `~/miniconda3/bin/cmake`（4.4.3）实测**配置 + 编译本工程全部通过**（configure done；
-  `ninja AudioVisExport` 36/36、exit 0），不会踩 CMake 4 移除 `cmake_minimum_required(<3.5)` 兼容的坑
-  ——本工程与 JUCE 都声明 `cmake_minimum_required(VERSION 3.22)`。
+**结局（2026-09-11 晚，用户自己优化环境后）**：用户把 pip 版 cmake 从 base 清掉了，
+现在**交互终端与 AI shell 的 `cmake` 统一为 apt 的 3.22.1**——上文的版本不对称已消失，
+本工程与 JUCE 均声明 `cmake_minimum_required(VERSION 3.22)`，apt 3.22.1 实测可用。
+上面那句"保留 4.4.3"的建议就此作废；留下的是**方法论教训**：
+判断用户终端环境要看**交互式 shell**（`bash -ic`），AI 自己的非交互 shell 不读 `.bashrc`。
+
+**权威环境文档**：`~/CodingProgram/PYTHON_ENVIRONMENT.md`（用户维护，2026-09-11 版）——
+- 系统层 `/usr/bin/python3.10`（**`python3.10-venv` 已装**，`python3 -m venv` 开箱可用）；
+- conda base 只管 conda 不装项目包（用户已清理：minidump / pillow / pip-cmake 均已移出）；
+- 日常通用 = `common311`（3.11.16）；专项有 llama_factory / ocr_env / toolbox_agent_env；
+- venv 首选**基于系统 Python**（文档"方式 A"），或基于 common311；
+- 决策树把"一次性临时脚本"指向 `uv`——**当前机器尚未安装 uv**，文档先行、工具未到位，用前需装。
+
+**本项目 tools-venv 已按该文档重建**：`rm -rf` 掉原先用 conda base python 3.13 造的 venv，
+改由**系统 python 3.10.12** 重建（`pyvenv.cfg` 的 `home = /usr/bin`，与 conda 完全解耦——
+用户哪天动 conda 也不再影响本工程工具）；`tools/setup_env.sh` 的解释器优先级同步改为
+系统 python3 → common311 → conda base（兜底），并把该文档列为权威依据。
 
 顺带：`tools/*.py` 缺包时会**自动 execv 到 tools-venv 重跑**（因为用户终端的 `python` 是 base、
 已不含 minidump/pillow），所以直接 `python tools/dmp_report.py ...` 就能用。

@@ -58,7 +58,7 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-11 18:4x）
+## 当前状态（最后更新：2026-09-11 19:5x）
 
 - **v0.5.3 已完整发版**（2026-09-09，tag `v0.5.3` + GitHub Release 已发）。
 - **v0.5.4 编码中（重点＝频谱样式 + 蒙版图片 + 基线轴 + 崩溃报告）**：
@@ -123,10 +123,12 @@
     从硬证据上否掉了"分配失败返回 NULL"的旧猜测）+ `tools/gen_icon.py`
     （`assets/icon.png` 原先**只有成品没有源**，现补上设计复刻脚本；默认不覆盖成品，均值差已如实记录）。
     文档：`ARCHITECTURE.md` 新增 §5.9；`.gitignore` 挡住误建在仓库内的 venv。
-    ✅ base 里的 pip `cmake 4.4.3` **经查保留**（并纠正我先前的误判）：你终端里 base 自动激活，
-    `cmake` 实际就是它；我的工具 shell 非交互才走 apt 3.22.1 —— 这个 PATH 差异已写进 §5.9 提醒后续 AI。
-    实测用 4.4.3 配置 + 编译本工程全通过（36/36、exit 0；工程与 JUCE 都声明 3.22，不踩 CMake 4 的 `<3.5` 坑）。
-    另给 `tools/*.py` 加了"缺包自动 execv 到 venv 重跑"，你直接 `python tools/dmp_report.py` 即可用。
+    ✅ **用户随后自己优化了环境**（权威说明落 `~/CodingProgram/PYTHON_ENVIRONMENT.md`）：
+    pip cmake 已被用户亲手移出 base → 终端与 AI shell 的 `cmake` 统一为 apt 3.22.1（上轮"保留"结论作废，
+    版本不对称消失）；系统 `python3.10-venv` 已装 → 本项目 tools-venv 已按文档"方式 A"**改由系统
+    python 3.10.12 重建**（`pyvenv.cfg home=/usr/bin`，与 conda 彻底解耦），`setup_env.sh` 优先级改为
+    系统 python3 → common311 → conda base。两工具 + 自动跳转实测全通过。
+    ⚠️ 文档决策树把"一次性临时脚本"指向 `uv`，但机器上**尚未安装 uv**——要装说一声。
   - 📋 协作机制：INBOX 三件套 + status gate + #0/#0+/#10/#11 轮次节奏协议，
     REPLY 三固定子节结构。全部写入 PLAN.md「文档更新触发点」。
   - 🛠 **崩溃报告器已两次立功**（#1b 与本轮排查）：用户只需照常闪退，`exe/crash/*.dmp`

@@ -14,6 +14,10 @@
 #   （几百 MB 起）；venv 只是个薄壳，装多少算多少。需要非 python 二进制时才值得
 #   用 conda（例：gitenv 里那个 openssl 版 git）。
 #
+#   环境选型的**权威说明**是 ~/CodingProgram/PYTHON_ENVIRONMENT.md（用户维护）：
+#   base 只管 conda 不装包；日常通用环境是 common311；venv 首选基于**系统 python**
+#   （不依赖 conda，文档"方式 A"），本脚本即按该优先级挑选解释器。
+#
 # 用法：  bash tools/setup_env.sh            # 建环境 + 装依赖（幂等，可重复跑）
 #         source tools/setup_env.sh --print  # 只打印激活路径，不动任何东西
 # =============================================================================
@@ -27,10 +31,13 @@ if [[ "${1:-}" == "--print" ]]; then
     exit 0
 fi
 
-# 挑一个能用 ensurepip 的解释器：优先系统 python3（最干净），
-# 退而用 conda 的 python（venv 的 site-packages 与 base 隔离，不会污染 base）。
+# 挑一个能用 ensurepip 的解释器，按 PYTHON_ENVIRONMENT.md 的优先级：
+#   ① 系统 python3（文档"方式 A"，与 conda 完全解耦）
+#   ② common311（用户的日常通用 conda 环境，3.11）
+#   ③ conda base 的 python（最后兜底；venv 与 base 隔离，不会把包装进 base）
 pick_python() {
-    for p in python3 "$HOME/miniconda3/bin/python" /usr/bin/python3 python; do
+    for p in python3 "$HOME/miniconda3/envs/common311/bin/python" \
+             "$HOME/miniconda3/bin/python" /usr/bin/python3 python; do
         command -v "$p" >/dev/null 2>&1 || continue
         if "$p" -c "import ensurepip" >/dev/null 2>&1; then echo "$p"; return 0; fi
     done

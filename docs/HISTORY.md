@@ -310,6 +310,22 @@
   被 `except ImportError` 吞掉后表现成"venv 里也缺包"的假象，差点误判成卸载失误——
   教训：**宽 except 会把"我用错了 API"伪装成"环境坏了"**，排障时先打印真实异常类型再动手。
 
+**对齐用户的 PYTHON_ENVIRONMENT.md（2026-09-11 19:5x）**：
+- 用户落了权威环境文档 `~/CodingProgram/PYTHON_ENVIRONMENT.md` 并动手优化：**pip cmake 已被用户
+  亲手移出 base**（`~/miniconda3/bin/cmake` 不复存在），交互终端与 AI shell 的 `cmake` 统一为
+  apt 3.22.1 —— 我上轮"保留 base 的 cmake 4.4.3"的建议就此作废（当时的分析没错，但前提被用户的
+  清理推翻）；系统 `python3.10-venv` 也已装上（此前系统 python 缺 `ensurepip`，`python3 -m venv`
+  不可用，才回退用 conda python 造 venv）。
+- 据此**重建本项目 tools-venv**：删掉 conda-base-python 3.13 造的旧 venv，按文档"方式 A"改由
+  **系统 python 3.10.12** 重建（`pyvenv.cfg home=/usr/bin`，与 conda 完全解耦——用户日后动 conda
+  不再影响本工程工具）。实测：base 的 site-packages 不在 venv 的 `sys.path`；`dmp_report.py`
+  （真 dump → `SpectrumMask::compose + 0x925`）与 `gen_icon.py` 全部正常；缺包自动跳 venv 依旧有效。
+- `tools/setup_env.sh` 解释器优先级同步改为：系统 python3 → **common311**（用户日常通用 conda 环境）
+  → conda base（兜底），并把 `PYTHON_ENVIRONMENT.md` 声明为权威依据。
+- 文档同步：`ARCHITECTURE.md` §5.9 记录 cmake 结局 + 引用权威文档；PLAN 状态刷新。
+- ⚠️ 记录一个文档与现实的差异：`PYTHON_ENVIRONMENT.md` 决策树把"一次性临时脚本"指向 `uv`，
+  但本机**尚未安装 uv**——文档先行、工具未到位；需要时说一声即装。
+
 **验证记录**：
 - Linux + Win 交叉双构建 0 error（`ninja AudioVisGUI AudioVisExport`）。
 - `vis_mask_test`：3 断言 ALL PASS（contain 居中 / 漂移=0 / 手柄=渲染）。
