@@ -818,12 +818,39 @@ void SpectrumCanvas::mouseDown (const juce::MouseEvent& e)
 
         if (picked == -2)
         {
-            dragMode = DragMode::None;
-            repaint();
+            // v0.5.6 #2：点空白——Ctrl 按住则保留当前多选（便于继续框选/操作），否则清空回单选
+            if (! e.mods.isCtrlDown() && ! e.mods.isCommandDown())
+            {
+                selectedSet.clear();
+                dragMode = DragMode::None;
+                repaint();
+            }
             return;
         }
 
-        selectedImage = picked;
+        // 多选切换：Ctrl/Cmd+点击 = 增删该元素（锚点跟到被点元素）；普通点击 = 单选
+        const bool ctrl = e.mods.isCtrlDown() || e.mods.isCommandDown();
+        if (ctrl)
+        {
+            const auto it = std::find (selectedSet.begin(), selectedSet.end(), picked);
+            if (it != selectedSet.end())
+                selectedSet.erase (it);            // 已有 → 取消选中
+            else
+                selectedSet.push_back (picked);   // 没有 → 加入
+            if (selectedSet.empty())
+            {
+                selectedImage = -1;
+                dragMode = DragMode::None;
+                repaint();
+                return;
+            }
+            selectedImage = picked;               // 锚点=刚点的，便于面板显示
+        }
+        else
+        {
+            selectedSet = { picked };
+            selectedImage = picked;
+        }
         if (picked >= 0)
             activeTransform();     // 惰性初始化该图层变换
         else
@@ -1362,6 +1389,41 @@ VisTransform& SpectrumCanvas::activeTransform()
         return t;
     }
     return params.transform;
+}
+
+// v0.5.6 新 #2：按 tag 取可写 transform（含图片层的惰性 contain 初始化，与 activeTransform 一致）
+VisTransform& SpectrumCanvas::transformForTag (int tag)
+{
+    if (tag >= 0 && tag < (int) params.images.size())
+    {
+        auto& t = params.images[(size_t) tag].transform;
+        if (! t.set)
+        {
+            const juce::Image img = loadCached (params.images[(size_t) tag].path);
+            const float ew = img.isValid() ? (float) img.getWidth()  : (float) params.width;
+            const float eh = img.isValid() ? (float) img.getHeight() : (float) params.height;
+            t = makeContainTransform (ew, eh, (float) params.width, (float) params.height);
+        }
+        return t;
+    }
+    beginTransformIfNeeded();          // 频谱：首次交互铺开
+    return params.transform;
+}
+
+void SpectrumCanvas::selectAllLayers()
+{
+    if (editMaskImage)                 // 蒙版图片编辑态不参与多选（那是"子层"单独平移）
+        return;
+    selectedSet.clear();
+    if (params.spectrumPresent)
+        selectedSet.push_back (-1);
+    for (int i = 0; i < (int) params.images.size(); ++i)
+        selectedSet.push_back (i);
+    if (selectedSet.empty())
+        return;
+    selectedImage = selectedSet.back();   // 锚点=最后一个，供面板仍显示某一层属性
+    dragMode = DragMode::None;            // 任何进行中的手势作废
+    repaint();
 }
 
 juce::Image SpectrumCanvas::loadCached (const juce::String& path) const

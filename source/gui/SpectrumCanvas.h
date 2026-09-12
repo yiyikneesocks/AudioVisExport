@@ -48,9 +48,16 @@ public:
     int  selectedImageIndex() const noexcept { return selectedImage; }  // -1 = 频谱元素
     // v0.5.5 新 #3：任何会改动 transform 的拖拽手势**开始时**回调一次（MainComponent 压 undo 快照）
     std::function<void ()> onGestureStart;
-    void selectSpectrum()    { selectedImage = -1; repaint(); }
-    void selectImage (int idx){ selectedImage = idx; repaint(); }
+    void selectSpectrum()    { selectedImage = -1; selectedSet = { -1 }; repaint(); }
+    void selectImage (int idx){ selectedImage = idx; selectedSet = { idx }; repaint(); }
     int  imageCount() const noexcept { return (int) params.images.size(); }
+
+    // ---- v0.5.6 新 #2：多选系统（Ctrl+A 全选 / Ctrl+点击 增选 / 批量删 / 一起移动）----
+    //   tag：-1 = 频谱，>=0 = params.images 下标。selectedSet 永远包含锚点 selectedImage。
+    const std::vector<int>& selection() const noexcept { return selectedSet; }
+    bool isMultiSelection() const noexcept { return selectedSet.size() > 1; }
+    void selectAllLayers();                        // Ctrl+A：频谱(在场)+全部图片
+    void clearSelection() { selectedSet.clear(); } // 供外部删除后复位
 
     // ---- 频谱蒙版图片编辑模式（v0.5.4）----
     //   开启后：在频谱范围内拖动 = 平移蒙版图片（maskImage.offset），不移动频谱；
@@ -74,6 +81,9 @@ private:
     };
     DragMode dragMode = DragMode::None;
     int selectedImage = -1;             // 当前选中元素：-1 = 频谱，>=0 = params.images 下标
+    std::vector<int> selectedSet { -1 }; // v0.5.6 #2：多选集合（含锚点 selectedImage）
+    // v0.5.6 #2：按 tag 拿可写 transform（-1=频谱 params.transform；>=0=图片层）。会惰性 ensure。
+    VisTransform& transformForTag (int tag);
     bool gestureReported = false;       // v0.5.5 #3：本次拖拽是否已触发 onGestureStart
     bool editMaskImage = false;         // v0.5.4：蒙版图片编辑模式
     // v0.5.5 #5e：描边实时平均色的**预览**节流+插值缓存（导出不用它，逐帧真算）
