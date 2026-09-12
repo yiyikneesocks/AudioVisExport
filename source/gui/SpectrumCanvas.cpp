@@ -243,6 +243,39 @@ void SpectrumCanvas::paintOverlay (juce::Graphics& g)
     if (selectedImage < 0 && ! params.spectrumPresent)
         return;
 
+    // v0.5.6 新 #2：多选态只画每个元素的轮廓框 + 组提示，**不给旋转/拉伸手柄**（只可整体移动）
+    if (isMultiSelection())
+    {
+        const auto disp = displayAffine();
+        for (int tag : selectedSet)
+        {
+            float w = (float) params.width, h = (float) params.height;
+            const VisTransform* t = &params.transform;
+            if (tag >= 0 && tag < (int) params.images.size())
+            {
+                const juce::Image img = loadCached (params.images[(size_t) tag].path);
+                w = img.isValid() ? (float) img.getWidth()  : (float) params.width;
+                h = img.isValid() ? (float) img.getHeight() : (float) params.height;
+                t = &params.images[(size_t) tag].transform;
+            }
+            const auto c = visCorners (*t, w, h);
+            const bool anchor = (tag == selectedImage);
+            g.setColour (anchor ? juce::Colour (0xffff7a00) : juce::Colour (0xff59c2ff));
+            for (int i = 0; i < 4; ++i)
+            {
+                const auto a = visTransformPoint (disp, c[i]);
+                const auto b = visTransformPoint (disp, c[(i + 1) % 4]);
+                g.drawLine (a.getX(), a.getY(), b.getX(), b.getY(), anchor ? 2.0f : 1.4f);
+            }
+        }
+        g.setColour (juce::Colours::white.withAlpha (0.85f));
+        g.setFont (juce::FontOptions (11.5f));
+        g.drawText (juce::String::formatted ("%d layers selected - move together (rotate/scale disabled)",
+                                             (int) selectedSet.size()),
+                    8, getHeight() - 22, getWidth() - 16, 16, juce::Justification::centredLeft);
+        return;
+    }
+
     const auto disp = displayAffine();
 
     // v0.5.4 #4：基线轴手柄（仅选中频谱、非蒙版编辑时显示；橙色横线 + 两端把手）
@@ -789,8 +822,9 @@ void SpectrumCanvas::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    // 1) 先检查当前选中元素的手柄
-    auto h = hitHandle (out);
+    // 1) 先检查当前选中元素的手柄（v0.5.6 #2：Ctrl/Cmd+点击一律走增选路径，不误触缩放/旋转）
+    auto h = (e.mods.isCtrlDown() || e.mods.isCommandDown()) ? DragMode::None
+                                                             : hitHandle (out);
 
     // 2) 未命中手柄 → 统一 z 序元素拾取（从栈顶向下：上方图片 → 频谱 → 下方图片）
     if (h == DragMode::None)
@@ -883,6 +917,21 @@ void SpectrumCanvas::mouseDown (const juce::MouseEvent& e)
     if (selectedImage < 0)
         beginTransformIfNeeded();
     dragStartOut   = out;
+
+    // v0.5.6 新 #2：多选时**只允许整体移动**，禁用一起旋转/拉伸（忽略手柄命中）。
+    //   记录每个被选元素的起始 pos，拖拽时统一加同一位移（组起点快照，避免累积漂移）。
+    if (isMultiSelection())
+    {
+        groupStartPos.clear();
+        for (int tag : selectedSet)
+            groupStartPos.push_back ({ tag,
+                juce::Point<float> (transformForTag (tag).posX, transformForTag (tag).posY) });
+        startTransform = activeTransform();   // 锚点仍记录，供单选快照/兼容
+        dragMode = DragMode::Move;
+        repaint();
+        return;
+    }
+
     startTransform = activeTransform();
     dragMode = (h != DragMode::None) ? h : DragMode::Move;
 
@@ -1067,6 +1116,21 @@ void SpectrumCanvas::mouseDrag (const juce::MouseEvent& e)
             repaint();
             return;
         }
+    }
+
+    // v0.5.6 新 #2：多选组移动——所有选中元素施加同一位移（输出坐标→各自 pos），不走吸附/缩放
+    if (isMultiSelection() && dragMode == DragMode::Move)
+    {
+        const float dx = out.getX() - dragStartOut.getX();
+        const float dy = out.getY() - dragStartOut.getY();
+        for (const auto& gp : groupStartPos)
+        {
+            auto& t = transformForTag (gp.first);
+            t.posX = gp.second.getX() + dx;
+            t.posY = gp.second.getY() + dy;
+        }
+        repaint();
+        return;
     }
 
     auto& t = activeTransform();

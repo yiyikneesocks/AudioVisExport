@@ -952,10 +952,11 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
     if (key == juce::KeyPress ('a', juce::ModifierKeys::ctrlModifier, 0)
         || key == juce::KeyPress ('a', juce::ModifierKeys::commandModifier, 0))
     {
-        canvas.selectSpectrum();   // Ctrl+A = 选中频谱（画布唯一"整组"选择语义；含义待用户确认，见 REPLY）
+        canvas.selectAllLayers();   // v0.5.6 新#2：Ctrl+A = 全选所有图层（多选=可整体移动/删除，禁一起旋转拉伸）
         canvas.grabKeyboardFocus();
         canvas.repaint();
-        panel.setProgressText ("Selected spectrum layer");
+        panel.refreshLayerList (canvas.selectedImageIndex(), canvas.editMaskImageMode());
+        panel.setProgressText (juce::String::formatted ("Selected %d layers", (int) canvas.selection().size()));
         return true;
     }
     return false;
@@ -1011,17 +1012,41 @@ void MainComponent::undoOnce()
 void MainComponent::removeSelectedLayer()
 {
     pushUndoSnapshot();   // v0.5.5 #3 Ctrl+Z：删除前存档
-    const int sel = canvas.selectedImageIndex();
-    if (sel >= 0)
+
+    // v0.5.6 新 #2：多选 → 一次删除集合内全部图片（含频谱则一并删频谱），索引从大到小删避免错位
+    const std::vector<int> sel = canvas.selection();
+    if (sel.size() > 1)
+    {
+        std::vector<int> imgs;
+        bool killSpectrum = false;
+        for (int tag : sel) { if (tag >= 0) imgs.push_back (tag); else killSpectrum = true; }
+        std::sort (imgs.begin(), imgs.end(), std::greater<int> ());
+        for (int i : imgs)
+            if (i >= 0 && i < (int) params.images.size())
+                params.images.erase (params.images.begin() + i);
+        if (killSpectrum) params.spectrumPresent = false;
+
+        params.spectrumIndex = juce::jlimit (0, (int) params.images.size(), params.spectrumIndex);
+        for (size_t i = 0; i < params.images.size(); ++i)
+            params.images[i].aboveSpectrum = ((int) i >= params.spectrumIndex);
+        canvas.clearSelection();
+        canvas.selectImage (params.images.empty() ? -1 : 0);
+        if (params.images.empty() && ! params.spectrumPresent) canvas.selectSpectrum();
+        canvas.repaint();
+        return;
+    }
+
+    const int sel1 = canvas.selectedImageIndex();
+    if (sel1 >= 0)
     {
         // 删除图片
-        params.images.erase (params.images.begin() + sel);
+        params.images.erase (params.images.begin() + sel1);
         // 重算 spectrumIndex（图片数减少，钳制）
         params.spectrumIndex = juce::jlimit (0, (int) params.images.size(), params.spectrumIndex);
         for (size_t i = 0; i < params.images.size(); ++i)
             params.images[i].aboveSpectrum = ((int) i >= params.spectrumIndex);
         canvas.selectImage (params.images.empty() ? -1
-                            : juce::jmin (sel, (int) params.images.size() - 1));
+                            : juce::jmin (sel1, (int) params.images.size() - 1));
     }
     else if (params.spectrumPresent)
     {

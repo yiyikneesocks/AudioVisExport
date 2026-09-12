@@ -82,6 +82,7 @@ private:
     DragMode dragMode = DragMode::None;
     int selectedImage = -1;             // 当前选中元素：-1 = 频谱，>=0 = params.images 下标
     std::vector<int> selectedSet { -1 }; // v0.5.6 #2：多选集合（含锚点 selectedImage）
+    std::vector<std::pair<int, juce::Point<float>>> groupStartPos; // v0.5.6 #2：组移动各元素起始 pos
     // v0.5.6 #2：按 tag 拿可写 transform（-1=频谱 params.transform；>=0=图片层）。会惰性 ensure。
     VisTransform& transformForTag (int tag);
     bool gestureReported = false;       // v0.5.5 #3：本次拖拽是否已触发 onGestureStart
