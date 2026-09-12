@@ -218,7 +218,8 @@ namespace
                                                   ? averageColourCached (adj, adjKey)
                                                   : p.maskImage.strokeColor;
                         juce::Image masked = SpectrumMask::compose (
-                            base, adj, p.maskImage, stroke);
+                            base, adj, p.maskImage, stroke,
+                            SpectrumMask::isBarStyle (p.style));   // line 系禁左右侧边（新1c2）
                         if (masked.isValid()) layer = masked;
                     }
                     catch (...) { }   // #2 防御：异常 → 回退裸频谱

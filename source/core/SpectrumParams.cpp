@@ -301,13 +301,17 @@ juce::String SpectrumParams::toJson() const
         // v0.5.5 #5 描边模式 / 四边 / 预览降频（默认值＝旧行为，写全字段方便反解）
         s << "    \"outlineMode\": \""    << escJson (mk.outlineMode)  << "\",\n";
         s << "    \"outTop\": "    << (mk.outTop    ? "true" : "false") << ",\n";
-        s << "    \"outBottom\": " << (mk.outBottom ? "true" : "false") << ",\n";
+        s << "    \"outAlphaTop\": "    << mk.outAlphaTop    << ",\n";
         s << "    \"outLeft\": "   << (mk.outLeft   ? "true" : "false") << ",\n";
         s << "    \"outRight\": "  << (mk.outRight  ? "true" : "false") << ",\n";
         s << "    \"outWTop\": "    << mk.outWTop    << ",\n";
-        s << "    \"outWBottom\": " << mk.outWBottom << ",\n";
         s << "    \"outWLeft\": "   << mk.outWLeft   << ",\n";
         s << "    \"outWRight\": "  << mk.outWRight  << ",\n";
+        s << "    \"outAlphaLeft\": "  << mk.outAlphaLeft  << ",\n";
+        s << "    \"outAlphaRight\": " << mk.outAlphaRight << ",\n";
+        s << "    \"outShadowTop\": "   << mk.outShadowTop   << ",\n";
+        s << "    \"outShadowLeft\": "  << mk.outShadowLeft  << ",\n";
+        s << "    \"outShadowRight\": " << mk.outShadowRight << ",\n";
         s << "    \"outlinePreviewFps\": " << mk.outlinePreviewFps << ",\n";
         s << "    \"outlineTemporal\": "   << (mk.outlineTemporal ? "true" : "false") << ",\n";
         s << "    \"outlineLookaheadFrames\": " << mk.outlineLookaheadFrames << ",\n";
@@ -525,13 +529,17 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
         // v0.5.5 #5：新字段缺失时全部落到默认（＝旧行为）
         p.maskImage.outlineMode  = getStr (mk, "outlineMode", p.maskImage.outlineMode).toLowerCase();
         p.maskImage.outTop       = getBool (mk, "outTop",    p.maskImage.outTop);
-        p.maskImage.outBottom    = getBool (mk, "outBottom", p.maskImage.outBottom);
+        p.maskImage.outAlphaTop  = juce::jlimit (0.0f, 1.0f, getFloat (mk, "outAlphaTop", p.maskImage.outAlphaTop));
         p.maskImage.outLeft      = getBool (mk, "outLeft",   p.maskImage.outLeft);
         p.maskImage.outRight     = getBool (mk, "outRight",  p.maskImage.outRight);
         p.maskImage.outWTop      = juce::jlimit (0.0f, 32.0f, getFloat (mk, "outWTop",    p.maskImage.outWTop));
-        p.maskImage.outWBottom   = juce::jlimit (0.0f, 32.0f, getFloat (mk, "outWBottom", p.maskImage.outWBottom));
         p.maskImage.outWLeft     = juce::jlimit (0.0f, 32.0f, getFloat (mk, "outWLeft",   p.maskImage.outWLeft));
         p.maskImage.outWRight    = juce::jlimit (0.0f, 32.0f, getFloat (mk, "outWRight",  p.maskImage.outWRight));
+        p.maskImage.outAlphaLeft = juce::jlimit (0.0f, 1.0f, getFloat (mk, "outAlphaLeft", p.maskImage.outAlphaLeft));
+        p.maskImage.outAlphaRight= juce::jlimit (0.0f, 1.0f, getFloat (mk, "outAlphaRight",p.maskImage.outAlphaRight));
+        p.maskImage.outShadowTop = juce::jlimit (0.0f, 32.0f, getFloat (mk, "outShadowTop", p.maskImage.outShadowTop));
+        p.maskImage.outShadowLeft= juce::jlimit (0.0f, 32.0f, getFloat (mk, "outShadowLeft",p.maskImage.outShadowLeft));
+        p.maskImage.outShadowRight=juce::jlimit (0.0f, 32.0f, getFloat (mk, "outShadowRight",p.maskImage.outShadowRight));
         p.maskImage.outlinePreviewFps        = juce::jlimit (0.0f, 60.0f, getFloat (mk, "outlinePreviewFps", p.maskImage.outlinePreviewFps));
         p.maskImage.outlineTemporal          = getBool (mk, "outlineTemporal", p.maskImage.outlineTemporal);
         p.maskImage.outlineLookaheadFrames   = (int) juce::jlimit (0.0f, 60.0f, getFloat (mk, "outlineLookaheadFrames", (float) p.maskImage.outlineLookaheadFrames));
@@ -679,13 +687,17 @@ bool SpectrumParams::applyOverride (const juce::String& dottedKey,
     // 蒙版图片几何（设值即视为已编辑 → set=true；未设则铺满画框，与电平无关）
     if      (key == "mask.outlineMode")       { auto v=val.toLowerCase(); if (v!="image"&&v!="uniform"&&v!="perbar"&&v!="perframe") return setErr("mask.outlineMode: image|uniform|perbar|perframe"); maskImage.outlineMode=v; return true; }
     if      (key == "mask.outTop")            { bool ok=true; bool b=toBool(&ok); if(!ok) return setErr("invalid bool"); maskImage.outTop=b;    return true; }
-    if      (key == "mask.outBottom")         { bool ok=true; bool b=toBool(&ok); if(!ok) return setErr("invalid bool"); maskImage.outBottom=b; return true; }
+    if      (key == "mask.outAlphaTop")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.outAlphaTop =juce::jlimit(0.0f,1.0f,v); return true; }
     if      (key == "mask.outLeft")           { bool ok=true; bool b=toBool(&ok); if(!ok) return setErr("invalid bool"); maskImage.outLeft=b;   return true; }
     if      (key == "mask.outRight")          { bool ok=true; bool b=toBool(&ok); if(!ok) return setErr("invalid bool"); maskImage.outRight=b;  return true; }
     if      (key == "mask.outWTop")           { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.outWTop    =juce::jlimit(0.0f,32.0f,v); return true; }
-    if      (key == "mask.outWBottom")        { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.outWBottom =juce::jlimit(0.0f,32.0f,v); return true; }
     if      (key == "mask.outWLeft")          { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.outWLeft   =juce::jlimit(0.0f,32.0f,v); return true; }
     if      (key == "mask.outWRight")         { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.outWRight  =juce::jlimit(0.0f,32.0f,v); return true; }
+    if      (key == "mask.outAlphaLeft")       { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.outAlphaLeft =juce::jlimit(0.0f,1.0f,v); return true; }
+    if      (key == "mask.outAlphaRight")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.outAlphaRight=juce::jlimit(0.0f,1.0f,v); return true; }
+    if      (key == "mask.outShadowTop")       { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.outShadowTop =juce::jlimit(0.0f,32.0f,v); return true; }
+    if      (key == "mask.outShadowLeft")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.outShadowLeft=juce::jlimit(0.0f,32.0f,v); return true; }
+    if      (key == "mask.outShadowRight")     { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.outShadowRight=juce::jlimit(0.0f,32.0f,v); return true; }
     if      (key == "mask.outlinePreviewFps") { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.outlinePreviewFps=juce::jlimit(0.0f,60.0f,v); return true; }
     if      (key == "mask.outlineTemporal")   { bool ok=true; bool b=toBool(&ok); if(!ok) return setErr("invalid bool"); maskImage.outlineTemporal=b; return true; }
     if      (key == "mask.outlineLookaheadFrames") { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); maskImage.outlineLookaheadFrames=(int)juce::jlimit(0.0f,60.0f,v); return true; }

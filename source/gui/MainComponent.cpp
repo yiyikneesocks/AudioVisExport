@@ -6,6 +6,10 @@
 #include "../core/SpectrumMask.h"
 #include <cmath>
 
+// v0.5.6 用户点名：暂时禁用 Ctrl+Z（撤销 bug 多、语义不一致；见 docs/PLAN_v0.5.6.md §1/§4）。
+//   保留 pushUndoSnapshot/undoOnce 与全部快照点，仅不响应快捷键——日后撤销系统重做只需翻这个开关。
+constexpr bool avxEnableUndo = false;
+
 // ---------------------------------------------------------------------------
 // 构建 / 销毁
 // ---------------------------------------------------------------------------
@@ -818,7 +822,6 @@ void MainComponent::addSpectrumLayer()
 {
     if (params.spectrumPresent)
         return;
-    pushUndoSnapshot();   // v0.5.5 #3
     pushUndoSnapshot();                   // v0.5.5 #3 Ctrl+Z：恢复频谱前存档
     params.spectrumPresent = true;
     params.transform = VisTransform {};   // 默认铺满画布
@@ -939,8 +942,9 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
         seekLastMs = nowMs;
         return true;
     }
-    if (key == juce::KeyPress ('z', juce::ModifierKeys::ctrlModifier, 0)
-        || key == juce::KeyPress ('z', juce::ModifierKeys::commandModifier, 0))
+    if (avxEnableUndo
+        && (key == juce::KeyPress ('z', juce::ModifierKeys::ctrlModifier, 0)
+            || key == juce::KeyPress ('z', juce::ModifierKeys::commandModifier, 0)))
     {
         undoOnce();
         return true;

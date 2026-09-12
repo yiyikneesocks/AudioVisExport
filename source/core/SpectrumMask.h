@@ -17,6 +17,9 @@
 
 namespace SpectrumMask
 {
+    // 该样式是否有"左右竖直侧边"（bar 系有、line 系没有）——决定 sideEdgesAllowed（新1c2）。
+    bool isBarStyle (const juce::String& style) noexcept;
+
     // 计算一张图片的平均色（按其自身 alpha 加权；全透明则返回不透明灰）。
     juce::Colour averageColour (const juce::Image& img);
 
@@ -45,7 +48,8 @@ namespace SpectrumMask
     juce::Image compose (const juce::Image& base,
                          const juce::Image& image,
                          const MaskImageLayer& cfg,
-                         juce::Colour resolvedStroke);
+                         juce::Colour resolvedStroke,
+                         bool sideEdgesAllowed = true);
 
     // ---- v0.5.5 INBOX #5：描边调色板（实时平均色）+ 预览节流/插值 ----
 
@@ -92,10 +96,12 @@ namespace SpectrumMask
     //   带缓存版 compose（GUI 预览用）：step 1-3 同旧 → 描边前对"无描边的 out"现算 fresh 计划
     //   → 交给 cache 做节流+插值 → 用插值结果画描边。cache=nullptr = 导出/离线：每帧真算（精确）。
     //   ⚠️ 顺序关键：计划必须在描边**之前**取，否则白描边像素会污染平均色。
+    // sideEdgesAllowed=false（line 系）：禁用左/右侧边，整条轮廓只走上边框（v0.5.6 新1c2）。
     juce::Image composeWithPlan (const juce::Image& base,
                                  const juce::Image& image,
                                  const MaskImageLayer& cfg,
                                  juce::Colour resolvedStroke,
                                  PreviewPaletteCache* cache,
-                                 double nowSec);
+                                 double nowSec,
+                                 bool sideEdgesAllowed = true);
 }

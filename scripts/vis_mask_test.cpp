@@ -260,8 +260,10 @@ int main()
         }
         std::printf ("      ring diffs: top=%d bottom=%d left=%d right=%d total=%d\n",
                      top, bottom, left, right, tot);
-        check (top > 0 && bottom > 0 && left > 0 && right > 0,
-               "inner rim present on ALL FOUR edges (old code missed bottom via wrong row)");
+        // #1b 越界回归：左/右带扫到 y∈[250,550]（含 H/2 以下）→ 若仍有 2yW+x 越界会崩/乱；
+        //   底部边已按 #1c1 取消 → 底缘 diff 应为 0。
+        check (tot > 100 && top > 0 && left > 0 && right > 0 && bottom == 0,
+               "rim on top/left/right (crosses lower half → anti-#1b), bottom edge removed (#1c1)");
         check (! interiorDiff, "rim does not touch deep interior");
         check (! outsideDiff,  "rim does not leak outside contour");
         check (tot < (SW + SH) * 40, "rim is a thin band, not whole-shape repaint");
@@ -269,54 +271,79 @@ int main()
 
 
 
-    // ============ 用例 7：四边独立开关（v0.5.5 #5c）============
+    // ============ 用例 7：上/左/右三边独立开关 + 无底部 + 斜面归属 + line 禁侧边（v0.5.6 #1c）============
     {
         const int CW = 200, CH = 40;
         auto base = makeBars (CW, CH, { {10, 4, 60, 32}, {80, 4, 60, 32} });
         auto img  = solidImg (CW, CH, juce::Colours::red);
         const juce::Colour rimC = juce::Colours::white;
         MaskImageLayer cfg; cfg.enabled = true;
-        cfg.strokeEnabled = true; cfg.strokeWidth = 5.0f;
-        cfg.outlineMode = "image";
-        cfg.outWTop = cfg.outWBottom = cfg.outWLeft = cfg.outWRight = 5.0f;
+        cfg.strokeEnabled = true; cfg.outlineMode = "image";
+        cfg.outWTop = cfg.outWLeft = cfg.outWRight = 5.0f;
 
-        // 两柱 x=[10,69] 与 [80,139]，y=[4,35]。柱体**中段列**（排除左右缘 ±8）专测顶/底缘。
+        // 柱体中段列专测顶缘（排除左右缘±8）；底缘区现在应恒空
         const std::vector<juce::Rectangle<int>> topR { {18, 4, 44, 5}, {88, 4, 44, 5} };
         const std::vector<juce::Rectangle<int>> botR { {18, 31, 44, 5}, {88, 31, 44, 5} };
-        const std::vector<juce::Rectangle<int>> lefR { {10, 12, 5, 16}, {80, 12, 5, 16} };   // 纵中段，专测左缘
-        const std::vector<juce::Rectangle<int>> rigR { {65, 12, 5, 16}, {135, 12, 5, 16} };  // 专测右缘
-        auto rimsOf = [&] (const MaskImageLayer& c)
+        const std::vector<juce::Rectangle<int>> lefR { {10, 14, 5, 12}, {80, 14, 5, 12} };
+        const std::vector<juce::Rectangle<int>> rigR { {65, 14, 5, 12}, {135, 14, 5, 12} };
+        auto rims = [&] (const MaskImageLayer& c, bool sides = true)
         {
-            auto im = SpectrumMask::compose (base, img, c, rimC);
+            auto im = SpectrumMask::compose (base, img, c, rimC, sides);
             return std::make_tuple (countRimInRects (im, rimC.getPixelARGB(), topR),
                                     countRimInRects (im, rimC.getPixelARGB(), botR),
                                     countRimInRects (im, rimC.getPixelARGB(), lefR),
                                     countRimInRects (im, rimC.getPixelARGB(), rigR));
         };
         int tA, bA, lA, rA;
-        std::tie (tA, bA, lA, rA) = rimsOf (cfg);
-        check (tA > 80 && bA > 80 && lA > 80 && rA > 80,
-               "edges all-on: all four rims present (top/bot/left/right)");
+        std::tie (tA, bA, lA, rA) = rims (cfg);
+        check (tA > 80 && lA > 80 && rA > 80, "three edges on: top/left/right rims present");
+        check (bA == 0, "bottom edge no longer drawn (removed per #1c1)");
 
-        cfg.outTop = false;   cfg.outWTop = 0.0f;
+        cfg.outTop = false; cfg.outWTop = 0.0f;
         int t2, b2, l2, r2;
-        std::tie (t2, b2, l2, r2) = rimsOf (cfg);
-        check (t2 == 0 && b2 > 80 && l2 > 80 && r2 > 80, "outTop=false kills ONLY the top edge");
+        std::tie (t2, b2, l2, r2) = rims (cfg);
+        check (t2 == 0 && l2 > 80 && r2 > 80, "outTop=false kills ONLY the top edge");
+        cfg.outTop = true; cfg.outWTop = 5.0f;
 
-        cfg.outTop = true;    cfg.outWTop = 5.0f;
-        cfg.outBottom = false; cfg.outWBottom = 0.0f;
-        std::tie (t2, b2, l2, r2) = rimsOf (cfg);
-        check (t2 > 80 && b2 == 0 && l2 > 80 && r2 > 80, "outBottom=false kills ONLY the bottom edge");
+        cfg.outLeft = false; cfg.outWLeft = 0.0f;
+        std::tie (t2, b2, l2, r2) = rims (cfg);
+        check (t2 > 80 && l2 == 0 && r2 > 80, "outLeft=false kills ONLY the left edge");
+        cfg.outLeft = true; cfg.outWLeft = 5.0f;
 
-        cfg.outBottom = true; cfg.outWBottom = 5.0f;
-        cfg.outLeft = false;  cfg.outWLeft = 0.0f;
-        std::tie (t2, b2, l2, r2) = rimsOf (cfg);
-        check (t2 > 80 && b2 > 80 && l2 == 0 && r2 > 80, "outLeft=false kills ONLY the left edge");
-
-        cfg.outLeft = true;   cfg.outWLeft = 5.0f;
         cfg.outRight = false; cfg.outWRight = 0.0f;
-        std::tie (t2, b2, l2, r2) = rimsOf (cfg);
-        check (t2 > 80 && b2 > 80 && l2 > 80 && r2 == 0, "outRight=false kills ONLY the right edge");
+        std::tie (t2, b2, l2, r2) = rims (cfg);
+        check (t2 > 80 && l2 > 80 && r2 == 0, "outRight=false kills ONLY the right edge");
+        cfg.outRight = true; cfg.outWRight = 5.0f;
+
+        // 新1c2：line 系（sideEdgesAllowed=false）→ 左右侧边强制无
+        std::tie (t2, b2, l2, r2) = rims (cfg, /*sides=*/false);
+        check (t2 > 80 && l2 == 0 && r2 == 0, "sideEdgesAllowed=false: top kept, sides suppressed (line styles)");
+
+        // 新1c4：透明度 0 → 该边描边不可见；阴影 0/大 只影响外圈
+        cfg.outAlphaLeft = 0.0f;
+        auto imNoAlpha = SpectrumMask::compose (base, img, cfg, rimC);
+        check (countRimInRects (imNoAlpha, rimC.getPixelARGB(), lefR) == 0,
+               "edge opacity 0 → that edge invisible");
+        cfg.outAlphaLeft = 1.0f;
+    }
+
+    // ============ 用例 7b：斜面归属（#1c3）——关顶只开侧，斜面上不该有侧边 ============
+    {
+        // 造一个斜顶多边形（模拟 bar-line 顶缘），高差明显
+        const int CW = 120, CH = 80;
+        juce::Image base (juce::Image::ARGB, CW, CH, true);
+        { juce::Graphics g (base); g.setColour (juce::Colours::white);
+          juce::Path tri; tri.startNewSubPath (10, 70); tri.lineTo (110, 10); tri.lineTo (110, 70); tri.closeSubPath();
+          g.fillPath (tri); }   // 右边竖直、顶是斜面
+        auto img = solidImg (CW, CH, juce::Colours::red);
+        MaskImageLayer cfg; cfg.enabled = true; cfg.strokeEnabled = true; cfg.outlineMode = "image";
+        cfg.outTop = false; cfg.outWTop = 0.0f;           // 关键：顶关
+        cfg.outLeft = false; cfg.outRight = true; cfg.outWRight = 6.0f;  // 只开右
+        auto im = SpectrumMask::compose (base, img, cfg, juce::Colours::white, /*sides=*/true);
+        // 沿斜面取一小条（斜面上半段），关掉顶边后这里不该有白描边
+        const std::vector<juce::Rectangle<int>> slantBand { {40, 32, 26, 12} };
+        const int onSlant = countRimInRects (im, juce::Colours::white.getPixelARGB(), slantBand);
+        check (onSlant == 0, "slanted top edge not drawn when only side edge on (fixes #1c3 leak)");
     }
 
     // ============ 用例 8：perBar 每柱独立可视区平均色（#5a）============
@@ -356,6 +383,27 @@ int main()
                "perBar bar1 (straddles blue|green) avg leans green (channel-wise)");
             check (plan.segColour[2].getRed() > 150, "perBar bar2 (over red band) avg is red");
         }
+    }
+
+    // ============ 用例 8b：GUI 下拉曾存驼峰 "perBar" 而核心比较小写 → 回归锁死 ============
+    {
+        const int CW = 200, CH = 60;
+        auto base = makeBars (CW, CH, { {10, 5, 30, 50}, {90, 5, 30, 50}, {150, 5, 30, 50} });
+        juce::Image img (juce::Image::ARGB, CW, CH, true);
+        { juce::Graphics g (img);
+          g.fillAll (juce::Colours::blue);
+          g.setColour (juce::Colours::green); g.fillRect (66, 0, 68, CH);
+          g.setColour (juce::Colours::red);   g.fillRect (134, 0, 66, CH); }
+        MaskImageLayer cfg; cfg.enabled = true;
+        cfg.strokeEnabled = true; cfg.strokeWidth = 3.0f;
+        cfg.outlineMode = "perBar";                       // 故意用驼峰（GUI 历史写法）
+        MaskImageLayer cfgNoS = cfg; cfgNoS.strokeEnabled = false;
+        auto out = SpectrumMask::compose (base, img, cfgNoS, juce::Colours::white);
+        auto plan = SpectrumMask::makeStrokePlan (out, cfg, juce::Colours::white);
+        check (plan.perColumn, "camelCase \"perBar\" still yields per-column palette (case canonicalized)");
+        check (plan.segColour.size() == 3
+               && plan.segColour[0].getBlue() > 150 && plan.segColour[2].getRed() > 150,
+               "camelCase perBar gives 3 distinct bar colours (regression of the GUI-all-uniform bug)");
     }
 
     // ============ 用例 9：uniform（#5d）与 image（#5f）模式 ============

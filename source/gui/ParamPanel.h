@@ -164,10 +164,14 @@ private:
     // v0.5.4 #7：描边色两按钮——手动选色 / 用图片平均色（固定为已算值）
     juce::TextButton maskColorBtn { "Border colour" }, maskAvgBtn { "Use average" };
     juce::ToggleButton maskEditToggle { "Edit image position" };
-    // v0.5.5 #5：描边模式 / 四边 / 预览节流控件指针
-    juce::ComboBox* outlineModeBoxPtr = nullptr;
-    juce::ToggleButton* outEdgeTogPtr[4] = { nullptr, nullptr, nullptr, nullptr };
-    juce::Slider* outEdgeWPtr[4] = { nullptr, nullptr, nullptr, nullptr };
+    // v0.5.5 #5 + v0.5.6 #1b：描边改为"开关组"（实时/逐柱）；outlineMode 字符串仍是唯一真源
+    juce::ToggleButton* outlineRealtimePtr = nullptr;   // (3) 实时变色：关=固定色，开=按可见区实时平均
+    juce::ToggleButton* outlinePerBarPtr   = nullptr;   // (4) 逐柱变色：仅实时开时可用，关=整块一色
+    // 上/左/右三边，各：开关 + 厚度 + 透明度 + 阴影（底部已取消）
+    juce::ToggleButton* outEdgeTogPtr[3]    = { nullptr, nullptr, nullptr };
+    juce::Slider*       outEdgeWPtr[3]      = { nullptr, nullptr, nullptr };
+    juce::Slider*       outEdgeAlphaPtr[3]  = { nullptr, nullptr, nullptr };
+    juce::Slider*       outEdgeShadowPtr[3] = { nullptr, nullptr, nullptr };
     juce::Slider* outlineFpsPtr = nullptr;
     juce::ToggleButton* outlineTemporalPtr = nullptr;
     juce::Slider* maskStrokeWidthSliderPtr = nullptr;
@@ -183,6 +187,10 @@ private:
     juce::Slider* capPullSliderPtr = nullptr;         // #3: 仅 bar-line
 public:
     void refreshStyleDependentControls();   // #3: 依当前样式置灰不适用控件
+    // v0.5.6 新1-b：边框控件按"总开关 → 实时/逐柱 → 固定色按钮/性能项"层级互斥置灰，
+    //   并把 realtime/perbar 两个开关的勾选态从 outlineMode 反推。所有改描边状态处都要调它。
+    void syncOutlineEnablement();
+    void setSliderEnabled (juce::Slider* s, bool en);   // 连同行标签一起灰
     void syncBarLayoutSliders();                  // #25: 联动回填另两条滑条
     juce::ToggleButton snapToggle { "Snapping" };               // v0.5.2 吸附开关
     juce::Slider layerOpacitySlider;                            // v0.5.1 需要引用以刷新

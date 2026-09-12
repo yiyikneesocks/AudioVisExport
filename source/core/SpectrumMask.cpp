@@ -21,6 +21,12 @@ namespace
     }
 }
 
+bool SpectrumMask::isBarStyle (const juce::String& style) noexcept
+{
+    const juce::String s = style.toLowerCase();
+    return s == "bar" || s == "bars" || s == "bar-line" || s == "barline" || s == "perbar";
+}
+
 juce::Colour SpectrumMask::averageColour (const juce::Image& img)
 {
     if (! img.isValid())
@@ -175,9 +181,10 @@ juce::Image SpectrumMask::adjustedImageCached (const juce::Image& img, const Mas
 juce::Image SpectrumMask::compose (const juce::Image& base,
                                    const juce::Image& image,
                                    const MaskImageLayer& cfg,
-                                   juce::Colour resolvedStroke)
+                                   juce::Colour resolvedStroke,
+                                   bool sideEdgesAllowed)
 {
-    return composeWithPlan (base, image, cfg, resolvedStroke, nullptr, 0.0);
+    return composeWithPlan (base, image, cfg, resolvedStroke, nullptr, 0.0, sideEdgesAllowed);
 }
 
 juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
@@ -185,7 +192,8 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
                                            const MaskImageLayer& cfg,
                                            juce::Colour resolvedStroke,
                                            PreviewPaletteCache* cache,
-                                           double nowSec)
+                                           double nowSec,
+                                           bool sideEdgesAllowed)
 {
     if (! base.isValid() || ! image.isValid())
         return {};
@@ -267,110 +275,115 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
         }
     }
 
-    // ---- 4. 描边（v0.5.5 #5：四边独立开关/厚度 + 实时平均色计划）----
+    // ---- 4. 描边（v0.5.6 新1c：上/左/右三边各 开关+厚度+透明度+阴影；底部取消）----
+    //   sideEdgesAllowed=false（line 系）→ 左右侧边强制关，整条只走上边框。
     if (cfg.strokeEnabled)
     {
-        const int rT = cfg.outTop    ? juce::jlimit (1, 32, (int) std::lround (cfg.outWTop   )) : 0;
-        const int rB = cfg.outBottom ? juce::jlimit (1, 32, (int) std::lround (cfg.outWBottom )) : 0;
-        const int rL = cfg.outLeft   ? juce::jlimit (1, 32, (int) std::lround (cfg.outWLeft   )) : 0;
-        const int rR = cfg.outRight  ? juce::jlimit (1, 32, (int) std::lround (cfg.outWRight  )) : 0;
+        const int rT = cfg.outTop   ? juce::jlimit (1, 32, (int) std::lround (cfg.outWTop )) : 0;
+        const int rL = (cfg.outLeft  && sideEdgesAllowed) ? juce::jlimit (1, 32, (int) std::lround (cfg.outWLeft )) : 0;
+        const int rR = (cfg.outRight && sideEdgesAllowed) ? juce::jlimit (1, 32, (int) std::lround (cfg.outWRight)) : 0;
 
-        if (rT | rB | rL | rR)
+        // 阴影 = 在实边外再叠一条更宽的低透明度带；半径 = 厚度 + 阴影外扩。
+        const int shT = rT ? rT + juce::jlimit (0, 32, (int) std::lround (cfg.outShadowTop )) : 0;
+        const int shL = rL ? rL + juce::jlimit (0, 32, (int) std::lround (cfg.outShadowLeft )) : 0;
+        const int shR = rR ? rR + juce::jlimit (0, 32, (int) std::lround (cfg.outShadowRight)) : 0;
+        const int capR = juce::jmax (1, juce::jmax (juce::jmax (rT, rL), juce::jmax (rR, juce::jmax (shT, juce::jmax (shL, shR)))));
+
+        if (rT | rL | rR)
         {
-            // 颜色计划：在**描边之前**的 out 上现算（避免白描边污染平均）。
-            //   GUI（带 cache）→ 节流 + 指数插值；导出 cache=nullptr → 每帧真算＝精确。
             const StrokePlan fresh = makeStrokePlan (out, cfg, resolvedStroke);
             const StrokePlan& plan = cache != nullptr
                                          ? cache->update (nowSec, fresh, cfg)
                                          : fresh;
 
-            // 四条方向各做一次"窗内最小值"。单调队列滑窗 O(W·H)（与 r 无关；旧版 2 次
-            //   全窗重扫是 O(W·H·r)，4 个方向若沿用旧写法要再 ×4）。rim = m − 方向窗最小值。
-            static thread_local std::vector<uint8> bufT, bufB, bufL, bufR;
+            // 每个方向一次"窗内最小值"（单调队列滑窗，O(W·H)，与半径无关）。
+            //   为做斜面归属：另算一个 capR 的"上方覆盖"bufCap——只有当某像素正上方 capR 内仍实心时
+            //   才算真正的**竖直侧边**；斜面/上边界（上方会变透明）一律归给上边框，修 1c(3)。
+            static thread_local std::vector<uint8> bufT, bufL, bufR, bufCap;
             const size_t n = (size_t) W * H;
-            if (bufT.size() < n)
-            {
-                bufT.resize (n); bufB.resize (n); bufL.resize (n); bufR.resize (n);
-            }
-            if (bufT.data() == nullptr || bufB.data() == nullptr
-                || bufL.data() == nullptr || bufR.data() == nullptr)
-                return {};   // 极端低内存：JUCE/STL 给不出缓冲 → 放弃描边（图本体已画好，宁缺勿崩）
+            if (bufT.size() < n) { bufT.resize (n); bufL.resize (n); bufR.resize (n); bufCap.resize (n); }
+            if (bufT.data() == nullptr || bufL.data() == nullptr
+                || bufR.data() == nullptr || bufCap.data() == nullptr)
+                return {};   // 极端低内存：宁缺勿崩
 
-            if (rT != 0 || rB != 0)   // 纵向：按列滑窗
+            std::vector<int> dqV ((size_t) H + 2);
+            for (int x = 0; x < W; ++x)
             {
-                std::vector<int> dq ((size_t) H + 2);
-                for (int x = 0; x < W; ++x)
-                {
-                    int hd = 0, tl = 0;                       // 顶缘窗口 [y-rT, y]
-                    for (int y = 0; y < H; ++y)
-                    {
-                        const uint8 v = mA[(size_t) y * W + x];
-                        while (tl > hd && mA[(size_t) dq[tl - 1] * W + x] >= v) --tl;
-                        dq[tl++] = y;
-                        while (dq[hd] < y - rT) ++hd;
-                        bufT[(size_t) y * W + x] = mA[(size_t) dq[hd] * W + x];
-                    }
-                    hd = tl = 0;                              // 底缘窗口 [y, y+rB]
-                    for (int y = H - 1; y >= 0; --y)
-                    {
-                        const uint8 v = mA[(size_t) y * W + x];
-                        while (tl > hd && mA[(size_t) dq[tl - 1] * W + x] >= v) --tl;
-                        dq[tl++] = y;
-                        while (dq[hd] > y + rB) ++hd;
-                        bufB[(size_t) y * W + x] = mA[(size_t) dq[hd] * W + x];
-                    }
-                }
-            }
-            if (rL != 0 || rR != 0)   // 横向：按行滑窗
-            {
-                std::vector<int> dq ((size_t) W + 2);
+                int hd = 0, tl = 0;                                  // 顶缘窗 [y-rT, y]
                 for (int y = 0; y < H; ++y)
                 {
-                    const uint8* row = mA.data() + (size_t) y * W;
-                    int hd = 0, tl = 0;                       // 左缘窗口 [x-rL, x]
-                    for (int x = 0; x < W; ++x)
-                    {
-                        while (tl > hd && row[dq[tl - 1]] >= row[x]) --tl;
-                        dq[tl++] = x;
-                        while (dq[hd] < x - rL) ++hd;
-                        bufL[(size_t) y * W + x] = row[dq[hd]];
-                    }
-                    hd = tl = 0;                              // 右缘窗口 [x, x+rR]
-                    for (int x = W - 1; x >= 0; --x)
-                    {
-                        while (tl > hd && row[dq[tl - 1]] >= row[x]) --tl;
-                        dq[tl++] = x;
-                        while (dq[hd] > x + rR) ++hd;
-                        bufR[(size_t) y * W + x] = row[dq[hd]];
-                    }
+                    const uint8 v = mA[(size_t) y * W + x];
+                    while (tl > hd && mA[(size_t) dqV[tl - 1] * W + x] >= v) --tl;
+                    dqV[tl++] = y;
+                    while (dqV[hd] < y - rT) ++hd;
+                    bufT[(size_t) y * W + x] = (rT && v) ? mA[(size_t) dqV[hd] * W + x] : v;
+                }
+                hd = tl = 0;                                         // "上方 capR 覆盖" 判定（斜面归属用）
+                for (int y = 0; y < H; ++y)
+                {
+                    const uint8 v = mA[(size_t) y * W + x];
+                    while (tl > hd && mA[(size_t) dqV[tl - 1] * W + x] >= v) --tl;
+                    dqV[tl++] = y;
+                    while (dqV[hd] < y - capR) ++hd;
+                    bufCap[(size_t) y * W + x] = v ? mA[(size_t) dqV[hd] * W + x] : 0;
+                }
+            }
+            std::vector<int> dqH ((size_t) W + 2);
+            for (int y = 0; y < H; ++y)
+            {
+                const uint8* row = mA.data() + (size_t) y * W;
+                int hd = 0, tl = 0;                                  // 左缘窗 [x-rL, x]
+                for (int x = 0; x < W; ++x)
+                {
+                    while (tl > hd && row[dqH[tl - 1]] >= row[x]) --tl;
+                    dqH[tl++] = x;
+                    while (dqH[hd] < x - rL) ++hd;
+                    bufL[(size_t) y * W + x] = (rL && row[x]) ? row[dqH[hd]] : row[x];
+                }
+                hd = tl = 0;                                         // 右缘窗 [x, x+rR]
+                for (int x = W - 1; x >= 0; --x)
+                {
+                    while (tl > hd && row[dqH[tl - 1]] >= row[x]) --tl;
+                    dqH[tl++] = x;
+                    while (dqH[hd] > x + rR) ++hd;
+                    bufR[(size_t) y * W + x] = (rR && row[x]) ? row[dqH[hd]] : row[x];
                 }
             }
 
-            const bool perCol = plan.perColumn
-                             && plan.colColour.size() >= (size_t) W;
+            const bool perCol = plan.perColumn && plan.colColour.size() >= (size_t) W;
+            // 每边的 (rim, 透明度) 合成：实边用自身 alpha，阴影用更宽窗、更低 alpha 且压在实边下。
+            auto edgeRim = [] (int mv, int minv, int width, int shadow, float alpha)
+            {
+                int a = 0;
+                if (shadow > width)                                  // 阴影带（外圈）：低透明度
+                {
+                    const int srim = (mv - minv) * 60 / 255;        // ~0.24 强度
+                    a = juce::jmax (a, (int) (srim * alpha));
+                }
+                const int rim = mv - minv;
+                if (rim > 0) a = juce::jmax (a, (int) (rim * alpha));
+                return juce::jlimit (0, 255, a);
+            };
             juce::Image::BitmapData bd (out, juce::Image::BitmapData::readWrite);
             for (int y = 0; y < H; ++y)
             {
                 auto* line = reinterpret_cast<juce::PixelARGB*> (bd.getLinePointer (y));
-                const uint8* m = mA.data()   + (size_t) y * W;
-                const uint8* t = bufT.data() + (size_t) y * W;
-                const uint8* b = bufB.data() + (size_t) y * W;
-                const uint8* l = bufL.data() + (size_t) y * W;
-                const uint8* rr = bufR.data() + (size_t) y * W;
+                const uint8* m  = mA.data()    + (size_t) y * W;
+                const uint8* t  = bufT.data()  + (size_t) y * W;
+                const uint8* l  = bufL.data()  + (size_t) y * W;
+                const uint8* rr = bufR.data()  + (size_t) y * W;
+                const uint8* cp = bufCap.data()+ (size_t) y * W;
                 for (int x = 0; x < W; ++x)
                 {
                     const int mv = m[x];
                     if (mv == 0) continue;
-                    // 启用的缘各算 rim，交汇处取 max（角部自然拼合）。
-                    // ⚠️ 未启用的方向 buf 未写，必须用 rX!=0 守卫，绝不能让 mv−0 混进来
-                    //    （那会把整个形状涂成描边）。
                     int rim = 0;
-                    if (rT != 0) rim = juce::jmax (rim, mv - (int) t[x]);
-                    if (rB != 0) rim = juce::jmax (rim, mv - (int) b[x]);
-                    if (rL != 0) rim = juce::jmax (rim, mv - (int) l[x]);
-                    if (rR != 0) rim = juce::jmax (rim, mv - (int) rr[x]);
+                    if (rT != 0) rim = juce::jmax (rim, edgeRim (mv, t[x], rT, shT, cfg.outAlphaTop));
+                    // 侧边仅当"上方 capR 内仍实心"（= 真正竖直边）；斜面/上边界交给上边框（修 1c(3)）
+                    const bool vertSide = (cp[x] >= 250);
+                    if (rL != 0 && vertSide) rim = juce::jmax (rim, edgeRim (mv, l[x],  rL, shL, cfg.outAlphaLeft));
+                    if (rR != 0 && vertSide) rim = juce::jmax (rim, edgeRim (mv, rr[x], rR, shR, cfg.outAlphaRight));
                     if (rim <= 0) continue;
-                    if (rim > 255) rim = 255;
                     const juce::Colour col = perCol ? plan.colColour[(size_t) x] : plan.uniform;
                     const int inv = 255 - rim;
                     const int srcR = col.getRed()   * rim / 255;
@@ -429,7 +442,11 @@ SpectrumMask::StrokePlan SpectrumMask::makeStrokePlan (const juce::Image& out,
 {
     StrokePlan plan;
     plan.uniform = fallbackUniform;
-    if (cfg.outlineMode == "image" || ! out.isValid())   // image 模式＝v0.5.4 行为，零开销直通
+    // ⚠️ 大小写归一：GUI 下拉历史上存 "perBar"/"perFrame"（驼峰），CLI/fromJson 存小写，
+    //   两边不一致曾导致 perBar 永不自匹配 → 全柱走 uniform（用户报"所有 bar 颜色都一样"）。
+    //   统一按小写比较，两种写法今后都对，不依赖各处 token 拼写。
+    const juce::String mode = cfg.outlineMode.toLowerCase();
+    if (mode == "image" || ! out.isValid())   // image 模式＝v0.5.4 行为，零开销直通
         return plan;
 
     const int W = out.getWidth(), H = out.getHeight();
@@ -488,7 +505,7 @@ SpectrumMask::StrokePlan SpectrumMask::makeStrokePlan (const juce::Image& out,
     if (plan.segColour.empty())
         return plan;                                   // 无电平 → 保持 fallback
 
-    if (plan.segColour.size() == 1 || cfg.outlineMode != "perbar")
+    if (plan.segColour.size() == 1 || mode != "perbar")
     {
         int64_t A = 0, R = 0, G = 0, B = 0;
         for (size_t s = 0; s < plan.segColour.size(); ++s)   // 按段宽加权 = 全可视区平均

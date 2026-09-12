@@ -390,51 +390,76 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     {
         params.maskImage.strokeEnabled = maskStrokeToggle.getToggleState();
         notify();
+        syncOutlineEnablement();   // v0.5.6 新1-b：总开关门控其余所有描边控件
     };
     maskChooseBtn.onClick = [this] { if (onChooseMaskImage) onChooseMaskImage(); };
     maskChooseBtn.setTooltip ("Pick an image that is shown only inside the spectrum silhouette "
                               "(bars / shape act as the mask). It moves & scales with the spectrum.");
-    maskStrokeWidthSliderPtr = addSlider ("Outline width", 0.5, 12.0, 0.5, 1.0,
+    maskStrokeWidthSliderPtr = addSlider ("All edges width", 0.5, 12.0, 0.5, 1.0,
                [this] { return (double) params.maskImage.strokeWidth; },
                [this] (double v) {
                    params.maskImage.strokeWidth = (float) v;
-                   // 主滑块 = 四边的统一预设（想单独调某缘再用下面的分缘滑块）
-                   params.maskImage.outWTop = params.maskImage.outWBottom
-                       = params.maskImage.outWLeft = params.maskImage.outWRight = (float) v;
+                   // 统一预设：把三边厚度一起设成该值（要单独调某缘用下面各缘的 width 滑块）
+                   params.maskImage.outWTop = params.maskImage.outWLeft
+                       = params.maskImage.outWRight = (float) v;
                    notify();
                });
-    // ---- v0.5.5 #5c/#5e：描边颜色模式 + 四边独立 + 预览节流 ----
-    outlineModeBoxPtr = addCombo ("Outline colour", { "image", "uniform", "perBar", "perFrame" },
-               1, [this] (int id)
+    // ---- v0.5.6 新1-b：边框颜色 = 开关组（总开关已在上方＝maskStrokeToggle）----
+    //   层级：strokeEnabled ┬ 固定色（Border colour / Use average 两按钮）
+    //                        └ 实时变色 realtime ┬ 逐柱变色 perBar（perbar）／整块（uniform）
+    //                                             └ 预览性能 fps / smoothing（仅实时有意义）
+    //   outlineMode 字符串仍是唯一真源（image/uniform/perbar/perframe），兼容旧 JSON 与 CLI。
+    outlineRealtimePtr = addToggle ("Real-time colour (by visible region)",
+               params.maskImage.outlineMode.toLowerCase() != "image",
+               [this] (bool live)
                {
-                   static const char* modes[] = { "image", "uniform", "perBar", "perFrame" };
-                   params.maskImage.outlineMode = modes[id - 1];
-                   notify();
+                   auto& m = params.maskImage;
+                   const juce::String mode = m.outlineMode.toLowerCase();
+                   if (live) { if (mode == "image") m.outlineMode = "uniform"; }   // 切实时：默认整块
+                   else      { m.outlineMode = "image"; }                          // 关实时：回固定色
+                   notify(); syncOutlineEnablement();
                });
-    outlineModeBoxPtr->setTooltip (
-        "Outline colour source:\n"
-        "  image    = image's own average (legacy; set at load / 'Use average')\n"
-        "  uniform  = average of the whole visible (masked) region, per frame\n"
-        "  perBar   = each bar outlines with ITS OWN visible-region average\n"
-        "  perFrame = line styles: this frame's visible-region average");
+    outlineRealtimePtr->setTooltip ("Off = fixed outline colour (pick below / 'Use average' = image avg).\n"
+                                    "On = colour follows what's currently visible inside the mask (live average).");
+    outlinePerBarPtr = addToggle ("   Per-bar colour (each bar its own)",
+               params.maskImage.outlineMode.toLowerCase() == "perbar",
+               [this] (bool pb)
+               {
+                   auto& m = params.maskImage;
+                   const juce::String mode = m.outlineMode.toLowerCase();
+                   if (pb) m.outlineMode = "perbar";
+                   else if (mode == "perbar") m.outlineMode = "uniform";   // 只从 perbar 退回整块；perframe 不动
+                   notify(); syncOutlineEnablement();
+               });
+    outlinePerBarPtr->setTooltip ("Only with real-time on: each bar outlines with its OWN visible-region average.\n"
+                                  "Off = one average for the whole visible region (bars) / per-frame (lines).");
+    // v0.5.6 新1c(4)：上/左/右三边各一组 开关 + 厚度 + 透明度 + 阴影；关掉某边 → 该边其余项灰。
     {
-        // C++17：lambda 不能捕获数组 → 成员指针用函数按 e 选择
-        auto onOf  = [] (int e) -> bool MaskImageLayer::* {
-            switch (e) { case 0: return &MaskImageLayer::outTop;    case 1: return &MaskImageLayer::outBottom;
-                         case 2: return &MaskImageLayer::outLeft;   default: return &MaskImageLayer::outRight; } };
-        auto wOf   = [] (int e) -> float MaskImageLayer::* {
-            switch (e) { case 0: return &MaskImageLayer::outWTop;   case 1: return &MaskImageLayer::outWBottom;
-                         case 2: return &MaskImageLayer::outWLeft;  default: return &MaskImageLayer::outWRight; } };
-        const char* edNames[4] = { "Outline top", "Outline bottom", "Outline left", "Outline right" };
-        for (int e = 0; e < 4; ++e)
+        auto onOf = [] (int e) -> bool MaskImageLayer::* {
+            return e == 0 ? &MaskImageLayer::outTop : (e == 1 ? &MaskImageLayer::outLeft : &MaskImageLayer::outRight); };
+        auto wOf  = [] (int e) -> float MaskImageLayer::* {
+            return e == 0 ? &MaskImageLayer::outWTop : (e == 1 ? &MaskImageLayer::outWLeft : &MaskImageLayer::outWRight); };
+        auto aOf  = [] (int e) -> float MaskImageLayer::* {
+            return e == 0 ? &MaskImageLayer::outAlphaTop : (e == 1 ? &MaskImageLayer::outAlphaLeft : &MaskImageLayer::outAlphaRight); };
+        auto sOf  = [] (int e) -> float MaskImageLayer::* {
+            return e == 0 ? &MaskImageLayer::outShadowTop : (e == 1 ? &MaskImageLayer::outShadowLeft : &MaskImageLayer::outShadowRight); };
+        const char* edNames[3] = { "Edge: Top", "Edge: Left", "Edge: Right" };
+        for (int e = 0; e < 3; ++e)
         {
-            auto* tg = addToggle (edNames[e], params.maskImage.*(onOf (e)),
-                                  [this, e, onOf] (bool on) { params.maskImage.*(onOf (e)) = on; notify(); });
-            outEdgeTogPtr[e] = tg;
+            outEdgeTogPtr[e] = addToggle (edNames[e], params.maskImage.*(onOf (e)),
+                [this, e, onOf] (bool on) { params.maskImage.*(onOf (e)) = on; notify(); syncOutlineEnablement(); });
             outEdgeWPtr[e] = addSlider ("  width", 0.0, 24.0, 0.5, 1.0,
                 [this, e, wOf] { return (double) (params.maskImage.*(wOf (e))); },
                 [this, e, wOf] (double v) { params.maskImage.*(wOf (e)) = (float) v; notify(); });
-            outEdgeWPtr[e]->setTooltip ("Edge thickness. 0 = this edge off (also via its toggle).");
+            outEdgeAlphaPtr[e] = addSlider ("  opacity", 0.0, 1.0, 0.01, 1.0,
+                [this, e, aOf] { return (double) (params.maskImage.*(aOf (e))); },
+                [this, e, aOf] (double v) { params.maskImage.*(aOf (e)) = (float) v; notify(); });
+            outEdgeShadowPtr[e] = addSlider ("  shadow", 0.0, 24.0, 0.5, 1.0,
+                [this, e, sOf] { return (double) (params.maskImage.*(sOf (e))); },
+                [this, e, sOf] (double v) { params.maskImage.*(sOf (e)) = (float) v; notify(); });
+            outEdgeWPtr[e]->setTooltip ("Edge thickness (px).");
+            outEdgeAlphaPtr[e]->setTooltip ("Edge opacity 0..1.");
+            outEdgeShadowPtr[e]->setTooltip ("Outer shadow band width (px). 0 = no shadow.");
         }
     }
     outlineFpsPtr = addSlider ("Outline fps (preview)", 0.0, 30.0, 1.0, 1.0,
@@ -689,6 +714,59 @@ void ParamPanel::syncAllFromParams()
     refreshStyleDependentControls();
 }
 
+void ParamPanel::setSliderEnabled (juce::Slider* s, bool en)
+{
+    if (s == nullptr) return;
+    s->setEnabled (en);
+    if (auto* l = rowLabels[s].get()) l->setEnabled (en);   // 行标签一起灰，避免"能看不能调"的错觉
+}
+
+void ParamPanel::syncOutlineEnablement()
+{
+    // v0.5.6 新1-b 层级：
+    //   strokeEnabled（总开关）关 → 其余全灰；
+    //   realtime（outlineMode != image）：关=走固定色（Border colour / Use average 可点，perbar/fps/平滑灰）；
+    //                                     开=固定色按钮灰，perbar/fps/平滑可用。
+    //   四边开关/宽度：几何属性，只要总开关开就可用。
+    const MaskImageLayer& m = params.maskImage;
+    const juce::String mode = m.outlineMode.toLowerCase();
+    const bool master   = m.strokeEnabled;
+    const bool realtime = master && mode != "image";
+    const juce::String st = params.style;
+    const bool barFam   = (st == "bar" || st == "bar-line");   // line 系：无左右侧边、无逐柱（新1c2/1b4）
+
+    maskStrokeToggle.setEnabled (true);                 // 总开关永远能点
+    if (outlineRealtimePtr != nullptr)
+    {
+        outlineRealtimePtr->setToggleState (mode != "image", juce::dontSendNotification);
+        outlineRealtimePtr->setEnabled (master);
+    }
+    if (outlinePerBarPtr != nullptr)
+    {
+        outlinePerBarPtr->setToggleState (mode == "perbar", juce::dontSendNotification);
+        outlinePerBarPtr->setEnabled (realtime && barFam);   // 新1b(4)：仅实时+bar 类可选
+    }
+    const bool fixedOn = master && ! realtime;          // 固定色按钮：仅"未开实时"时可用
+    maskColorBtn.setEnabled (fixedOn);
+    maskAvgBtn.setEnabled   (fixedOn);
+
+    setSliderEnabled (maskStrokeWidthSliderPtr, master);   // 三边统一预设（几何）
+    for (int e = 0; e < 3; ++e)
+    {
+        const bool side = (e != 0);                         // e=1/2 = 左/右
+        const bool en   = master && (! side || barFam);    // 侧边仅 bar 类可用
+        if (outEdgeTogPtr[e] != nullptr)
+            outEdgeTogPtr[e]->setEnabled (en);
+        // 某边开关关闭 → 该边的 厚度/透明度/阴影 三项整体灰（新1c4）
+        const bool edgeOn = en && (outEdgeTogPtr[e] != nullptr ? outEdgeTogPtr[e]->getToggleState() != false : false);
+        setSliderEnabled (outEdgeWPtr[e],      edgeOn);
+        setSliderEnabled (outEdgeAlphaPtr[e],  edgeOn);
+        setSliderEnabled (outEdgeShadowPtr[e], edgeOn);
+    }
+    setSliderEnabled (outlineFpsPtr, realtime);            // 性能项只在实时有意义
+    if (outlineTemporalPtr != nullptr) outlineTemporalPtr->setEnabled (realtime);
+}
+
 void ParamPanel::syncMaskControls()
 {
     maskOnToggle.setToggleState    (params.maskImage.enabled, juce::dontSendNotification);
@@ -708,33 +786,29 @@ void ParamPanel::syncMaskControls()
         maskContrastPtr->setValue (params.maskImage.contrast, juce::dontSendNotification);
     if (maskSaturationPtr != nullptr)
         maskSaturationPtr->setValue (params.maskImage.saturation, juce::dontSendNotification);
-    // v0.5.5 #5
-    if (outlineModeBoxPtr != nullptr)
-    {
-        static const char* modes[] = { "image", "uniform", "perBar", "perFrame" };
-        int id = 1;
-        for (int i = 0; i < 4; ++i) if (params.maskImage.outlineMode == modes[i]) id = i + 1;
-        outlineModeBoxPtr->setSelectedId (id, juce::dontSendNotification);
-    }
+    // v0.5.6 新1c：上/左/右三边的 开关/厚度/透明度/阴影 值回填（enabled 由 syncOutlineEnablement 管）
     {
         auto onOf = [] (int e) -> bool MaskImageLayer::* {
-            switch (e) { case 0: return &MaskImageLayer::outTop;    case 1: return &MaskImageLayer::outBottom;
-                         case 2: return &MaskImageLayer::outLeft;   default: return &MaskImageLayer::outRight; } };
+            return e == 0 ? &MaskImageLayer::outTop : (e == 1 ? &MaskImageLayer::outLeft : &MaskImageLayer::outRight); };
         auto wOf  = [] (int e) -> float MaskImageLayer::* {
-            switch (e) { case 0: return &MaskImageLayer::outWTop;   case 1: return &MaskImageLayer::outWBottom;
-                         case 2: return &MaskImageLayer::outWLeft;  default: return &MaskImageLayer::outWRight; } };
-        for (int e = 0; e < 4; ++e)
+            return e == 0 ? &MaskImageLayer::outWTop : (e == 1 ? &MaskImageLayer::outWLeft : &MaskImageLayer::outWRight); };
+        auto aOf  = [] (int e) -> float MaskImageLayer::* {
+            return e == 0 ? &MaskImageLayer::outAlphaTop : (e == 1 ? &MaskImageLayer::outAlphaLeft : &MaskImageLayer::outAlphaRight); };
+        auto sOf  = [] (int e) -> float MaskImageLayer::* {
+            return e == 0 ? &MaskImageLayer::outShadowTop : (e == 1 ? &MaskImageLayer::outShadowLeft : &MaskImageLayer::outShadowRight); };
+        for (int e = 0; e < 3; ++e)
         {
-            if (outEdgeTogPtr[e] != nullptr)
-                outEdgeTogPtr[e]->setToggleState (params.maskImage.*(onOf (e)), juce::dontSendNotification);
-            if (outEdgeWPtr[e] != nullptr)
-                outEdgeWPtr[e]->setValue (params.maskImage.*(wOf (e)), juce::dontSendNotification);
+            if (outEdgeTogPtr[e]    != nullptr) outEdgeTogPtr[e]   ->setToggleState (params.maskImage.*(onOf (e)), juce::dontSendNotification);
+            if (outEdgeWPtr[e]      != nullptr) outEdgeWPtr[e]      ->setValue (params.maskImage.*(wOf (e)), juce::dontSendNotification);
+            if (outEdgeAlphaPtr[e]  != nullptr) outEdgeAlphaPtr[e]  ->setValue (params.maskImage.*(aOf (e)), juce::dontSendNotification);
+            if (outEdgeShadowPtr[e] != nullptr) outEdgeShadowPtr[e] ->setValue (params.maskImage.*(sOf (e)), juce::dontSendNotification);
         }
     }
     if (outlineFpsPtr != nullptr)
         outlineFpsPtr->setValue (params.maskImage.outlinePreviewFps, juce::dontSendNotification);
     if (outlineTemporalPtr != nullptr)
         outlineTemporalPtr->setToggleState (params.maskImage.outlineTemporal, juce::dontSendNotification);
+    syncOutlineEnablement();   // v0.5.6 新1-b：开关态 + 互斥置灰（含 realtime/perbar 从 outlineMode 反推）
 }
 
 void ParamPanel::setProgressText (const juce::String& s)

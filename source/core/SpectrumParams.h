@@ -60,8 +60,12 @@ struct MaskImageLayer
     //   "perBar"   每根柱各算本柱可视区的平均色（bar 系才有意义；折线自动退化为 uniform）
     //   "perFrame" 本帧整个可视区一色（line 系；bar 系效果同 uniform 的另一叫法）
     juce::String outlineMode = "image";
-    bool  outTop = true, outBottom = true, outLeft = true, outRight = true;
-    float outWTop = 2.0f, outWBottom = 2.0f, outWLeft = 2.0f, outWRight = 2.0f;
+    // v0.5.6 新1c：底部边框取消（"没意义"）；上/左/右各一组 开关+厚度+透明度+阴影。
+    bool  outTop = true, outLeft = true, outRight = true;
+    float outWTop = 2.0f, outWLeft = 2.0f, outWRight = 2.0f;              // 厚度 px
+    float outAlphaTop = 1.0f, outAlphaLeft = 1.0f, outAlphaRight = 1.0f;   // 透明度 0..1
+    float outShadowTop = 0.0f, outShadowLeft = 0.0f, outShadowRight = 0.0f; // 阴影外扩 px（0=无）
+    // （outBottom 已移除；旧 JSON 里若还有该键会被忽略）
     // 预览降频/插值（**只 GUI**；离线导出默认关，逐帧真算保精确）
     //   默认 8fps：视频 30fps 但描边色每 8 次/秒刷新已够"跟手"；指数逼近窗口 ≈ 8 帧（≤0.35s）无跳变。
     float outlinePreviewFps = 8.0f;   // 0 = 关节流（每帧真算）

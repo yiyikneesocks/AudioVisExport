@@ -114,7 +114,8 @@ void SpectrumCanvas::paint (juce::Graphics& g)
                     const juce::Colour stroke = params.maskImage.strokeColor;
                     const double nowSec = (double) juce::Time::getMillisecondCounterHiRes() * 0.001;
                     juce::Image masked = SpectrumMask::composeWithPlan (
-                        base, adj, params.maskImage, stroke, &maskPalette, nowSec);
+                        base, adj, params.maskImage, stroke, &maskPalette, nowSec,
+                        SpectrumMask::isBarStyle (params.style));   // line 系禁左右侧边（新1c2）
                     if (masked.isValid()) specLayer = masked;
                 }
                 catch (...) { }   // #2 防御：异常 → specLayer 保持 base（无蒙版回退）
