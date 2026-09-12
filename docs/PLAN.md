@@ -65,7 +65,13 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-12 23:3x）
+## 当前状态（最后更新：2026-09-12 23:4x）
+
+- **多选双向同步（用户新需求）**：① 画布多选（含 Ctrl+A）时，图层列表对应多行一起高亮；② 列表里也能 Ctrl/Shift 多选行，效果与画布一致，并驱动画布组移动/批量删。
+  实现：`canvas.setSelection(tags,anchor)`（过滤越界/频谱不在场，锚点入集合）；`ParamPanel` ListBox `setMultipleSelectionEnabled(true)`，
+  `refreshLayerList(const std::vector<int>& sel,…)`（哈希纳入选择集合→多选变化即刷新；`deselectAllRows`+逐行 `selectRow`）；
+  `listBoxItemClicked` 读 `getSelectedRows()` 回传集合经新回调 `onSelectLayerRows`；`deleteKeyPressed` 批量删所有选中图片行。
+  画布↔列表共用同一 `selectedSet`，双向一致；四套回归全绿、双端干净、部署 `AudioVisGUI_09122345.exe`。
 
 - **修多选组拖拽 bug（用户反馈，task2 回归）**：全选(Ctrl+A)能一起删、却拖不动整组。根因＝`SpectrumCanvas::mouseDown`
   普通按下无条件 `selectedSet = { picked }`，把刚 Ctrl+A 的多选在拖拽开始前就塌陷成单选（Delete 不经过按下所以没事）。

@@ -95,7 +95,31 @@ MainComponent::MainComponent() : canvas (params), panel (params)
             canvas.selectImage (tag);
         }
         canvas.grabKeyboardFocus();   // 新1-B：焦点给画布 → 列表选完后 Delete/方向键等即时可用
-        panel.refreshLayerList (canvas.selectedImageIndex(), canvas.editMaskImageMode());
+        panel.refreshLayerList (canvas.selection(), canvas.editMaskImageMode());
+        canvas.repaint();
+    };
+
+    // v0.5.6 #2：图层列表 Ctrl/Shift 多选 → 同步到画布同一套 selectedSet（与画布多选双向一致）。
+    panel.onSelectLayerRows = [this] (const std::vector<int>& tags, int clickedTag, bool clickedMask)
+    {
+        if (clickedMask)                                  // 点到蒙版子行 = 进入/退出"编辑图片位置"
+        {
+            canvas.setEditMaskImage (! canvas.editMaskImageMode());
+            panel.setMaskEditChecked (canvas.editMaskImageMode());
+        }
+        else
+        {
+            canvas.setEditMaskImage (false);
+            panel.setMaskEditChecked (false);
+            std::vector<int> valid;                       // 过滤到画布可选项：频谱(-1) 或 有效图片下标
+            for (int tg : tags)
+                if (tg == ParamPanel::layerTagSpectrum
+                    || (tg >= 0 && tg < (int) params.images.size()))
+                    valid.push_back (tg);
+            canvas.setSelection (valid, clickedTag);      // 集合 + 锚点（列表反向高亮也靠这个）
+        }
+        canvas.grabKeyboardFocus();
+        panel.refreshLayerList (canvas.selection(), canvas.editMaskImageMode());
         canvas.repaint();
     };
     panel.onToggleMaskEdit  = [this] (bool b) { canvas.setEditMaskImage (b); canvas.repaint(); };
@@ -336,7 +360,7 @@ void MainComponent::timerCallback()
                                         imgSel ? params.images[(size_t) selNow].opacity * 100.0
                                                : 100.0,
                                         params.spectrumPresent);
-            panel.refreshLayerList (selNow, canvas.editMaskImageMode());   // v0.5.4 #H
+            panel.refreshLayerList (canvas.selection(), canvas.editMaskImageMode());   // v0.5.4 #H / v0.5.6 多选高亮
         }
     }
 
@@ -813,7 +837,7 @@ void MainComponent::addImageLayer (const juce::File& f)
     // v0.5.4 #H：把"这个文件到底去了哪儿"说出来——静默正是这类 bug 的温床
     panel.setProgressText ("Image layer #" + juce::String (k + 1) + " added: " + f.getFileName()
                            + "  (" + juce::String (im.getWidth()) + "x" + juce::String (im.getHeight()) + ")");
-    panel.refreshLayerList (canvas.selectedImageIndex(), canvas.editMaskImageMode());
+    panel.refreshLayerList (canvas.selection(), canvas.editMaskImageMode());
     canvas.repaint();
 }
 
@@ -955,7 +979,7 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
         canvas.selectAllLayers();   // v0.5.6 新#2：Ctrl+A = 全选所有图层（多选=可整体移动/删除，禁一起旋转拉伸）
         canvas.grabKeyboardFocus();
         canvas.repaint();
-        panel.refreshLayerList (canvas.selectedImageIndex(), canvas.editMaskImageMode());
+        panel.refreshLayerList (canvas.selection(), canvas.editMaskImageMode());
         panel.setProgressText (juce::String::formatted ("Selected %d layers", (int) canvas.selection().size()));
         return true;
     }
@@ -1130,7 +1154,7 @@ void MainComponent::applyMaskImageFile (const juce::File& f)
     canvas.setEditMaskImage (false);
     panel.setProgressText ("Mask image set: " + f.getFileName()
                            + "  (" + juce::String (im.getWidth()) + "x" + juce::String (im.getHeight()) + ")");
-    panel.refreshLayerList (canvas.selectedImageIndex(), canvas.editMaskImageMode());
+    panel.refreshLayerList (canvas.selection(), canvas.editMaskImageMode());
     canvas.repaint();
 }
 

@@ -307,7 +307,7 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     //   专治"拖进去没反应""手柄框跑到画布外"这类**状态看不见**的问题（用户建议）。
     layerList.setModel (this);   // 见 .h 注释：对象构造完成后再挂 model
     layerList.setRowHeight (22);
-    layerList.setMultipleSelectionEnabled (false);
+    layerList.setMultipleSelectionEnabled (true);   // v0.5.6 #2：图层列表支持 Ctrl/Shift 多选，与画布同一套集合
     layerList.setColour (juce::ListBox::outlineColourId, juce::Colour (0xff3a3a44));
     layerList.setColour (juce::ListBox::backgroundColourId, juce::Colour (0xff1a1a20));
     addRow ("", &layerList, 150);
@@ -1029,8 +1029,22 @@ void ParamPanel::paintListBoxItem (int row, juce::Graphics& g, int w, int h, boo
 
 void ParamPanel::listBoxItemClicked (int row, const juce::MouseEvent&)
 {
-    if (row >= 0 && row < (int) layerRows.size() && onSelectLayerRow)
-        onSelectLayerRow (layerRows[(size_t) row].tag);
+    if (row < 0 || row >= (int) layerRows.size()) return;
+    const int clickedTag = layerRows[(size_t) row].tag;
+    const bool clickedMask = (clickedTag == layerTagMask);
+    // ListBox 已按 Ctrl/Shift 维护好内部选中；读出全部选中行 → 映射成 tag 集合回传。
+    std::vector<int> tags;
+    const juce::SparseSet<int> sel = layerList.getSelectedRows();
+    for (int si = 0; si < sel.size(); ++si)          // SparseSet 不支持 range-for，按下标遍历
+    {
+        const int r = sel[si];
+        if (r >= 0 && r < (int) layerRows.size())
+            tags.push_back (layerRows[(size_t) r].tag);
+    }
+    if (onSelectLayerRows)
+        onSelectLayerRows (tags, clickedTag, clickedMask);
+    else if (onSelectLayerRow)
+        onSelectLayerRow (clickedTag);
 }
 
 void ParamPanel::listBoxItemDoubleClicked (int row, const juce::MouseEvent& e)
@@ -1040,19 +1054,33 @@ void ParamPanel::listBoxItemDoubleClicked (int row, const juce::MouseEvent& e)
 
 void ParamPanel::deleteKeyPressed (int lastRowSelected)
 {
-    // 新1-B：列表里选中某行直接按 Delete 也要能删（旧行为：键被 ListView 吞掉、无任何反应）。
-    if (lastRowSelected >= 0 && lastRowSelected < (int) layerRows.size()
-        && layerRows[(size_t) lastRowSelected].tag >= 0)   // 只对图片层执行
+    // 新1-B / v0.5.6 #2：列表里按 Delete 删除**所有选中的图片行**（多选批量删），与画布一致。
+    std::vector<int> tags;
+    const juce::SparseSet<int> rows = layerList.getSelectedRows();
+    for (int si = 0; si < rows.size(); ++si)
     {
-        if (onSelectLayerRow) onSelectLayerRow (layerRows[(size_t) lastRowSelected].tag);
-        if (onLayerRemove)    onLayerRemove();
+        const int r = rows[si];
+        if (r >= 0 && r < (int) layerRows.size() && layerRows[(size_t) r].tag >= 0)
+            tags.push_back (layerRows[(size_t) r].tag);
     }
+    if (tags.empty() && lastRowSelected >= 0 && lastRowSelected < (int) layerRows.size()
+        && layerRows[(size_t) lastRowSelected].tag >= 0)
+        tags.push_back (layerRows[(size_t) lastRowSelected].tag);   // 兜底：单选旧路径
+    if (tags.empty()) return;                                       // 只删图片层（频谱/蒙版不在列表删）
+    if (onSelectLayerRows) onSelectLayerRows (tags, tags.back(), false);   // 先同步画布多选集合
+    if (onLayerRemove)     onLayerRemove();
 }
 
-void ParamPanel::refreshLayerList (int selectedImage, bool maskEditMode)
+void ParamPanel::refreshLayerList (const std::vector<int>& sel, bool maskEditMode)
 {
-    // 内容哈希去抖：MainComponent 每 tick 都会调，只有真的变了才重建 + 重绘
-    juce::String hash = juce::String (selectedImage) + "|"
+    auto contains = [&] (int tag) { return std::find (sel.begin (), sel.end (), tag) != sel.end (); };
+    // 内容哈希去抖：MainComponent 每 tick 都会调，只有真的变了才重建 + 重绘。
+    //   选择集合（排序后拼串）纳入哈希 → 多选变化也能触发高亮刷新。
+    std::vector<int> selSorted = sel;
+    std::sort (selSorted.begin (), selSorted.end ());
+    juce::String selSig;
+    for (int tt : selSorted) selSig += juce::String (tt) + ",";
+    juce::String hash = selSig + "|"
                       + juce::String ((int) maskEditMode) + "|"
                       + juce::String (params.spectrumIndex) + "|"
                       + juce::String ((int) params.spectrumPresent) + "|"
@@ -1093,8 +1121,8 @@ void ParamPanel::refreshLayerList (int selectedImage, bool maskEditMode)
         lr.text = "  " + describe (params.images[(size_t) i].path,
                                    params.images[(size_t) i].transform,
                                    "Image " + juce::String (i + 1))
-                + (selectedImage == i ? "   < selected" : "");
-        lr.selected = (selectedImage == i);
+                + (contains (i) ? "   < selected" : "");
+        lr.selected = (contains (i));
         lr.colour = lr.selected ? "ffffffff" : "ffb8b8c4";
         layerRows.push_back (lr);
     }
@@ -1104,7 +1132,7 @@ void ParamPanel::refreshLayerList (int selectedImage, bool maskEditMode)
         lr.text = params.spectrumPresent ? ("Spectrum  [" + params.style + "]")
                                          : "Spectrum  [DELETED]";
         lr.text = "  " + lr.text;
-        lr.selected = (selectedImage < 0 && ! maskEditMode);
+        lr.selected = contains (layerTagSpectrum);   // 频谱是否被多选集合选中
         lr.colour = lr.selected ? "ffffffff" : "ffffa8d4";
         layerRows.push_back (lr);
     }
@@ -1130,8 +1158,8 @@ void ParamPanel::refreshLayerList (int selectedImage, bool maskEditMode)
         lr.text = "  " + describe (params.images[(size_t) i].path,
                                    params.images[(size_t) i].transform,
                                    "Image " + juce::String (i + 1))
-                + (selectedImage == i ? "   < selected" : "");
-        lr.selected = (selectedImage == i);
+                + (contains (i) ? "   < selected" : "");
+        lr.selected = (contains (i));
         lr.colour = lr.selected ? "ffffffff" : "ffb8b8c4";
         layerRows.push_back (lr);
     }
@@ -1140,12 +1168,11 @@ void ParamPanel::refreshLayerList (int selectedImage, bool maskEditMode)
     //   首次 updateContent 发生在 layerRows 还是空的时候 → 缓存 0 行 → 之后永远不画行，
     //   只剩我们设的深色底 —— 用户实测所见"图层列表一直是黑的"。
     layerList.updateContent();
+    // 把"哪些行选中"回写到 ListBox（多选）；蒙版行仅在编辑态高亮。用 ListBox 选中态驱动行底色高亮。
+    layerList.deselectAllRows();
     for (int i = 0; i < (int) layerRows.size(); ++i)
-        if (layerRows[(size_t) i].selected)
-        {
-            layerList.selectRow (i);
-            break;
-        }
+        if (layerRows[(size_t) i].selected || (layerRows[(size_t) i].tag == layerTagMask && maskEditMode))
+            layerList.selectRow (i, /*addToCurrent=*/true, /*shouldScrollIntoView=*/false);
     layerList.repaint();
 }
 

@@ -63,7 +63,9 @@ public:
     // v0.5.4 #6: 拖图片到 Mask 页签 → 设为蒙版图（区别于画布拖放=图片图层）
     std::function<void (const juce::File&)> onMaskFileDropped;
     // v0.5.4 #H：图层列表点击 → MainComponent 把画布选中切到该元素
-    std::function<void (int)> onSelectLayerRow;      // 传 layerTag*
+    std::function<void (int)> onSelectLayerRow;      // 传 layerTag*（旧的单选路径）
+    // v0.5.6 #2：图层列表 Ctrl/Shift 多选 → 回传整个选中 tag 集合 + 被点击 tag + 是否点到蒙版行
+    std::function<void (const std::vector<int>& tags, int clickedTag, bool clickedMask)> onSelectLayerRows;
     // v0.5.4 #6: 页签切换后高度变化 → MainComponent 重排 viewport
     std::function<void ()>     onPanelHeightChanged;
 
@@ -75,7 +77,7 @@ public:
     void refreshLayerControls (bool imageSelected, double opacityPct,
                                bool spectrumPresent);
     // v0.5.4 #H：图层列表数据刷新（MainComponent 每 tick 在选中变化时调；内部按内容哈希去抖）
-    void refreshLayerList (int selectedImage, bool maskEditMode);
+    void refreshLayerList (const std::vector<int>& sel, bool maskEditMode);  // v0.5.6：多选集合驱动高亮
     // v0.5.4 #H：图层行数（诊断/测试用；vis_tabs_test 靠它验证列表真的被填过）
     int layerRowCount() const noexcept { return (int) layerRows.size(); }
 

@@ -57,6 +57,7 @@ public:
     const std::vector<int>& selection() const noexcept { return selectedSet; }
     bool isMultiSelection() const noexcept { return selectedSet.size() > 1; }
     void selectAllLayers();                        // Ctrl+A：频谱(在场)+全部图片
+    void setSelection (const std::vector<int>& tags, int anchor); // v0.5.6：外部(图层列表)设定多选集合+锚点
     void clearSelection() { selectedSet.clear(); } // 供外部删除后复位
 
     // ---- 频谱蒙版图片编辑模式（v0.5.4）----

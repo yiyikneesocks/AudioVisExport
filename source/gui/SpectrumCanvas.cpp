@@ -1496,6 +1496,30 @@ void SpectrumCanvas::selectAllLayers()
     repaint();
 }
 
+// v0.5.6：外部（图层列表 Ctrl/Shift 多选）设定选择集合 + 锚点。过滤掉越界/频谱不在场的项，
+// 保证 selectedSet 含锚点、selectedImage 指向锚点。列表高亮由此反向同步到画布同一套集合。
+void SpectrumCanvas::setSelection (const std::vector<int>& tags, int anchor)
+{
+    selectedSet.clear();
+    for (int t : tags)
+    {
+        if (t < 0 && ! params.spectrumPresent) continue;          // 频谱不在场 → 忽略 -1
+        if (t >= (int) params.images.size()) continue;            // 越界图片 → 忽略
+        if (std::find (selectedSet.begin (), selectedSet.end (), t) == selectedSet.end ())
+            selectedSet.push_back (t);
+    }
+    if (selectedSet.empty ())
+    {
+        selectedImage = -1; dragMode = DragMode::None; repaint(); return;
+    }
+    if (std::find (selectedSet.begin (), selectedSet.end (), anchor) == selectedSet.end ())
+        anchor = selectedSet.front ();
+    selectedImage = anchor;
+    if (selectedImage >= 0) transformForTag (selectedImage);      // 惰性确保该图层变换存在
+    dragMode = DragMode::None;
+    repaint();
+}
+
 juce::Image SpectrumCanvas::loadCached (const juce::String& path) const
 {
     auto it = imageCache.find (path);
