@@ -1,6 +1,6 @@
 # AudioVisExport — 长期计划（Roadmap）
 
-> 迁自 `ARCHITECTURE.md` 原 §7。完成一项即把 `[ ]` 改 `[x]`，并在 `docs/HISTORY.md` §2 对应版本条目记录。
+> 迁自 `ARCHITECTURE.md` 原 §7。完成一项即把 `[ ]` 改 `[x]`，并在对应版本档 `docs/history/<系列>/<版本>.md` 记录（索引在 `docs/HISTORY.md` §2）。
 > 架构参考见 `ARCHITECTURE.md`，当前迭代计划见 `docs/PLAN.md`。
 
 
@@ -12,7 +12,7 @@
 
 ### 中期（编码 + 工作流）
 
-> **已完成**（未列在原清单，详见 `docs/HISTORY.md`）：图片图层系统 v0.4.2 落地、
+> **已完成**（未列在原清单，详见 `docs/history/`）：图片图层系统 v0.4.2 落地、
 > v0.5.1 等比显示重构、v0.5.2 统一图层模型（频谱=真图层：z 序自由/删除恢复/键盘删除）+
 > 对边锚定缩放 + 吸附系统。
 - [x] MOV QTRLE alpha 编码器内置（PngSequenceEncoder::finalizeAndMux，v0.4.0；实测 argb 无损保留）
@@ -32,6 +32,24 @@ CrystalStyle 已验证 `getNumPasses() / renderPass()` 机制可用。后续扩�
 - **真多图层合成**：VisPipeline::renderFrame() 检测 `getNumPasses() > 1`，每 pass 渲染到独立 ARGB Image，用 blend mode 合成（支持 blur / color-dodge / screen 等）
 - **滤镜链**：每个 pass 可附加 ImageEffectFilter（GaussianBlur / DropShadow / InnerShadow）
 - **动画化 pass 参数**：pass 的透明度/粗细随时间变化（如辉光呼吸效果）
+
+---
+
+## 长期计划：实时渲染 / 性能优化（自旧 PLAN_v0.5.6 §1.2/§4 迁入，2026-09-12）
+
+**核心瓶颈**：`SpectrumMask::compose` 每帧 ~7–8 遍全图遍历（base 分配 → image 绘制 → alpha 蒙版裁剪 →
+4 向滑窗最小值 → makeStrokePlan → 描边混合）。1280×720 下 ≈ 92 万像素 × 7~8 ≈ 600–700M 像素操作/帧，30fps 预览 CPU 高。
+
+| 优化项 | 收益 | 复杂度 | 优先级 |
+|---|---|---|---|
+| 预览分辨率解耦（预览按视口低分辨率渲染，导出全分辨率） | ⭐⭐⭐⭐⭐ | 中 | P0 |
+| 脏区/增量更新（电平未变的列不重算描边色） | ⭐⭐⭐⭐ | 高 | P0 |
+| `base`/`out` 图像 buffer 复用（thread_local 静态，避免每帧分配） | ⭐⭐⭐ | 低 | P0 |
+| 预览帧率解耦（预览 ~20fps / 导出 30fps；`repaint(rect)` 局部刷新） | ⭐⭐⭐ | 中 | P1 |
+| timer 分级（音频同步 30Hz / 重绘更低帧率） | ⭐⭐ | 中 | P1 |
+
+**已做**：预览降频重算描边色 + 指数插值平滑（`PreviewPaletteCache`）。`outlineLookaheadFrames`（预渲染/看前）默认关闭。
+**建议路线**：先做 P0（分辨率解耦 + buffer 复用 + 脏区列），单项加 `scripts/` 计时基准后再逐项合入，避免一次大改。
 
 ---
 

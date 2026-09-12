@@ -1,8 +1,10 @@
 # AudioVisExport — 下一步计划（滚动文件）
 
-> **生命周期**：开版时写计划（经用户确认）→ 执行 → 发版后把执行结果摘要并入
-> `docs/HISTORY.md` §2 变更日志，然后**清空本文件**写下一版计划。
-> 历史计划快照：`docs/PLAN_v0.5.0.md`（Windows 交叉编译专项）。长期方向见 `docs/ROADMAP.md`。
+> **生命周期**：开版时写计划（经用户确认）→ 执行 → 发版后把执行结果摘要写入
+> `docs/history/<系列>/<版本>.md` 并在 `docs/HISTORY.md` §2 索引表加一行，然后**清空本文件**写下一版计划。
+> **不再另立 `PLAN_vX.Y.Z.md`**（v0.5.6 起约定，2026-09-12 用户拍板）：历史计划快照与 HISTORY 高度重复、
+> 且必然烂尾（0.5.1–0.5.4 发版都没写快照也没人丢信息）。**计划只此一份滚动 PLAN.md**；归档交给 HISTORY + `docs/history/`；
+> 长期方向交给 `docs/ROADMAP.md`。
 
 ---
 
@@ -12,7 +14,7 @@
 2. **GitHub 参考检索（务必优先，非阻断）**：本步动手前，只要环境能联网，就先搜同类实现 / 范式
    （REST API 搜索 → `webfetch` 读 README/源码 → 必要时 `git clone --depth 1` 到 `/tmp/opencode`），
    在「当前状态」记可借鉴点 / 坑 + 来源 `owner/repo`；**无网才跳过并注明**。详见 `ARCHITECTURE.md`「参考优先原则」
-3. 执行：代码 + 双端构建 + 部署测试包 + 文档（`HISTORY.md` / `RELEASE_NOTES.md` / 版本号）
+3. 执行：代码 + 双端构建 + 部署测试包 + 文档（`docs/history/<版本>.md` 新建 + `HISTORY.md` 索引 / `RELEASE_NOTES.md` / 版本号）
 4. `git commit`（本地；**此时严禁 push / tag / Release**）
 5. **【验证闸门】** 停下请用户验证 GUI/CLI；用户明确回复「全部通过」之前不得推送
 6. 用户通过后，**主动提醒用户「尚未推送 GitHub」**，等待用户明确下达推送指令
@@ -26,8 +28,8 @@
 |---|---|
 | 开版：计划获批 | `PLAN.md` 写入任务拆分与验证方案 |
 | 每完成一步 / 发现偏差 | `PLAN.md`「当前状态」+ 最后更新时间戳 |
-| 闸门前（本地 commit 时） | `HISTORY.md` §2 版本条目 + `RELEASE_NOTES.md` + `ARCHITECTURE.md` 版本映射表 + 代码版本号（CMake/CLI） |
-| 发版推送后（用户指令） | `PLAN.md` 摘要并入 `HISTORY.md` 后清空重写 |
+| 闸门前（本地 commit 时） | `docs/history/<系列>/<版本>.md` 变更条目 + `HISTORY.md` §2 索引行 + `RELEASE_NOTES.md` + `ARCHITECTURE.md` 版本映射表 + 代码版本号（CMake/CLI） |
+| 发版推送后（用户指令） | `PLAN.md` 摘要已写入 `docs/history/<版本>.md` → 清空本文件写下一版（**不再生成 PLAN_vX.Y.Z 快照**） |
 
 > **⚠️ 纪律红线（2026-09-10，v0.5.4 教训）**：
 > - **每完成一个 INBOX 任务** → 必须同步更新 `PLAN.md`「当前状态」（含时间戳），不可积压。
@@ -63,13 +65,12 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-12 03:1x）
+## 当前状态（最后更新：2026-09-12 20:3x）
 
-- **⏸ 用户 2026-09-12 口述：三条记账、暂不动工**（计划见 `docs/PLAN_v0.5.6.md`，原话留档见 WORKLOG"已记录·暂不动工"）：
-  ① 暂时**禁用 Ctrl+Z**（bug 多；顺带发现 `addSpectrumLayer` 双快照 bug）；
-  ② **大幅优化实时渲染**（性能 + Mask 页控件"乱"）；
-  ③ **多选系统**（Ctrl+A 全选 / Ctrl+点击多选 / 批量删除 / 一起移动，**禁用一起旋转拉伸**）。
-  → 本轮**未改任何源码**，仅出计划。
+- **v0.5.4 之后累计推进（未发版，等用户指令）**：task1 边框系统重构（perBar 大小写 bug 修复 + 开关组 + 上/左/右三边各带 厚度/透明度/阴影 + 斜面归属 + line 系禁侧边）；task2 多选系统（Ctrl+A / Ctrl+点击 / 批量删 / 组移动禁旋转拉伸）。commit `7b434b4`/`3d09da1`。
+- **文档架构重构（本轮，2026-09-12 用户拍板）**：废掉 `PLAN_vX.Y.Z.md` 格式（`git rm docs/PLAN_v0.5.0.md docs/PLAN_v0.5.6.md`），计划只留 `PLAN.md` 一份；`HISTORY.md` §2 拆分为 `docs/history/<系列>/<版本>.md` 每版一档 + 索引表；渲染优化 / Ctrl+Z / Ctrl+C+V 设计并入 `docs/ROADMAP.md` 长期计划。
+- **INBOX 双线**：历史线 / 暂停线已重命名带图例，规则见下方 §0 收件箱协议；未解决/搁置项（Ctrl+Z、Ctrl+C/V）已移到历史线上方归档。
+- 原"三条记账暂不动工"已全部有归宿：① Ctrl+Z → 保持禁用 + 命令式撤销入 ROADMAP；② 渲染优化 → ROADMAP；③ 多选 → 已实现。
 
 - **v0.5.3 已完整发版**（2026-09-09，tag `v0.5.3` + GitHub Release 已发）。
 - **v0.5.4 ✅ 已发版（2026-09-12，tag `v0.5.4` + GitHub Release）**：
