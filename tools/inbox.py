@@ -72,7 +72,7 @@ def cmd_prune(args: argparse.Namespace) -> int:
         return 2
 
     lines = text.split("\n")
-    kept, deleted, mismatch = [], [], []
+    kept, deleted, mismatch, missing = [], [], [], []
 
     # 解析 --expect "id=snippet"
     want = []
@@ -83,31 +83,39 @@ def cmd_prune(args: argparse.Namespace) -> int:
         want.append((k.strip(), v))
 
     consumed = set()
-    for ln in lines:
-        m = re.match(r"^\s*(\d+)\.", ln)
-        hit = None
-        if m:
-            num = m.group(1)
-            for k, snip in want:
-                if k == num and (num, snip) not in consumed:
-                    if snip and snip in ln:
-                        hit = (num, k, "del")
-                        consumed.add((num, snip))
-                        break
-                    hit = (num, k, "mismatch")   # 编号在、但内容被用户改过 → 绝不删
-                    consumed.add((num, snip))
-                    break
-        if hit and hit[2] == "del":
-            deleted.append(ln)
-        elif hit and hit[2] == "mismatch":
-            mismatch.append(ln)
-            kept.append(ln)
-        else:
-            kept.append(ln)
+    # 先算出每个编号块的行范围：`^N.` 行 + 紧随其后的**缩进续行**（以空格/Tab 开头，遇到
+    # 新的顶格 `M.` 或分隔线则停）。这样删多行任务不会留下孤儿子项。
+    def block_end(k: int) -> int:
+        e = k + 1
+        while e < len(lines):
+            s = lines[e]
+            if not s.strip():
+                break
+            if s[0] not in (" ", "\t"):        # 顶格 = 新条目 / 说明块 / 分隔线
+                break
+            e += 1
+        return e
 
-    found_nums = {re.match(r"^\s*(\d+)\.", l).group(1)
-                  for l in lines if re.match(r"^\s*(\d+)\.", l)}
-    missing = [k for k, _ in want if k not in found_nums]
+    drop = [False] * len(lines)
+    for k, snip in want:
+        found = False
+        for idx, ln in enumerate(lines):
+            m = re.match(r"^\s*(\d+)\.", ln)
+            if found or (m and m.group(1) == k):
+                if snip and snip in ln:
+                    end = block_end(idx)
+                    for j in range(idx, end):
+                        drop[j] = True
+                    deleted.extend(lines[idx:end])
+                else:
+                    mismatch.append(ln)
+                found = True
+                break
+        if not found:
+            missing.append(k)
+    for idx, ln in enumerate(lines):
+        if not drop[idx]:
+            kept.append(ln)
 
     out = "\n".join(kept)
     if out != text:
