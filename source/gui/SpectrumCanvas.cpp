@@ -882,8 +882,14 @@ void SpectrumCanvas::mouseDown (const juce::MouseEvent& e)
         }
         else
         {
-            selectedSet = { picked };
-            selectedImage = picked;
+            // v0.5.6 #2 修复：普通按下若点在"已在多选集合内"的元素 → **保留整个集合**，
+            //   好让这次按下能直接拖拽整组（塌陷会杀掉 Ctrl+A 的多选，导致全选拖不动）。
+            //   只有点到集合**外**的元素才塌陷为单选（标准设计工具语义）。
+            const bool alreadySel = std::find (selectedSet.begin (), selectedSet.end (), picked)
+                                        != selectedSet.end ();
+            if (! alreadySel)
+                selectedSet = { picked };
+            selectedImage = picked;               // 锚点=刚点的，便于面板显示
         }
         if (picked >= 0)
             activeTransform();     // 惰性初始化该图层变换

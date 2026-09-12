@@ -65,7 +65,12 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-12 23:1x）
+## 当前状态（最后更新：2026-09-12 23:3x）
+
+- **修多选组拖拽 bug（用户反馈，task2 回归）**：全选(Ctrl+A)能一起删、却拖不动整组。根因＝`SpectrumCanvas::mouseDown`
+  普通按下无条件 `selectedSet = { picked }`，把刚 Ctrl+A 的多选在拖拽开始前就塌陷成单选（Delete 不经过按下所以没事）。
+  修法＝按下若点中"已在集合内"的元素则**保留集合**（可直接拖整组），仅点集合**外**元素才塌陷为单选。
+  组移动拖拽端(`:1122`)/`transformForTag`（含频谱 -1）本就读集合、无需改。四套回归全绿、双端干净、部署 `AudioVisGUI_09122334.exe`。
 
 - **新任务（用户口述，未入 INBOX）**：① 边框阴影**暂时禁用**——`SpectrumMask` 里 `shT/shL/shR=0`（原式注释保留），
   ParamPanel 三条 shadow 滑块同步置灰（`avxBorderShadowEnabled=false`），均未删代码可一键恢复；
