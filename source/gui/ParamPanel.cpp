@@ -14,6 +14,10 @@
 
 namespace
 {
+    // 用户 2026-09-12：暂时禁用边框阴影。渲染侧 SpectrumMask 已把 shT/shL/shR 置 0；
+    // 这里同步把面板上的 3 条 shadow 滑块整体置灰，避免"能调但没效果"的误导。要恢复=改回 true。
+    static constexpr bool avxBorderShadowEnabled = false;
+
     // Colour picker popup (ColourSelector is a ChangeBroadcaster)
     struct ColourPickSelector : juce::ColourSelector,
                                 private juce::ChangeListener
@@ -457,6 +461,7 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
             outEdgeShadowPtr[e] = addSlider ("  shadow", 0.0, 24.0, 0.5, 1.0,
                 [this, e, sOf] { return (double) (params.maskImage.*(sOf (e))); },
                 [this, e, sOf] (double v) { params.maskImage.*(sOf (e)) = (float) v; notify(); });
+            outEdgeShadowPtr[e]->setEnabled (avxBorderShadowEnabled);
             outEdgeWPtr[e]->setTooltip ("Edge thickness (px).");
             outEdgeAlphaPtr[e]->setTooltip ("Edge opacity 0..1.");
             outEdgeShadowPtr[e]->setTooltip ("Outer shadow band width (px). 0 = no shadow.");
@@ -761,7 +766,7 @@ void ParamPanel::syncOutlineEnablement()
         const bool edgeOn = en && (outEdgeTogPtr[e] != nullptr ? outEdgeTogPtr[e]->getToggleState() != false : false);
         setSliderEnabled (outEdgeWPtr[e],      edgeOn);
         setSliderEnabled (outEdgeAlphaPtr[e],  edgeOn);
-        setSliderEnabled (outEdgeShadowPtr[e], edgeOn);
+        setSliderEnabled (outEdgeShadowPtr[e], edgeOn && avxBorderShadowEnabled);
     }
     setSliderEnabled (outlineFpsPtr, realtime);            // 性能项只在实时有意义
     if (outlineTemporalPtr != nullptr) outlineTemporalPtr->setEnabled (realtime);

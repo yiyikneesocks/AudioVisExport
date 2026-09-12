@@ -463,6 +463,44 @@ int main()
         check (q.uniform.getBlue() > 240, "outlineTemporal=false: snaps straight to target");
     }
 
+    // ============ 用例 11：法向等宽描边（顶边厚度垂直于切线测量）============
+    {
+        const int CW = 140, CH = 120;
+        const float rT = 8.0f;
+        auto base = juce::Image (juce::Image::ARGB, CW, CH, true);
+        { juce::Graphics g (base);
+          g.setColour (juce::Colours::black);
+          juce::Path poly;                              // 平段 x[10..60] 在 y=30，45° 斜坡到 x[60..120] y=90
+          poly.startNewSubPath (10, 30); poly.lineTo (60, 30); poly.lineTo (120, 90);
+          poly.lineTo (120, CH - 1);    poly.lineTo (10, CH - 1); poly.closeSubPath();
+          g.fillPath (poly); }
+        auto img  = solidImg (CW, CH, juce::Colours::black);   // 形状内部=黑，描边用白，好区分
+        MaskImageLayer cfg; cfg.enabled = true;
+        cfg.strokeEnabled = true; cfg.outlineMode = "image";
+        cfg.outTop = true;  cfg.outWTop = rT;
+        cfg.outLeft = false; cfg.outRight = false;             // 只测顶边
+        auto im = SpectrumMask::compose (base, img, cfg, juce::Colours::white, /*sides=*/false);
+        // 量某列顶边白色带的**竖直**连续长度（从表面往下）
+        auto vrun = [&] (int x) {
+            juce::Image::BitmapData b (im, juce::Image::BitmapData::readOnly);
+            int best = 0, cur = 0;
+            for (int y = 0; y < CH; ++y)
+            {
+                const auto p = reinterpret_cast<const juce::PixelARGB*> (b.getLinePointer (y))[x];
+                const bool white = p.getRed() > 128 && p.getGreen() > 128 && p.getBlue() > 128 && p.getAlpha() > 128;
+                cur = white ? cur + 1 : 0;
+                best = juce::jmax (best, cur);
+            }
+            return best;
+        };
+        const int flat = vrun (30);     // 平段：竖直带 ≈ rT
+        const int ramp = vrun (90);     // 45° 斜面：竖直带 ≈ rT*sqrt2（法向等宽的体现）
+        std::printf ("      [normal-width] rT=%.0f  flatV=%d  ramp45V=%d (expect flat~8, ramp~11)\n", rT, flat, ramp);
+        check (flat >= (int) rT - 1 && flat <= (int) rT + 2, "flat top: vertical band ~ rT");
+        check (ramp > flat + 1, "45deg top: vertical band WIDER than rT -> perpendicular width held at rT (normal, not fixed-vertical)");
+        check (ramp >= (int)(rT * 1.25f) && ramp <= (int)(rT * 1.6f), "45deg band ~ rT*sqrt2 (within tol)");
+    }
+
     std::printf (failures ? "FAILURES: %d\n" : "ALL PASS\n", failures);
     return failures ? 1 : 0;
 }

@@ -65,7 +65,13 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-12 20:3x）
+## 当前状态（最后更新：2026-09-12 23:1x）
+
+- **新任务（用户口述，未入 INBOX）**：① 边框阴影**暂时禁用**——`SpectrumMask` 里 `shT/shL/shR=0`（原式注释保留），
+  ParamPanel 三条 shadow 滑块同步置灰（`avxBorderShadowEnabled=false`），均未删代码可一键恢复；
+  ② 边框**厚度改为法向等宽**——旧实现顶边是竖直固定 `rT`（斜面法向变细），现按每列顶面斜率把竖直窗半径放大
+  `rT·√(1+slope²)=rT/cosθ`，使**垂直于曲线切线**的厚度恒为 `rT`。左右侧边本就是竖直面/线系禁用，不改。
+  新增 `vis_mask_test` 用例 11 锁死：平段竖直带≈rT、45°斜面竖直带≈rT·√2（法向等宽）。四套回归全绿、Win 交叉编译部署 `AudioVisGUI_09122306.exe`。
 
 - **v0.5.4 之后累计推进（未发版，等用户指令）**：task1 边框系统重构（perBar 大小写 bug 修复 + 开关组 + 上/左/右三边各带 厚度/透明度/阴影 + 斜面归属 + line 系禁侧边）；task2 多选系统（Ctrl+A / Ctrl+点击 / 批量删 / 组移动禁旋转拉伸）。commit `7b434b4`/`3d09da1`。
 - **文档架构重构（本轮，2026-09-12 用户拍板）**：废掉 `PLAN_vX.Y.Z.md` 格式（`git rm docs/PLAN_v0.5.0.md docs/PLAN_v0.5.6.md`），计划只留 `PLAN.md` 一份；`HISTORY.md` §2 拆分为 `docs/history/<系列>/<版本>.md` 每版一档 + 索引表；渲染优化 / Ctrl+Z / Ctrl+C+V 设计并入 `docs/ROADMAP.md` 长期计划。

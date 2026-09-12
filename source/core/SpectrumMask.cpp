@@ -284,9 +284,12 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
         const int rR = (cfg.outRight && sideEdgesAllowed) ? juce::jlimit (1, 32, (int) std::lround (cfg.outWRight)) : 0;
 
         // 阴影 = 在实边外再叠一条更宽的低透明度带；半径 = 厚度 + 阴影外扩。
-        const int shT = rT ? rT + juce::jlimit (0, 32, (int) std::lround (cfg.outShadowTop )) : 0;
-        const int shL = rL ? rL + juce::jlimit (0, 32, (int) std::lround (cfg.outShadowLeft )) : 0;
-        const int shR = rR ? rR + juce::jlimit (0, 32, (int) std::lround (cfg.outShadowRight)) : 0;
+        // v0.5.6 暂时禁用边框阴影（用户 2026-09-12 要求，保留原式勿删）：阴影外扩=0，
+        // 于是 shT/shL/shR == 各自 width，edgeRim 内 `shadow > width` 分支自然不触发。
+        const int shT = 0, shL = 0, shR = 0;
+        // const int shT = rT ? rT + juce::jlimit (0, 32, (int) std::lround (cfg.outShadowTop )) : 0;
+        // const int shL = rL ? rL + juce::jlimit (0, 32, (int) std::lround (cfg.outShadowLeft )) : 0;
+        // const int shR = rR ? rR + juce::jlimit (0, 32, (int) std::lround (cfg.outShadowRight)) : 0;
         const int capR = juce::jmax (1, juce::jmax (juce::jmax (rT, rL), juce::jmax (rR, juce::jmax (shT, juce::jmax (shL, shR)))));
 
         if (rT | rL | rR)
@@ -306,17 +309,49 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
                 || bufR.data() == nullptr || bufCap.data() == nullptr)
                 return {};   // 极端低内存：宁缺勿崩
 
+            // 法向等宽描边：当前沿是曲线，"厚度"应垂直于切线测量。旧实现是竖直方向固定 rT
+            //   （斜面的法向厚度只有 rT*cosθ，越斜越细）。改为：逐列按顶面局部斜率 θ 把竖直窗
+            //   半径放大 rT -> rT/cosθ = rT*sqrt(1+slope^2)，使**法向**厚度恒为 rT。
+            std::vector<int> rTcol ((size_t) W, 0);
+            if (rT)
+            {
+                static thread_local std::vector<int> ytop;
+                if ((int) ytop.size() < W) ytop.resize ((size_t) W);
+                for (int x = 0; x < W; ++x)
+                {
+                    int yt = -1;
+                    for (int y = 0; y < H; ++y)
+                        if (mA[(size_t) y * W + x] >= 128) { yt = y; break; }
+                    ytop[(size_t) x] = yt;
+                }
+                const int k = 3;                      // 中心差分窗，抑制逐列噪声
+                for (int x = 0; x < W; ++x)
+                {
+                    const int xa = juce::jmax (0, x - k), xb = juce::jmin (W - 1, x + k);
+                    const int ya = ytop[(size_t) xa], yb = ytop[(size_t) xb];
+                    float scale = 1.0f;
+                    if (ya >= 0 && yb >= 0 && xb > xa)
+                    {
+                        const float s = (float) (yb - ya) / (float) (xb - xa);   // 斜率 dy/dx
+                        scale = std::sqrt (1.0f + s * s);                         // = 1/cosθ
+                        if (scale > 4.0f) scale = 4.0f;                          // 限制最大 4x（θ≤约75°）
+                    }
+                    rTcol[(size_t) x] = juce::jlimit (rT, 64, (int) std::lround ((float) rT * scale));
+                }
+            }
+
             std::vector<int> dqV ((size_t) H + 2);
             for (int x = 0; x < W; ++x)
             {
-                int hd = 0, tl = 0;                                  // 顶缘窗 [y-rT, y]
+                const int rw = rTcol[x];                             // 顶缘窗 [y-rw, y]，rw 随斜率=法向等宽
+                int hd = 0, tl = 0;
                 for (int y = 0; y < H; ++y)
                 {
                     const uint8 v = mA[(size_t) y * W + x];
                     while (tl > hd && mA[(size_t) dqV[tl - 1] * W + x] >= v) --tl;
                     dqV[tl++] = y;
-                    while (dqV[hd] < y - rT) ++hd;
-                    bufT[(size_t) y * W + x] = (rT && v) ? mA[(size_t) dqV[hd] * W + x] : v;
+                    while (dqV[hd] < y - rw) ++hd;
+                    bufT[(size_t) y * W + x] = (rw && v) ? mA[(size_t) dqV[hd] * W + x] : v;
                 }
                 hd = tl = 0;                                         // "上方 capR 覆盖" 判定（斜面归属用）
                 for (int y = 0; y < H; ++y)
