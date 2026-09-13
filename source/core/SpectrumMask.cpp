@@ -6,6 +6,7 @@
 #include <vector>
 #include <cmath>
 #include <cstdint>
+#include <algorithm>
 
 using uint8 = std::uint8_t;
 
@@ -302,17 +303,21 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
             // 每个方向一次"窗内最小值"（单调队列滑窗，O(W·H)，与半径无关）。
             //   为做斜面归属：另算一个 capR 的"上方覆盖"bufCap——只有当某像素正上方 capR 内仍实心时
             //   才算真正的**竖直侧边**；斜面/上边界（上方会变透明）一律归给上边框，修 1c(3)。
-            static thread_local std::vector<uint8> bufT, bufL, bufR, bufCap;
+            static thread_local std::vector<uint8> bufL, bufR, bufCap;
             const size_t n = (size_t) W * H;
-            if (bufT.size() < n) { bufT.resize (n); bufL.resize (n); bufR.resize (n); bufCap.resize (n); }
-            if (bufT.data() == nullptr || bufL.data() == nullptr
-                || bufR.data() == nullptr || bufCap.data() == nullptr)
+            if (bufL.size() < n) { bufL.resize (n); bufR.resize (n); bufCap.resize (n); }
+            if (bufL.data() == nullptr || bufR.data() == nullptr || bufCap.data() == nullptr)
                 return {};   // 极端低内存：宁缺勿崩
 
-            // 法向等宽描边：当前沿是曲线，"厚度"应垂直于切线测量。旧实现是竖直方向固定 rT
-            //   （斜面的法向厚度只有 rT*cosθ，越斜越细）。改为：逐列按顶面局部斜率 θ 把竖直窗
-            //   半径放大 rT -> rT/cosθ = rT*sqrt(1+slope^2)，使**法向**厚度恒为 rT。
-            std::vector<int> rTcol ((size_t) W, 0);
+            // ---- 顶缘：平滑表面 + 法向距离 + 抗锯齿带（v0.5.6 修大量锯齿）----
+            //   旧法把顶缘做成"逐列竖直窗最小值"，在锯齿状顶面（频谱逐 bin 台阶）上，逐列窗宽会
+            //   随噪声忽大忽小 → 描边内缘逐列抖动 = 大量锯齿。改为：拟合一条**平滑**顶表面 f(x)，
+            //   逐像素求到曲线的**法向距离** dperp，在 [0,rT] 带内按到两端距离线性渐入渐出（AA），
+            //   得到沿法向恒定厚度、边缘平滑的描边。斜率只取平滑面的低频分量 → 不被台阶带偏。
+            static thread_local std::vector<float> fSurf, fCos;
+            if ((int) fSurf.size() < W) { fSurf.resize ((size_t) W); fCos.resize ((size_t) W); }
+            std::fill (fSurf.begin (), fSurf.end (), -1.0f);
+            std::fill (fCos.begin (), fCos.end (), 1.0f);
             if (rT)
             {
                 static thread_local std::vector<int> ytop;
@@ -324,36 +329,33 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
                         if (mA[(size_t) y * W + x] >= 128) { yt = y; break; }
                     ytop[(size_t) x] = yt;
                 }
-                const int k = 3;                      // 中心差分窗，抑制逐列噪声
+                const int sm = 2;                     // 顶面平滑半径（吃掉 1px 台阶噪声，保留整体坡度）
                 for (int x = 0; x < W; ++x)
                 {
-                    const int xa = juce::jmax (0, x - k), xb = juce::jmin (W - 1, x + k);
-                    const int ya = ytop[(size_t) xa], yb = ytop[(size_t) xb];
-                    float scale = 1.0f;
-                    if (ya >= 0 && yb >= 0 && xb > xa)
+                    if (ytop[x] < 0) continue;
+                    double acc = 0.0; int c = 0;
+                    for (int d = -sm; d <= sm; ++d)
                     {
-                        const float s = (float) (yb - ya) / (float) (xb - xa);   // 斜率 dy/dx
-                        scale = std::sqrt (1.0f + s * s);                         // = 1/cosθ
-                        if (scale > 4.0f) scale = 4.0f;                          // 限制最大 4x（θ≤约75°）
+                        const int xx = x + d;
+                        if (xx >= 0 && xx < W && ytop[(size_t) xx] >= 0) { acc += ytop[(size_t) xx]; ++c; }
                     }
-                    rTcol[(size_t) x] = juce::jlimit (rT, 64, (int) std::lround ((float) rT * scale));
+                    fSurf[(size_t) x] = (float) (acc / (c > 0 ? c : 1));
+                }
+                const int sk = 2;                     // 斜率用更大中心差分窗 → 低频、稳定
+                for (int x = 0; x < W; ++x)
+                {
+                    if (fSurf[(size_t) x] < 0.0f) continue;
+                    const int xa = juce::jmax (0, x - sk), xb = juce::jmin (W - 1, x + sk);
+                    const float s = (xb > xa) ? (fSurf[(size_t) xb] - fSurf[(size_t) xa]) / (float) (xb - xa) : 0.0f;
+                    const float cosf = 1.0f / std::sqrt (1.0f + s * s);          // = cosθ
+                    fCos[(size_t) x] = juce::jlimit (0.28f, 1.0f, cosf);         // θ≤约74° 上限
                 }
             }
 
             std::vector<int> dqV ((size_t) H + 2);
-            for (int x = 0; x < W; ++x)
+            for (int x = 0; x < W; ++x)                              // "上方 capR 覆盖" 判定（斜面归属用）
             {
-                const int rw = rTcol[x];                             // 顶缘窗 [y-rw, y]，rw 随斜率=法向等宽
                 int hd = 0, tl = 0;
-                for (int y = 0; y < H; ++y)
-                {
-                    const uint8 v = mA[(size_t) y * W + x];
-                    while (tl > hd && mA[(size_t) dqV[tl - 1] * W + x] >= v) --tl;
-                    dqV[tl++] = y;
-                    while (dqV[hd] < y - rw) ++hd;
-                    bufT[(size_t) y * W + x] = (rw && v) ? mA[(size_t) dqV[hd] * W + x] : v;
-                }
-                hd = tl = 0;                                         // "上方 capR 覆盖" 判定（斜面归属用）
                 for (int y = 0; y < H; ++y)
                 {
                     const uint8 v = mA[(size_t) y * W + x];
@@ -404,7 +406,6 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
             {
                 auto* line = reinterpret_cast<juce::PixelARGB*> (bd.getLinePointer (y));
                 const uint8* m  = mA.data()    + (size_t) y * W;
-                const uint8* t  = bufT.data()  + (size_t) y * W;
                 const uint8* l  = bufL.data()  + (size_t) y * W;
                 const uint8* rr = bufR.data()  + (size_t) y * W;
                 const uint8* cp = bufCap.data()+ (size_t) y * W;
@@ -413,7 +414,20 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
                     const int mv = m[x];
                     if (mv == 0) continue;
                     int rim = 0;
-                    if (rT != 0) rim = juce::jmax (rim, edgeRim (mv, t[x], rT, shT, cfg.outAlphaTop));
+                    if (rT != 0 && fSurf[(size_t) x] >= 0.0f)        // 顶缘：沿法向的等宽抗锯齿带
+                    {
+                        const float dv = (float) y - fSurf[(size_t) x];        // 到平滑顶面的竖直偏移
+                        if (dv >= 0.0f)
+                        {
+                            const float dperp = dv * fCos[(size_t) x];         // 法向距离（垂直于切线）
+                            const float aa = std::min (1.5f, (float) rT * 0.5f); // 两端渐入渐出宽度
+                            float cov = std::min (dperp, (float) rT - dperp) / (aa > 0.0f ? aa : 1.0f);
+                            cov = juce::jlimit (0.0f, 1.0f, cov);
+                            const float band = cov * ((float) mv / 255.0f) * cfg.outAlphaTop;
+                            const int a = (int) (band * 255.0f + 0.5f);
+                            if (a > rim) rim = juce::jmin (255, a);
+                        }
+                    }
                     // 侧边仅当"上方 capR 内仍实心"（= 真正竖直边）；斜面/上边界交给上边框（修 1c(3)）
                     const bool vertSide = (cp[x] >= 250);
                     if (rL != 0 && vertSide) rim = juce::jmax (rim, edgeRim (mv, l[x],  rL, shL, cfg.outAlphaLeft));

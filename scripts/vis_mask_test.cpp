@@ -7,6 +7,7 @@
 #include <vector>
 #include <cmath>
 #include <tuple>
+#include <fstream>
 
 namespace
 {
@@ -487,7 +488,7 @@ int main()
             for (int y = 0; y < CH; ++y)
             {
                 const auto p = reinterpret_cast<const juce::PixelARGB*> (b.getLinePointer (y))[x];
-                const bool white = p.getRed() > 128 && p.getGreen() > 128 && p.getBlue() > 128 && p.getAlpha() > 128;
+                const bool white = p.getRed() > 30 && p.getGreen() > 30 && p.getBlue() > 30 && p.getAlpha() > 30;
                 cur = white ? cur + 1 : 0;
                 best = juce::jmax (best, cur);
             }
@@ -499,6 +500,78 @@ int main()
         check (flat >= (int) rT - 1 && flat <= (int) rT + 2, "flat top: vertical band ~ rT");
         check (ramp > flat + 1, "45deg top: vertical band WIDER than rT -> perpendicular width held at rT (normal, not fixed-vertical)");
         check (ramp >= (int)(rT * 1.25f) && ramp <= (int)(rT * 1.6f), "45deg band ~ rT*sqrt2 (within tol)");
+    }
+
+    // ============ 诊断用例 12：把描边渲染成 PNG 供肉眼检查锯齿（不判定，仅落盘）============
+    {
+        auto dump = [] (const juce::Image& im, const char* path)
+        {
+            juce::MemoryOutputStream mem;
+            juce::PNGImageFormat png;
+            if (! png.writeImageToStream (im, mem)) { std::printf ("      [dump-encfail] %s\n", path); return; }
+            std::ofstream out (path, std::ios::binary);
+            if (! out) { std::printf ("      [dump-openfail] %s\n", path); return; }
+            out.write ((const char*) mem.getData(), (std::streamsize) mem.getDataSize());
+            std::printf ("      [dump] %s (%lld bytes)\n", path, (long long) mem.getDataSize());
+        };
+        const int CW = 300, CH = 160; const int rT = 6;
+        // 12a 锯齿台阶顶面（模拟频谱逐 bin 台阶）
+        {
+            auto base = juce::Image (juce::Image::ARGB, CW, CH, true);
+            { juce::Graphics g (base); g.setColour (juce::Colours::black);
+              for (int x = 0; x < CW; ++x) { int yt = 60 + (x / 10 % 2) * 10 + (x / 47 % 3) * 4; g.fillRect (x, yt, 1, CH - yt); } }
+            auto img = solidImg (CW, CH, juce::Colours::black);
+            MaskImageLayer cfg; cfg.enabled = true; cfg.strokeEnabled = true; cfg.outlineMode = "image";
+            cfg.outTop = true; cfg.outWTop = (float) rT; cfg.outAlphaTop = 1.0f;
+            cfg.outLeft = false; cfg.outRight = false;
+            auto out = SpectrumMask::compose (base, img, cfg, juce::Colours::red, false);
+            dump (out, "/tmp/opencode/beta/stroke_stair.png");
+        }
+        // 12b 正弦曲线顶面（平滑，检验等宽）
+        {
+            auto base = juce::Image (juce::Image::ARGB, CW, CH, true);
+            { juce::Graphics g (base); g.setColour (juce::Colours::black);
+              for (int x = 0; x < CW; ++x) { int yt = (int) (70 + 28.0 * std::sin (x * 0.05)); g.fillRect (x, yt, 1, CH - yt); } }
+            auto img = solidImg (CW, CH, juce::Colours::black);
+            MaskImageLayer cfg; cfg.enabled = true; cfg.strokeEnabled = true; cfg.outlineMode = "image";
+            cfg.outTop = true; cfg.outWTop = (float) rT; cfg.outAlphaTop = 1.0f;
+            cfg.outLeft = false; cfg.outRight = false;
+            auto out = SpectrumMask::compose (base, img, cfg, juce::Colours::red, false);
+            dump (out, "/tmp/opencode/beta/stroke_sine.png");
+
+            // 定量：逐列量描边的**法向宽度**（竖直强带 × cosθ）应≈ rT；并确认边缘有抗锯齿中间灰阶。
+            auto surfY = [&] (int x) {                 // 顶面整数 y（首个 alpha>=128）
+                juce::Image::BitmapData b (base, juce::Image::BitmapData::readOnly);
+                for (int y = 0; y < CH; ++y) if (reinterpret_cast<const juce::PixelARGB*>(b.getLinePointer(y))[x].getAlpha() >= 128) return (float) y;
+                return -1.f;
+            };
+            juce::Image::BitmapData ob (out, juce::Image::BitmapData::readOnly);
+            float wmin = 999, wmax = -999, wsum = 0; int wn = 0, aaCols = 0;
+            for (int x = 3; x < CW - 3; ++x)
+            {
+                const float sy = surfY (x); if (sy < 0) continue;
+                const float s  = (surfY (juce::jmin (CW-1, x+3)) - surfY (juce::jmax (0, x-3))) / 6.0f;
+                const float cosf = 1.0f / std::sqrt (1.0f + s*s);
+                int strong = 0, partial = 0;
+                for (int y = (int) sy; y < CH; ++y)
+                {
+                    const auto px = reinterpret_cast<const juce::PixelARGB*>(ob.getLinePointer (y))[x];
+                    const int red = px.getRed(), al = px.getAlpha();
+                    const bool stroke = red > 120 && px.getGreen() < 90 && px.getBlue() < 90 && al > 20;
+                    if (! stroke) { if (strong) break; continue; }
+                    if (al > 200 && red > 200) ++strong; else ++partial;
+                }
+                const float wPerp = (strong + partial * 0.5f) * cosf;
+                wmin = std::min (wmin, wPerp); wmax = std::max (wmax, wPerp); wsum += wPerp; ++wn;
+                if (partial >= 1) ++aaCols;             // 该列存在半透明描边像素=有抗锯齿
+            }
+            const float wmean = wn ? wsum / (float) wn : 0.0f;
+            std::printf ("      [sine normal-width] perp %.1f..%.1f (mean %.1f)  spread<1.9?%s  AAcols=%d/%d\n",
+                         wmin, wmax, wmean, (wmax - wmin < 1.9f ? "yes" : "no"), aaCols, CW-6);
+            check (wmean > 3.0f, "sine: stroke has real thickness across the curve");
+            check (wmax - wmin < 1.9f, "sine: perpendicular width stays ~constant across the whole curve (no thin/thick jaggy wobble)");
+            check (aaCols > (CW - 6) / 2, "sine: stroke edges are anti-aliased (not hard jaggies)");
+        }
     }
 
     std::printf (failures ? "FAILURES: %d\n" : "ALL PASS\n", failures);
