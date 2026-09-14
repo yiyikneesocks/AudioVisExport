@@ -113,10 +113,27 @@ void SpectrumCanvas::paint (juce::Graphics& g)
                     //   导出侧仍用 compose()（cache=nullptr）逐帧真算 → 两路径同源。
                     const juce::Colour stroke = params.maskImage.strokeColor;
                     const double nowSec = (double) juce::Time::getMillisecondCounterHiRes() * 0.001;
+                    // 描边/裁剪与 peak caps 解耦（与导出同源）：无帽主体轮廓做蒙版源，再把帽叠回。
+                    SpectrumStyle::RenderParams rpBody = rp; rpBody.barParticles = false;
+                    rpBody.width = ow; rpBody.height = oh;
+                    const auto canvasRectBody = juce::Rectangle<int> (
+                        (int) rp.paddingLeft, (int) rp.paddingTop,
+                        ow - (int)(rp.paddingLeft + rp.paddingRight),
+                        oh - (int)(rp.paddingTop  + rp.paddingBottom));
+                    juce::Image baseBody (juce::Image::ARGB, ow, oh, true);
+                    {
+                        juce::Graphics gb2 (baseBody);
+                        gb2.setOpacity (rp.opacity);
+                        style->render (gb2, canvasRectBody, frame, rpBody);
+                    }
                     juce::Image masked = SpectrumMask::composeWithPlan (
-                        base, adj, params.maskImage, stroke, &maskPalette, nowSec,
+                        baseBody, adj, params.maskImage, stroke, &maskPalette, nowSec,
                         SpectrumMask::isBarStyle (params.style));   // line 系禁左右侧边（新1c2）
-                    if (masked.isValid()) specLayer = masked;
+                    if (masked.isValid())
+                    {
+                        SpectrumMask::overlayCapsFrom (masked, base, baseBody);
+                        specLayer = masked;
+                    }
                 }
                 catch (...) { }   // #2 防御：异常 → specLayer 保持 base（无蒙版回退）
             }

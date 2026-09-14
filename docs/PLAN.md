@@ -24,7 +24,17 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-14 21:4x）
+## 当前状态（最后更新：2026-09-14 22:1x）
+
+- **修 bar / bar-line 描边仍连 peak caps + 侧边错框（用户报，line 模式已 OK）**：根因是 peak cap 画进 `base` alpha 且
+  **比柱体更宽**（capX=x−gap·0.25、capW=barW+gap·0.5）、alpha≈204 → 无论"柱顶"（外伸列被当成主体顶）还是
+  "左右侧边"（bufL/R 绕着含帽轮廓）都会被帽污染；单靠列向 run-skip 修不干净。
+  改法（结构正确解）：**描边/裁剪改用"无帽"主体轮廓** —— 蒙版路径下另渲一份 `barParticles=false` 的 baseBody 喂 compose，
+  再把含帽的完整 base 中"主体此处透明、含帽版有像素"的帽用新函数 `SpectrumMask::overlayCapsFrom` 原样叠回 masked 之上
+  （帽保持原色、与描边彻底无关）。VisPipeline + SpectrumCanvas 两路同源接入。已确认 4 样式 `barParticles` 只 gate 帽、
+  主体曲线/填充不受影响。新增 `vis_mask_test` 用例 13/14（含 overlayCapsFrom：柱顶/柱侧无帽框、帽绿色叠回）。
+  四套回归全绿、双端干净、部署 `AudioVisGUI_09142207.exe`。
+
 
 - **修"边框盖到 peak caps 上"（用户报，回归）**：peak caps 由 style 画进 `base` alpha（柱体上方、隔 gap 的
   1~2px 细线）。顶缘 strokePath 的"从顶取第一个实心像素"会把 **cap** 当表面 → 描边跟着 cap、盖到 cap 上方，

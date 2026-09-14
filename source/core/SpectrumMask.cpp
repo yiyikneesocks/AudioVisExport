@@ -180,6 +180,32 @@ juce::Image SpectrumMask::adjustedImageCached (const juce::Image& img, const Mas
     return adjustedImageCached (img, cfg.path, cfg.brightness, cfg.contrast, cfg.saturation);
 }
 
+void SpectrumMask::overlayCapsFrom (juce::Image& layer,
+                                    const juce::Image& baseFull,
+                                    const juce::Image& baseBody)
+{
+    if (! layer.isValid() || ! baseFull.isValid() || ! baseBody.isValid())
+        return;
+    const int W = baseFull.getWidth(), H = baseFull.getHeight();
+    if (W != layer.getWidth() || H != layer.getHeight() || baseBody.getWidth() != W || baseBody.getHeight() != H)
+        return;
+    juce::Image::BitmapData bf (baseFull, juce::Image::BitmapData::readOnly);
+    juce::Image::BitmapData bb (baseBody, juce::Image::BitmapData::readOnly);
+    juce::Image::BitmapData ly (layer,    juce::Image::BitmapData::readWrite);
+    for (int y = 0; y < H; ++y)
+    {
+        const auto* f = reinterpret_cast<const juce::PixelARGB*> (bf.getLinePointer (y));
+        const auto* b = reinterpret_cast<const juce::PixelARGB*> (bb.getLinePointer (y));
+        auto*       l = reinterpret_cast<juce::PixelARGB*>       (ly.getLinePointer (y));
+        for (int x = 0; x < W; ++x)
+        {
+            // 主体轮廓此处近乎透明、但含帽版本有像素 → 该像素属于浮动/外伸的 peak cap，原样盖回
+            if (b[x].getAlpha() <= 8 && f[x].getAlpha() > 8)
+                l[x] = f[x];
+        }
+    }
+}
+
 juce::Image SpectrumMask::compose (const juce::Image& base,
                                    const juce::Image& image,
                                    const MaskImageLayer& cfg,

@@ -217,10 +217,25 @@ namespace
                         const juce::Colour stroke = p.maskImage.strokeAutoColor
                                                   ? averageColourCached (adj, adjKey)
                                                   : p.maskImage.strokeColor;
+                        // 描边/裁剪与 peak caps 解耦：另渲染一份"无帽"主体轮廓当蒙版源，
+                        //   再把含帽的完整 base 里的帽叠回 masked 之上（帽保持原色、不被描边）。
+                        SpectrumStyle::RenderParams rpBody = rp; rpBody.barParticles = false;
+                        juce::Image baseBody (juce::Image::ARGB, p.width, p.height, true);
+                        {
+                            juce::Graphics gb2 (baseBody);
+                            gb2.setOpacity (rp.opacity);
+                            BandFrame bandFrameBody;
+                            core.getBandFrame (bandFrameBody);
+                            style.render (gb2, canvas, bandFrameBody, rpBody);
+                        }
                         juce::Image masked = SpectrumMask::compose (
-                            base, adj, p.maskImage, stroke,
+                            baseBody, adj, p.maskImage, stroke,
                             SpectrumMask::isBarStyle (p.style));   // line 系禁左右侧边（新1c2）
-                        if (masked.isValid()) layer = masked;
+                        if (masked.isValid())
+                        {
+                            SpectrumMask::overlayCapsFrom (masked, base, baseBody);
+                            layer = masked;
+                        }
                     }
                     catch (...) { }   // #2 防御：异常 → 回退裸频谱
                 }

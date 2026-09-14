@@ -599,6 +599,36 @@ int main()
         check (bodyTopRegion >= CW * 3 / 4, "border anchors to the bar BODY top, not the peak cap");
     }
 
+    // ============ 用例 14：overlayCapsFrom —— 描边只认柱体，peak cap 原样叠回（bar/bar-line 回归）============
+    {
+        const int CW = 60, CH = 140, rT = 6;
+        auto body = juce::Image (juce::Image::ARGB, CW, CH, true);   // 柱体 only
+        { juce::Graphics g (body); g.setColour (juce::Colours::black); g.fillRect (10, 90, CW-20, CH-90); }
+        auto full = juce::Image (juce::Image::ARGB, CW, CH, true);   // 柱体 + 更宽、悬浮的绿色 peak cap
+        { juce::Graphics g (full);
+          g.setColour (juce::Colours::black); g.fillRect (10, 90, CW-20, CH-90);
+          g.setColour (juce::Colours::green); g.fillRect (4, 20, CW-8, 2); }   // cap 比柱宽，外伸到 x=4..55
+        auto img = solidImg (CW, CH, juce::Colours::white);
+        MaskImageLayer cfg; cfg.enabled = true; cfg.strokeEnabled = true; cfg.outlineMode = "image";
+        cfg.outTop = true;  cfg.outWTop = (float) rT; cfg.outAlphaTop = 1.0f;
+        cfg.outLeft = true; cfg.outWLeft = (float) rT; cfg.outAlphaLeft = 1.0f;
+        cfg.outRight = true; cfg.outWRight = (float) rT; cfg.outAlphaRight = 1.0f;
+        auto masked = SpectrumMask::compose (body, img, cfg, juce::Colours::red, true);
+        SpectrumMask::overlayCapsFrom (masked, full, body);
+        juce::Image::BitmapData ob (masked, juce::Image::BitmapData::readOnly);
+        auto at = [&] (int x, int y) { return reinterpret_cast<const juce::PixelARGB*>(ob.getLinePointer (y))[x]; };
+        int redAboveBody = 0, redAtBodyTop = 0, greenCap = 0;
+        for (int x = 0; x < CW; ++x)
+            for (int y = 0; y < 85; ++y) { auto p = at (x, y); if (p.getRed()>120 && p.getGreen()<90) ++redAboveBody; }
+        for (int x = 10; x < CW-10; ++x) { auto p = at (x, 90); if (p.getRed()>120 && p.getGreen()<90) ++redAtBodyTop; }
+        for (int x = 4; x < CW-4; ++x) { auto p = at (x, 20); if (p.getGreen()>120 && p.getRed()<90) ++greenCap; }
+        std::printf ("      [caps-decouple] redAboveBody=%d redAtBodyTop=%d/%d greenCap=%d/%d\n",
+                     redAboveBody, redAtBodyTop, CW-20, greenCap, CW-8);
+        check (redAboveBody == 0, "no border near/above the peak cap or its overhang (bar sides too)");
+        check (redAtBodyTop >= (CW-20) * 3 / 4, "border sits on the bar top");
+        check (greenCap >= (CW-8) * 3 / 4, "peak cap re-composited on top in its own colour");
+    }
+
     std::printf (failures ? "FAILURES: %d\n" : "ALL PASS\n", failures);
     return failures ? 1 : 0;
 }

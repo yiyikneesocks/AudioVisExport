@@ -45,6 +45,13 @@ namespace SpectrumMask
     //   · 若 cfg.strokeEnabled：沿轮廓内侧勾边，四边可独立开关与厚度
     // base / image 都应是已加载好的位图；resolvedStroke 为最终描边色（avg 或手动）。
     // 返回 null 图片 = 无有效轮廓或参数为空。
+    // 描边/裁剪用"无峰值帽"的主体轮廓（baseBody=以 barParticles=false 渲染），再把完整 base
+    //   (baseFull) 里"主体该处为空、但含帽版本有像素"的峰值帽原样叠回 layer → 描边与 peak caps
+    //   完全解耦（柱顶/柱侧不再被浮动且更宽的帽污染）。由调用方在 masked 结果上就地调用。
+    void overlayCapsFrom (juce::Image& layer,
+                          const juce::Image& baseFull,
+                          const juce::Image& baseBody);
+
     juce::Image compose (const juce::Image& base,
                          const juce::Image& image,
                          const MaskImageLayer& cfg,
