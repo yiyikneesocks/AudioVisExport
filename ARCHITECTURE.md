@@ -125,6 +125,9 @@ JUCE `juce::dsp::FFT` 前向变换是**非归一化的**（`juce_FFT.cpp` FFTFal
 
 ## 3. 工程结构
 
+> 本节 = **代码/工程结构**（源码目录 / 模块划分）。**文档之间的分工**（AGENTS.md/ARCHITECTURE.md/PLAN.md/HISTORY 等各自角色）
+> 见工程根 `AGENTS.md` 顶部"本工程文档分工"块与 §6 表——那是每次会话自动注入的权威版本，本文档不再重复。
+
 ```
 AudioVisExport/
 ├── CMakeLists.txt              # 构建配置（juce_add_console_app + FetchContent JUCE）

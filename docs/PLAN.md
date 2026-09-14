@@ -24,7 +24,14 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-13 10:1x）
+## 当前状态（最后更新：2026-09-13 10:2x）
+
+- **AGENTS.md 顶部补"本工程文档分工"块 + ARCHITECTURE.md §3 加双向指路**（用户主动要求）：AGENTS.md 是
+  每轮自动注入的通用提示词，在此处放"哪个文档做什么"最高效；ARCHITECTURE.md §3 只讲代码工程结构，
+  分工角色指向 AGENTS.md，避免双份维护。用户手动重构 AGENTS.md 后新增：顶部导航 5 行 · 无其它改动。
+  顺带修正旧记录：`SpectrumCanvas.cpp` / `MainComponent.cpp` / `SpectrumStyle.cpp` 实测均为 LF（旧文档误列 CRLF），
+  现 AGENTS.md §4.1 只留 `SpectrumCanvas.h` 为 CRLF。纯文档改动，无代码/构建影响。
+
 
 - **文档结构再整理：新建工程根 `AGENTS.md`（用户主动要求）**。OpenCode 官方 docs 确认 `AGENTS.md` 每次会话自动注入、
   且推荐精简。把 ARCHITECTURE.md 里"每次都必守"的硬规则（工作流闸门/纪律红线/发版 checklist/INBOX 三文件 + 两条分隔线
