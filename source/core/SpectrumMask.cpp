@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdint>
 #include <algorithm>
+#include <functional>
 
 using uint8 = std::uint8_t;
 
@@ -309,49 +310,6 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
             if (bufL.data() == nullptr || bufR.data() == nullptr || bufCap.data() == nullptr)
                 return {};   // 极端低内存：宁缺勿崩
 
-            // ---- 顶缘：平滑表面 + 法向距离 + 抗锯齿带（v0.5.6 修大量锯齿）----
-            //   旧法把顶缘做成"逐列竖直窗最小值"，在锯齿状顶面（频谱逐 bin 台阶）上，逐列窗宽会
-            //   随噪声忽大忽小 → 描边内缘逐列抖动 = 大量锯齿。改为：拟合一条**平滑**顶表面 f(x)，
-            //   逐像素求到曲线的**法向距离** dperp，在 [0,rT] 带内按到两端距离线性渐入渐出（AA），
-            //   得到沿法向恒定厚度、边缘平滑的描边。斜率只取平滑面的低频分量 → 不被台阶带偏。
-            static thread_local std::vector<float> fSurf, fCos;
-            if ((int) fSurf.size() < W) { fSurf.resize ((size_t) W); fCos.resize ((size_t) W); }
-            std::fill (fSurf.begin (), fSurf.end (), -1.0f);
-            std::fill (fCos.begin (), fCos.end (), 1.0f);
-            if (rT)
-            {
-                static thread_local std::vector<int> ytop;
-                if ((int) ytop.size() < W) ytop.resize ((size_t) W);
-                for (int x = 0; x < W; ++x)
-                {
-                    int yt = -1;
-                    for (int y = 0; y < H; ++y)
-                        if (mA[(size_t) y * W + x] >= 128) { yt = y; break; }
-                    ytop[(size_t) x] = yt;
-                }
-                const int sm = 2;                     // 顶面平滑半径（吃掉 1px 台阶噪声，保留整体坡度）
-                for (int x = 0; x < W; ++x)
-                {
-                    if (ytop[x] < 0) continue;
-                    double acc = 0.0; int c = 0;
-                    for (int d = -sm; d <= sm; ++d)
-                    {
-                        const int xx = x + d;
-                        if (xx >= 0 && xx < W && ytop[(size_t) xx] >= 0) { acc += ytop[(size_t) xx]; ++c; }
-                    }
-                    fSurf[(size_t) x] = (float) (acc / (c > 0 ? c : 1));
-                }
-                const int sk = 2;                     // 斜率用更大中心差分窗 → 低频、稳定
-                for (int x = 0; x < W; ++x)
-                {
-                    if (fSurf[(size_t) x] < 0.0f) continue;
-                    const int xa = juce::jmax (0, x - sk), xb = juce::jmin (W - 1, x + sk);
-                    const float s = (xb > xa) ? (fSurf[(size_t) xb] - fSurf[(size_t) xa]) / (float) (xb - xa) : 0.0f;
-                    const float cosf = 1.0f / std::sqrt (1.0f + s * s);          // = cosθ
-                    fCos[(size_t) x] = juce::jlimit (0.28f, 1.0f, cosf);         // θ≤约74° 上限
-                }
-            }
-
             std::vector<int> dqV ((size_t) H + 2);
             for (int x = 0; x < W; ++x)                              // "上方 capR 覆盖" 判定（斜面归属用）
             {
@@ -413,26 +371,12 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
                 {
                     const int mv = m[x];
                     if (mv == 0) continue;
-                    int rim = 0;
-                    if (rT != 0 && fSurf[(size_t) x] >= 0.0f)        // 顶缘：沿法向的等宽抗锯齿带
-                    {
-                        const float dv = (float) y - fSurf[(size_t) x];        // 到平滑顶面的竖直偏移
-                        if (dv >= 0.0f)
-                        {
-                            const float dperp = dv * fCos[(size_t) x];         // 法向距离（垂直于切线）
-                            const float aa = std::min (1.5f, (float) rT * 0.5f); // 两端渐入渐出宽度
-                            float cov = std::min (dperp, (float) rT - dperp) / (aa > 0.0f ? aa : 1.0f);
-                            cov = juce::jlimit (0.0f, 1.0f, cov);
-                            const float band = cov * ((float) mv / 255.0f) * cfg.outAlphaTop;
-                            const int a = (int) (band * 255.0f + 0.5f);
-                            if (a > rim) rim = juce::jmin (255, a);
-                        }
-                    }
+                    int rim = 0;                                  // （顶缘由下方 strokePath 负责）
                     // 侧边仅当"上方 capR 内仍实心"（= 真正竖直边）；斜面/上边界交给上边框（修 1c(3)）
                     const bool vertSide = (cp[x] >= 250);
                     if (rL != 0 && vertSide) rim = juce::jmax (rim, edgeRim (mv, l[x],  rL, shL, cfg.outAlphaLeft));
                     if (rR != 0 && vertSide) rim = juce::jmax (rim, edgeRim (mv, rr[x], rR, shR, cfg.outAlphaRight));
-                    if (rim <= 0) continue;
+                    if (rim <= 0 && rT == 0) continue;
                     const juce::Colour col = perCol ? plan.colColour[(size_t) x] : plan.uniform;
                     const int inv = 255 - rim;
                     const int srcR = col.getRed()   * rim / 255;
@@ -448,6 +392,83 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
                                static_cast<uint8> (juce::jmin (255, cg)),
                                static_cast<uint8> (juce::jmin (255, cb)));
                     line[x] = d;
+                }
+            }
+
+            // ---- 顶缘：与 line 模式同法 = 矢量 strokePath（居中·恒定法向宽·JUCE AA·圆角连接）----
+            //   旧逐像素法向带做不到：① 中心线量化到像素中心 → 沿斜线台阶化（就是"锯齿"根因）；
+            //   ② 只在形状内侧、被 base 硬 alpha 边裁掉外沿（无中心线两侧的 AA 过渡）；
+            //   ③ 逐列窗/斜率估计跨 gap 会把两个 bar 顶连成一气；④ 只有 alpha=1px 通道做 AA。
+            //   改用与 CrystalStyle / Y2KLineStyle 完全一致的 PathStrokeType（curved join · rounded cap）
+            //   → 亚像素中心线 + JUCE AA 光栅化 + 真正恒定法向宽度，"边框=线条"从原理上一致。
+            if (rT != 0)
+            {
+                std::vector<float> yEdge ((size_t) W, -1.0f);
+                for (int x = 0; x < W; ++x)
+                {
+                    int yt = -1;
+                    for (int y = 0; y < H; ++y)
+                        if (mA[(size_t) y * W + x] >= 128) { yt = y; break; }
+                    if (yt < 0) continue;
+                    const uint8 aTop = (yt == 0) ? 255 : mA[(size_t) (yt - 1) * W + x];
+                    float ye = (float) yt;
+                    if (aTop < 128)
+                    {
+                        const float denom = 255.0f - (float) aTop;
+                        ye -= (denom > 1e-3f) ? ((128.0f - (float) aTop) / denom) : 0.5f;
+                    }
+                    yEdge[(size_t) x] = ye;
+                }
+                std::vector<std::pair<int,int>> runs;
+                {
+                    int x0 = -1;
+                    for (int x = 0; x <= W; ++x)
+                    {
+                        const bool ok = (x < W && yEdge[(size_t) x] >= 0.0f);
+                        if (ok && x0 < 0) x0 = x;
+                        if ((! ok) && x0 >= 0) { runs.push_back ({ x0, x }); x0 = -1; }
+                    }
+                }
+                auto buildRun = [&] (int s, int e, int& nPts) -> juce::Path
+                {
+                    juce::Path path; nPts = 0;
+                    if (e - s < 2) return path;
+                    path.startNewSubPath ((float) s, yEdge[(size_t) s]);
+                    for (int x = s + 1; x < e; ++x) path.lineTo ((float) x, yEdge[(size_t) x]);
+                    nPts = e - s;
+                    return path;
+                };
+                juce::Graphics g (out);
+                const juce::PathStrokeType st ((float) rT,
+                                               juce::PathStrokeType::JointStyle::curved,
+                                               juce::PathStrokeType::EndCapStyle::rounded);
+                auto strokeRun = [&] (int s, int e, const juce::Colour& col)
+                {
+                    int nPts = 0;
+                    const juce::Path p = buildRun (s, e, nPts);
+                    if (nPts < 2) return;
+                    g.setColour (col);
+                    g.strokePath (p, st);
+                };
+                if (! perCol)                        // uniform / image：整段一种色
+                {
+                    for (const auto& r : runs) strokeRun (r.first, r.second, plan.uniform.withAlpha (cfg.outAlphaTop));
+                }
+                else                                 // perColumn（perBar）：按颜色变化切段，段间共享点避免缝
+                {
+                    for (const auto& r : runs)
+                    {
+                        int s = r.first;
+                        for (int x = r.first + 1; x < r.second; ++x)
+                        {
+                            if (plan.colColour[(size_t) x].getARGB() != plan.colColour[(size_t) s].getARGB())
+                            {
+                                strokeRun (s, x + 1, plan.colColour[(size_t) s].withAlpha (cfg.outAlphaTop));
+                                s = x;
+                            }
+                        }
+                        strokeRun (s, r.second, plan.colColour[(size_t) s].withAlpha (cfg.outAlphaTop));
+                    }
                 }
             }
         }

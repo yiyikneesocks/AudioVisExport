@@ -90,7 +90,7 @@ int main()
 
     // ---- 4) #H 图层栈真的有内容、真的画得出字（回归"列表一直黑"）----
     {
-        panel.refreshLayerList (-1, false);          // 无图片：至少该有 Spectrum + Mask image 两行
+        panel.refreshLayerList (std::vector<int>{ -1 }, false);   // 无图片：至少 Spectrum + Mask image 两行
         const int rows = panel.layerRowCount();
         std::printf ("      layer rows = %d\n", rows);
         check (rows >= 2, "layer stack is populated (Spectrum + Mask image rows at minimum)");
