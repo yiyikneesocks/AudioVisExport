@@ -24,7 +24,15 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-13 10:2x）
+## 当前状态（最后更新：2026-09-14 20:3x）
+
+- **修 Windows 下"顶缘完全消失"（INBOX r6 task1 复报 v3）**：`SpectrumMask::composeWithPlan` 里
+  `BitmapData bd (out, readWrite)` 作用域跨到了后面 `juce::Graphics g (out)` 的 strokePath——JUCE 同一 Image
+  上 BitmapData 与 Graphics **不能同时持写锁**。Linux 软件路径静默容忍，Windows MSVC 下 Graphics 直接
+  不绘制（且 line 模式 sideEdgesAllowed=false → 只有顶，顶没=全没）。修法：pixel 循环外层加 `{ }`
+  显式限定 bd 生命周期，出块即释放，再建 Graphics。数字回归 Linux 侧全绿（本来就"能画"）；
+  Windows 视觉验证交用户实测。部署 `AudioVisGUI_09142028.exe`。
+
 
 - **AGENTS.md 顶部补"本工程文档分工"块 + ARCHITECTURE.md §3 加双向指路**（用户主动要求）：AGENTS.md 是
   每轮自动注入的通用提示词，在此处放"哪个文档做什么"最高效；ARCHITECTURE.md §3 只讲代码工程结构，

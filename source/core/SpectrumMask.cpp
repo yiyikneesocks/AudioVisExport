@@ -359,6 +359,10 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
                 if (rim > 0) a = juce::jmax (a, (int) (rim * alpha));
                 return juce::jlimit (0, 255, a);
             };
+            // ⚠️ bd 与后面 strokePath 用的 Graphics 不能同时持有 out 的写锁
+            //    （JUCE 同一 Image 上 BitmapData 和 Graphics 并存时，Windows 下 Graphics
+            //    会静默不绘制 → 顶缘消失）。用 {} 限定 bd 作用域，出块即释放。
+            {
             juce::Image::BitmapData bd (out, juce::Image::BitmapData::readWrite);
             for (int y = 0; y < H; ++y)
             {
@@ -394,6 +398,7 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
                     line[x] = d;
                 }
             }
+            }   // ← 结束 bd 作用域，BitmapData 已析构，接下来 Graphics 可安全上锁
 
             // ---- 顶缘：与 line 模式同法 = 矢量 strokePath（居中·恒定法向宽·JUCE AA·圆角连接）----
             //   旧逐像素法向带做不到：① 中心线量化到像素中心 → 沿斜线台阶化（就是"锯齿"根因）；
