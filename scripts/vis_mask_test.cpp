@@ -663,6 +663,31 @@ int main()
         check (! ap, "config.json: missing file -> load returns false, built-in defaults kept");
     }
 
+    // ============ 用例 16：bar 家族向内带——顶/左/右闭合、无圆帽外伸、不越界 ============
+    {
+        const int CW = 60, CH = 120, rW = 4;
+        auto base = juce::Image (juce::Image::ARGB, CW, CH, true);
+        { juce::Graphics g (base); g.setColour (juce::Colours::black); g.fillRect (20, 30, 21, 60); } // bar x[20..40] y[30..89]
+        auto img = solidImg (CW, CH, juce::Colours::white);
+        MaskImageLayer cfg; cfg.enabled = true; cfg.strokeEnabled = true; cfg.outlineMode = "image";
+        cfg.outTop = cfg.outLeft = cfg.outRight = true;
+        cfg.outWTop = cfg.outWLeft = cfg.outWRight = (float) rW;
+        cfg.outAlphaTop = cfg.outAlphaLeft = cfg.outAlphaRight = 1.0f;
+        auto out = SpectrumMask::compose (base, img, cfg, juce::Colours::red, /*sides=*/true); // barFamily
+        juce::Image::BitmapData ob (out, juce::Image::BitmapData::readOnly);
+        auto redAt = [&] (int x, int y) { auto p = reinterpret_cast<const juce::PixelARGB*>(ob.getLinePointer(y))[x];
+                                          return p.getRed()>120 && p.getGreen()<90 && p.getBlue()<90 && p.getAlpha()>120; };
+        int aboveBar = 0, leftOverhang = 0, rightOverhang = 0;
+        for (int x = 0; x < CW; ++x) for (int y = 0; y < 30; ++y) if (redAt (x, y)) ++aboveBar;         // bar 顶以上不该有任何描边（向内）
+        for (int y = 0; y < CH; ++y) { if (redAt (16, y)) ++leftOverhang; if (redAt (44, y)) ++rightOverhang; } // 外侧不该有（无外伸）
+        const bool topOK = redAt (30, 31), leftOK = redAt (21, 60), cornerOK = redAt (21, 31), interiorNotRed = ! redAt (30, 60);
+        std::printf ("      [bar-closure] aboveBar=%d leftOver=%d rightOver=%d top=%d left=%d corner=%d interiorRed=%d\n",
+                     aboveBar, leftOverhang, rightOverhang, (int)topOK, (int)leftOK, (int)cornerOK, (int)(!interiorNotRed));
+        check (aboveBar == 0 && leftOverhang == 0 && rightOverhang == 0, "bar border is INWARD: nothing above the top edge, no sideways overhang past bar sides");
+        check (topOK && leftOK && cornerOK, "bar top+left meet (closed corner, no gap)");
+        check (interiorNotRed, "bar interior shows the mask image (not covered by border)");
+    }
+
     std::printf (failures ? "FAILURES: %d\n" : "ALL PASS\n", failures);
     return failures ? 1 : 0;
 }

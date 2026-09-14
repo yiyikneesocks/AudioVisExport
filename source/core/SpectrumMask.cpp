@@ -319,6 +319,9 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
         // const int shL = rL ? rL + juce::jlimit (0, 32, (int) std::lround (cfg.outShadowLeft )) : 0;
         // const int shR = rR ? rR + juce::jlimit (0, 32, (int) std::lround (cfg.outShadowRight)) : 0;
         const int capR = juce::jmax (1, juce::jmax (juce::jmax (rT, rL), juce::jmax (rR, juce::jmax (shT, juce::jmax (shL, shR)))));
+        // bar / bar-line（有竖直侧边）→ 三边统一用"向内形态学带"，转角自然闭合成直角、无圆帽外伸；
+        // line / y2k / crystal / polyline → 顶缘走居中矢量 strokePath（保持之前修好的平滑，不改）。
+        const bool barFamily = sideEdgesAllowed;
 
         if (rT | rL | rR)
         {
@@ -330,13 +333,30 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
             // 每个方向一次"窗内最小值"（单调队列滑窗，O(W·H)，与半径无关）。
             //   为做斜面归属：另算一个 capR 的"上方覆盖"bufCap——只有当某像素正上方 capR 内仍实心时
             //   才算真正的**竖直侧边**；斜面/上边界（上方会变透明）一律归给上边框，修 1c(3)。
-            static thread_local std::vector<uint8> bufL, bufR, bufCap;
+            static thread_local std::vector<uint8> bufT, bufL, bufR, bufCap;
             const size_t n = (size_t) W * H;
-            if (bufL.size() < n) { bufL.resize (n); bufR.resize (n); bufCap.resize (n); }
-            if (bufL.data() == nullptr || bufR.data() == nullptr || bufCap.data() == nullptr)
+            if (bufT.size() < n) { bufT.resize (n); bufL.resize (n); bufR.resize (n); bufCap.resize (n); }
+            if (bufT.data() == nullptr || bufL.data() == nullptr
+                || bufR.data() == nullptr || bufCap.data() == nullptr)
                 return {};   // 极端低内存：宁缺勿崩
 
+            // barFamily 顶缘：正上方 rT 窗内最小 alpha（=到顶面的竖直距离带），与左/右窗同法 → 转角闭合、向内。
             std::vector<int> dqV ((size_t) H + 2);
+            if (barFamily && rT)
+            {
+                for (int x = 0; x < W; ++x)
+                {
+                    int hd = 0, tl = 0;
+                    for (int y = 0; y < H; ++y)
+                    {
+                        const uint8 v = mA[(size_t) y * W + x];
+                        while (tl > hd && mA[(size_t) dqV[tl - 1] * W + x] >= v) --tl;
+                        dqV[tl++] = y;
+                        while (dqV[hd] < y - rT) ++hd;
+                        bufT[(size_t) y * W + x] = (v ? mA[(size_t) dqV[hd] * W + x] : v);
+                    }
+                }
+            }
             for (int x = 0; x < W; ++x)                              // "上方 capR 覆盖" 判定（斜面归属用）
             {
                 int hd = 0, tl = 0;
@@ -394,6 +414,7 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
             {
                 auto* line = reinterpret_cast<juce::PixelARGB*> (bd.getLinePointer (y));
                 const uint8* m  = mA.data()    + (size_t) y * W;
+                const uint8* tt = bufT.data()  + (size_t) y * W;
                 const uint8* l  = bufL.data()  + (size_t) y * W;
                 const uint8* rr = bufR.data()  + (size_t) y * W;
                 const uint8* cp = bufCap.data()+ (size_t) y * W;
@@ -401,12 +422,14 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
                 {
                     const int mv = m[x];
                     if (mv == 0) continue;
-                    int rim = 0;                                  // （顶缘由下方 strokePath 负责）
+                    int rim = 0;
+                    if (barFamily && rT != 0)                      // bar：顶缘向内带（与左右同法→闭合）
+                        rim = juce::jmax (rim, edgeRim (mv, tt[x], rT, shT, cfg.outAlphaTop));
                     // 侧边仅当"上方 capR 内仍实心"（= 真正竖直边）；斜面/上边界交给上边框（修 1c(3)）
                     const bool vertSide = (cp[x] >= 250);
                     if (rL != 0 && vertSide) rim = juce::jmax (rim, edgeRim (mv, l[x],  rL, shL, cfg.outAlphaLeft));
                     if (rR != 0 && vertSide) rim = juce::jmax (rim, edgeRim (mv, rr[x], rR, shR, cfg.outAlphaRight));
-                    if (rim <= 0 && rT == 0) continue;
+                    if (rim <= 0) continue;
                     const juce::Colour col = perCol ? plan.colColour[(size_t) x] : plan.uniform;
                     const int inv = 255 - rim;
                     const int srcR = col.getRed()   * rim / 255;
@@ -432,7 +455,7 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
             //   ③ 逐列窗/斜率估计跨 gap 会把两个 bar 顶连成一气；④ 只有 alpha=1px 通道做 AA。
             //   改用与 CrystalStyle / Y2KLineStyle 完全一致的 PathStrokeType（curved join · rounded cap）
             //   → 亚像素中心线 + JUCE AA 光栅化 + 真正恒定法向宽度，"边框=线条"从原理上一致。
-            if (rT != 0)
+            if (rT != 0 && ! barFamily)                            // 仅 line 家族（bar 家族已在上面用向内带）
             {
                 std::vector<float> yEdge ((size_t) W, -1.0f);
                 // 顶面锚定"主体"而非 peak cap：peak cap 是浮在柱体上方、隔着 gap 的 1~2px 细线。
