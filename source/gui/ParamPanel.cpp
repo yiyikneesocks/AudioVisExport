@@ -399,15 +399,10 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     maskChooseBtn.onClick = [this] { if (onChooseMaskImage) onChooseMaskImage(); };
     maskChooseBtn.setTooltip ("Pick an image that is shown only inside the spectrum silhouette "
                               "(bars / shape act as the mask). It moves & scales with the spectrum.");
-    maskStrokeWidthSliderPtr = addSlider ("All edges width", 0.5, 12.0, 0.5, 1.0,
-               [this] { return (double) params.maskImage.strokeWidth; },
-               [this] (double v) {
-                   params.maskImage.strokeWidth = (float) v;
-                   // 统一预设：把三边厚度一起设成该值（要单独调某缘用下面各缘的 width 滑块）
-                   params.maskImage.outWTop = params.maskImage.outWLeft
-                       = params.maskImage.outWRight = (float) v;
-                   notify();
-               });
+    lockWidthPtr = addToggle ("Lock edge thickness (top/left/right together)", false,
+               [this] (bool on) { lockEdgeWidths = on; });
+    lockWidthPtr->setTooltip ("When ON, dragging any one edge's thickness sets all three to the same value.\n"
+                              "When OFF, top/left/right thicknesses are independent.");
     // ---- v0.5.6 新1-b：边框颜色 = 开关组（总开关已在上方＝maskStrokeToggle）----
     //   层级：strokeEnabled ┬ 固定色（Border colour / Use average 两按钮）
     //                        └ 实时变色 realtime ┬ 逐柱变色 perBar（perbar）／整块（uniform）
@@ -454,7 +449,19 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
                 [this, e, onOf] (bool on) { params.maskImage.*(onOf (e)) = on; notify(); syncOutlineEnablement(); });
             outEdgeWPtr[e] = addSlider ("  width", 0.0, 24.0, 0.5, 1.0,
                 [this, e, wOf] { return (double) (params.maskImage.*(wOf (e))); },
-                [this, e, wOf] (double v) { params.maskImage.*(wOf (e)) = (float) v; notify(); });
+                [this, e, wOf] (double v)
+                {
+                    params.maskImage.*(wOf (e)) = (float) v;
+                    if (lockEdgeWidths)                       // 锁定：任一改动 → 三边同值
+                    {
+                        params.maskImage.outWTop = params.maskImage.outWLeft
+                            = params.maskImage.outWRight = (float) v;
+                        for (int j = 0; j < 3; ++j)
+                            if (j != e && outEdgeWPtr[j] != nullptr)
+                                outEdgeWPtr[j]->setValue (v, juce::NotificationType::dontSendNotification);
+                    }
+                    notify();
+                });
             outEdgeAlphaPtr[e] = addSlider ("  opacity", 0.0, 1.0, 0.01, 1.0,
                 [this, e, aOf] { return (double) (params.maskImage.*(aOf (e))); },
                 [this, e, aOf] (double v) { params.maskImage.*(aOf (e)) = (float) v; notify(); });
@@ -762,7 +769,7 @@ void ParamPanel::syncOutlineEnablement()
     maskColorBtn.setEnabled (fixedOn);
     maskAvgBtn.setEnabled   (fixedOn);
 
-    setSliderEnabled (maskStrokeWidthSliderPtr, master);   // 三边统一预设（几何）
+    if (lockWidthPtr != nullptr) lockWidthPtr->setEnabled (master);   // 锁定框随总开关（几何）
     for (int e = 0; e < 3; ++e)
     {
         const bool side = (e != 0);                         // e=1/2 = 左/右
@@ -790,8 +797,7 @@ void ParamPanel::syncMaskControls()
         b->setColour (juce::TextButton::textColourOffId,
                       sc.getBrightness() > 0.5f ? juce::Colours::black : juce::Colours::white);
     }
-    if (maskStrokeWidthSliderPtr != nullptr)
-        maskStrokeWidthSliderPtr->setValue (params.maskImage.strokeWidth, juce::dontSendNotification);
+    // (旧 "All edges width" 总滑块已移除；lockEdgeWidths 为纯 UI 态，无需从 params 回填)
     if (maskBrightnessPtr != nullptr)
         maskBrightnessPtr->setValue (params.maskImage.brightness, juce::dontSendNotification);
     if (maskContrastPtr != nullptr)

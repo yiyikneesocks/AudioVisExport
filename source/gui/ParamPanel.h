@@ -178,7 +178,8 @@ private:
     juce::Slider*       outEdgeShadowPtr[3] = { nullptr, nullptr, nullptr };
     juce::Slider* outlineFpsPtr = nullptr;
     juce::ToggleButton* outlineTemporalPtr = nullptr;
-    juce::Slider* maskStrokeWidthSliderPtr = nullptr;
+    juce::ToggleButton* lockWidthPtr = nullptr;    // v0.5.6：锁定三边厚度联动（取代旧的"All edges width"总滑块）
+    bool lockEdgeWidths = false;                   // v0.5.6：纯 UI 联动模式，不进渲染参数
     juce::Slider* maskBrightnessPtr = nullptr;
     juce::Slider* maskContrastPtr = nullptr;
     juce::Slider* maskSaturationPtr = nullptr;
