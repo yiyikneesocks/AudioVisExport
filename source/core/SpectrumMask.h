@@ -56,7 +56,9 @@ namespace SpectrumMask
                          const juce::Image& image,
                          const MaskImageLayer& cfg,
                          juce::Colour resolvedStroke,
-                         bool sideEdgesAllowed = true);
+                         bool sideEdgesAllowed = true,
+                         const juce::Image* strokeBase = nullptr,
+                         const juce::Image* capOverlay = nullptr);
 
     // ---- v0.5.5 INBOX #5：描边调色板（实时平均色）+ 预览节流/插值 ----
 
@@ -110,5 +112,7 @@ namespace SpectrumMask
                                  juce::Colour resolvedStroke,
                                  PreviewPaletteCache* cache,
                                  double nowSec,
-                                 bool sideEdgesAllowed = true);
+                                 bool sideEdgesAllowed = true,
+                                 const juce::Image* strokeBase = nullptr,
+                                 const juce::Image* capOverlay = nullptr);
 }

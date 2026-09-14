@@ -333,11 +333,20 @@ void Y2KLineStyle::render (juce::Graphics& g,
     juce::Path peakPath;
     buildSmoothPath_ (peakPath, peakPts, /*closeToBottom*/ false, yBot, yTop);
 
-    juce::Path dashedPeakPath;
-    const float dashes[] = { 3.0f, 3.0f };
-    juce::PathStrokeType (1.2f).createDashedStroke (dashedPeakPath, peakPath, dashes, 2);
+    const float peakW = juce::jmax (1.0f, rp.peakCapWidth);
     g.setColour (rp.peak.withAlpha (0.75f));
-    g.fillPath (dashedPeakPath);
+    if (rp.peakLineDotted)
+    {
+        const float dashes[] = { juce::jmax (1.0f, peakW), juce::jmax (3.0f, peakW * 1.5f) };
+        juce::Path dashedPeakPath;
+        juce::PathStrokeType (peakW).createDashedStroke (dashedPeakPath, peakPath, dashes, 2);
+        g.fillPath (dashedPeakPath);
+    }
+    else
+    {
+        g.strokePath (peakPath, juce::PathStrokeType (peakW,
+            juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
 
     // v0.5.4 #3.4：轴不在底/顶时，下臂也要有一条峰线（此前只有上侧有）。
     //   下臂点在轴下方，buildSmoothPath_ 的贴底剪枝会砍平 → 手构折线（与下臂曲线同法）。
@@ -352,9 +361,19 @@ void Y2KLineStyle::render (juce::Graphics& g,
             if (i == 0) peakDnPath.startNewSubPath (x, y);
             else        peakDnPath.lineTo (x, y);
         }
-        juce::Path dashedDn;
-        juce::PathStrokeType (1.2f).createDashedStroke (dashedDn, peakDnPath, dashes, 2);
         g.setColour (rp.peak.withAlpha (0.75f));
-        g.fillPath (dashedDn);
+        const float dnW = juce::jmax (1.0f, rp.peakCapWidth);
+        if (rp.peakLineDotted)
+        {
+            const float dashes2[] = { juce::jmax (1.0f, dnW), juce::jmax (3.0f, dnW * 1.5f) };
+            juce::Path dashedDn;
+            juce::PathStrokeType (dnW).createDashedStroke (dashedDn, peakDnPath, dashes2, 2);
+            g.fillPath (dashedDn);
+        }
+        else
+        {
+            g.strokePath (peakDnPath, juce::PathStrokeType (dnW,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
     }
 }

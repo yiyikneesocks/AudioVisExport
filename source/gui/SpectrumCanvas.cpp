@@ -126,14 +126,13 @@ void SpectrumCanvas::paint (juce::Graphics& g)
                         gb2.setOpacity (rp.opacity);
                         style->render (gb2, canvasRectBody, frame, rpBody);
                     }
+                    const bool asBorder = params.peakCapAsBorder;
                     juce::Image masked = SpectrumMask::composeWithPlan (
-                        baseBody, adj, params.maskImage, stroke, &maskPalette, nowSec,
-                        SpectrumMask::isBarStyle (params.style));   // line 系禁左右侧边（新1c2）
-                    if (masked.isValid())
-                    {
-                        SpectrumMask::overlayCapsFrom (masked, base, baseBody);
-                        specLayer = masked;
-                    }
+                        asBorder ? baseBody : base, adj, params.maskImage, stroke, &maskPalette, nowSec,
+                        SpectrumMask::isBarStyle (params.style),
+                        &baseBody,                                   // 描边只认无帽主体
+                        asBorder ? &base : nullptr);                 // 边框样式：帽重涂成边框色
+                    if (masked.isValid()) specLayer = masked;
                 }
                 catch (...) { }   // #2 防御：异常 → specLayer 保持 base（无蒙版回退）
             }

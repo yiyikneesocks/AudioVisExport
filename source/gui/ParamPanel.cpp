@@ -107,6 +107,20 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     peakCapsTogglePtr->setTooltip ("Show peak-hold markers.\n"
                                    "  bar / bar-line: falling peak caps (two-sided with a baseline).\n"
                                    "  y2k-line / polyline / crystal: the dashed peak-hold line.");
+    // v0.5.6 task2：峰帽粗细 / 线家族峰线 dotted↔完整 / 有描边时帽=边框同色同宽
+    peakCapWidthSliderPtr = addSlider ("Peak cap width", 0.5, 24.0, 0.5, 1.0,
+               [this] { return (double) params.peakCapWidth; },
+               [this] (double v) { params.peakCapWidth = (float) v; notify(); });
+    peakCapWidthSliderPtr->setTooltip ("Peak-cap / peak-line thickness (px). For dotted line styles this\n"
+               "is the DOT diameter - gaps auto-widen so dots never merge.");
+    peakLineDottedPtr = addToggle ("   Peak line dotted (line styles)", params.peakLineDotted,
+               [this] (bool v) { params.peakLineDotted = v; notify(); });
+    peakLineDottedPtr->setTooltip ("y2k / polyline / crystal peak-hold line: ON = dotted, OFF = a solid curve.");
+    peakCapAsBorderPtr = addToggle ("   Peak cap = border style (with mask)", params.peakCapAsBorder,
+               [this] (bool v) { params.peakCapAsBorder = v; notify(); });
+    peakCapAsBorderPtr->setTooltip ("With a mask outline on:\n"
+               "  ON  = peak cap drawn in the bar's border colour+width (reads as an outline).\n"
+               "  OFF = peak cap becomes part of the mask, showing the mask image through it.");
     // v0.5.4 #4：基线轴（0=底部；0.5=镜像；画布内可拖 + 吸附）
     auto* capPullSlider = addSlider ("Cap pull", 0, 100, 1, 1.0,
                [this] { return (double) params.capPull * 100.0; },
@@ -724,6 +738,8 @@ void ParamPanel::syncAllFromParams()
     syncMaskControls();          // 蒙版：勾选/颜色/四边开关+厚度/fps/平滑（已含 #5 控件）
     // 少数独立 toggle 直接读 params（不进 sliderGetters）
     if (peakCapsTogglePtr  != nullptr) peakCapsTogglePtr ->setToggleState (params.barParticles, juce::dontSendNotification);
+    if (peakLineDottedPtr  != nullptr) peakLineDottedPtr ->setToggleState (params.peakLineDotted, juce::dontSendNotification);
+    if (peakCapAsBorderPtr != nullptr) peakCapAsBorderPtr->setToggleState (params.peakCapAsBorder, juce::dontSendNotification);
     if (lineOnlyTogglePtr  != nullptr) lineOnlyTogglePtr ->setToggleState (params.lineOnly,    juce::dontSendNotification);
     gridToggle     .setToggleState (params.drawGrid,       juce::dontSendNotification);
     axisLabelToggle.setToggleState (params.drawAxisLabels, juce::dontSendNotification);

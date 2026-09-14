@@ -198,11 +198,23 @@ void PolylineStyle::render (juce::Graphics& g,
         const float x = x0 + (float) i * invN * xLen;
         peakPath.lineTo (x, peakY (frame.peakDb[i]));
     }
-    juce::Path dashedPeak;
-    const float dashes[] = { 3.0f, 3.0f };
-    juce::PathStrokeType (1.2f).createDashedStroke (dashedPeak, peakPath, dashes, 2);
+    // v0.5.6 task2：peakLineDotted=false → 完整曲线；true → 点线，粗细=点直径且 gap 随直径同步放大
+    const float peakW = juce::jmax (1.0f, rp.peakCapWidth);
     g.setColour (rp.peak.withAlpha (0.75f));
-    g.fillPath (dashedPeak);
+    if (rp.peakLineDotted)
+    {
+        const float dashLen = juce::jmax (1.0f, peakW);
+        const float gapLen  = juce::jmax (3.0f, peakW * 1.5f);
+        const float dashes[] = { dashLen, gapLen };
+        juce::Path dashedPeak;
+        juce::PathStrokeType (peakW).createDashedStroke (dashedPeak, peakPath, dashes, 2);
+        g.fillPath (dashedPeak);
+    }
+    else
+    {
+        g.strokePath (peakPath, juce::PathStrokeType (peakW,
+            juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
 
     if (a > 0.001f)
     {
@@ -214,8 +226,19 @@ void PolylineStyle::render (juce::Graphics& g,
             peakDnPath.lineTo (x, peakYDn (frame.peakDb[i]));
         }
         juce::Path dashedDn;
-        juce::PathStrokeType (1.2f).createDashedStroke (dashedDn, peakDnPath, dashes, 2);
+        const float dnW = juce::jmax (1.0f, rp.peakCapWidth);
+        const float dnDash = juce::jmax (1.0f, dnW), dnGap = juce::jmax (3.0f, dnW * 1.5f);
+        const float dashes2[] = { dnDash, dnGap };
         g.setColour (rp.peak.withAlpha (0.75f));
-        g.fillPath (dashedDn);
+        if (rp.peakLineDotted)
+        {
+            juce::PathStrokeType (dnW).createDashedStroke (dashedDn, peakDnPath, dashes2, 2);
+            g.fillPath (dashedDn);
+        }
+        else
+        {
+            g.strokePath (peakDnPath, juce::PathStrokeType (dnW,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
     }
 }

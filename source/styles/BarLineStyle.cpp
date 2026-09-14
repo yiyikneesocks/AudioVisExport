@@ -199,7 +199,7 @@ void BarLineStyle::render (juce::Graphics& g,
         }
         g.setColour (rp.peak.withAlpha (0.9f));
         g.strokePath (capPath, juce::PathStrokeType (
-            juce::jmax (1.2f, rp.lineWidth * 0.9f),
+            juce::jmax (1.0f, rp.peakCapWidth),
             juce::PathStrokeType::curved,
             juce::PathStrokeType::rounded));
 
@@ -225,7 +225,7 @@ void BarLineStyle::render (juce::Graphics& g,
                 capB.lineTo          (xR, normalizedToY_ (baselineBottom (capEdgeBot (i + 1), a), canvas));
             }
             g.strokePath (capB, juce::PathStrokeType (
-                juce::jmax (1.2f, rp.lineWidth * 0.9f),
+                juce::jmax (1.0f, rp.peakCapWidth),
                 juce::PathStrokeType::curved,
                 juce::PathStrokeType::rounded));
         }

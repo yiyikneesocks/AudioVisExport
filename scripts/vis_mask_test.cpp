@@ -688,6 +688,45 @@ int main()
         check (interiorNotRed, "bar interior shows the mask image (not covered by border)");
     }
 
+    // ============ 用例 17：peak cap 两模式（蒙版穿透 vs 边框样式）============
+    {
+        const int CW = 60, CH = 120, rW = 4;
+        auto bodyOnly = juce::Image (juce::Image::ARGB, CW, CH, true);   // 柱体
+        { juce::Graphics g (bodyOnly); g.setColour (juce::Colours::black); g.fillRect (15, 70, 31, 30); }
+        auto withCap  = juce::Image (juce::Image::ARGB, CW, CH, true);   // 柱体 + 更宽的绿色帽（浮在上方）
+        { juce::Graphics g (withCap);
+          g.setColour (juce::Colours::black); g.fillRect (15, 70, 31, 30);
+          g.setColour (juce::Colours::green); g.fillRect (10, 30, 41, 2); }
+        auto img = solidImg (CW, CH, juce::Colours::white);
+        MaskImageLayer cfg; cfg.enabled = true; cfg.strokeEnabled = true; cfg.outlineMode = "image";
+        cfg.outTop = cfg.outLeft = cfg.outRight = true;
+        cfg.outWTop = cfg.outWLeft = cfg.outWRight = (float) rW;
+        cfg.outAlphaTop = cfg.outAlphaLeft = cfg.outAlphaRight = 1.0f;
+        auto classify = [] (const juce::Image& im, int x, int y, bool& red, bool& white, bool& green)
+        {
+            juce::Image::BitmapData b (im, juce::Image::BitmapData::readOnly);
+            auto p = reinterpret_cast<const juce::PixelARGB*>(b.getLinePointer (y))[x];
+            const int R = p.getRed(), G = p.getGreen(), B = p.getBlue();
+            red   = (R>120 && G<90 && B<90);
+            white = (R>160 && G>160 && B>160);
+            green = (G>120 && R<90 && B<90);
+        };
+        // 17a 穿透模式：base=含帽(clip含帽→帽透出白图)，strokeBase=无帽(帽不描边)
+        {
+            auto out = SpectrumMask::compose (withCap, img, cfg, juce::Colours::red, true, &bodyOnly, nullptr);
+            bool red, white, green; classify (out, 25, 31, red, white, green);   // 帽处
+            bool bRed, bWhite, bGreen; classify (out, 30, 71, bRed, bWhite, bGreen); // 柱顶应有红描边
+            check (white && ! red && ! green, "passthrough: peak-cap region shows the mask IMAGE (not bordered, not peak colour)");
+            check (bRed, "passthrough: bar body still bordered");
+        }
+        // 17b 边框样式：base=无帽，strokeBase=无帽，capOverlay=含帽 → 帽重涂成边框红
+        {
+            auto out = SpectrumMask::compose (bodyOnly, img, cfg, juce::Colours::red, true, &bodyOnly, &withCap);
+            bool red, white, green; classify (out, 25, 31, red, white, green);
+            check (red && ! green, "border-style: peak cap recolored to the bar's border colour (not peak green)");
+        }
+    }
+
     std::printf (failures ? "FAILURES: %d\n" : "ALL PASS\n", failures);
     return failures ? 1 : 0;
 }

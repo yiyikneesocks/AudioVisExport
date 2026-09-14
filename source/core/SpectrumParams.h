@@ -159,6 +159,10 @@ struct SpectrumParams
     float baselineY     = 0.0f;    // v0.5.4 #4 基线轴：0=底部，0.5=镜像，1=顶部；柱以轴为零点上下按比例生长
     float capPull       = 0.35f;   // v0.5.4 #2峰帽：帽顶点邻域拉扯强度 0..1；0=关闭拉扯（斜面可拉得很长）
     bool  lineOnly      = false;   // v0.5.4 #6：line 系只画线条，不画内部填充（tint/玻璃体）
+    // v0.5.6 task2/peak cap：峰值帽外观（全局样式参数，与是否开蒙版无关）
+    float peakCapWidth  = 2.0f;    // 峰帽线粗细 / y2k 点线里"点"的直径（px）；dotted 时自动保证点间留空隙
+    bool  peakLineDotted = true;   // line 系峰线样式：true=点(虚)线，false=完整平滑曲线
+    bool  peakCapAsBorder = false; // 有蒙版描边时：true=峰帽画成"该柱边框同色同宽"的线；false=峰帽作为蒙版一部分透出 mask 图
     bool  drawGrid        = false;     // 可视化视频默认不画坐标轴（需要时 CLI 开 --draw-grid on）
     bool  drawAxisLabels  = false;     // 同上（--draw-axis-labels on）
 

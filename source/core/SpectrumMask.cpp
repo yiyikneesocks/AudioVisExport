@@ -210,9 +210,11 @@ juce::Image SpectrumMask::compose (const juce::Image& base,
                                    const juce::Image& image,
                                    const MaskImageLayer& cfg,
                                    juce::Colour resolvedStroke,
-                                   bool sideEdgesAllowed)
+                                   bool sideEdgesAllowed,
+                                   const juce::Image* strokeBase,
+                                   const juce::Image* capOverlay)
 {
-    return composeWithPlan (base, image, cfg, resolvedStroke, nullptr, 0.0, sideEdgesAllowed);
+    return composeWithPlan (base, image, cfg, resolvedStroke, nullptr, 0.0, sideEdgesAllowed, strokeBase, capOverlay);
 }
 
 juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
@@ -221,7 +223,9 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
                                            juce::Colour resolvedStroke,
                                            PreviewPaletteCache* cache,
                                            double nowSec,
-                                           bool sideEdgesAllowed)
+                                           bool sideEdgesAllowed,
+                                           const juce::Image* strokeBase,
+                                           const juce::Image* capOverlay)
 {
     if (! base.isValid() || ! image.isValid())
         return {};
@@ -330,6 +334,29 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
                                          ? cache->update (nowSec, fresh, cfg)
                                          : fresh;
 
+            // 描边专用轮廓 mS：给了 strokeBase（无帽主体）就用它，否则=裁剪轮廓 mA。
+            //   裁剪始终用 mA（穿透模式下帽区也透出图片）；描边只认 mS → 帽不被描边。
+            std::vector<uint8> mSbuf;
+            const std::vector<uint8>* Sp = &mA;
+            if (strokeBase != nullptr && strokeBase->isValid()
+                && strokeBase->getWidth() == W && strokeBase->getHeight() == H)
+            {
+                mSbuf.assign ((size_t) W * H, 0);
+                juce::Image::BitmapData sb (*strokeBase, juce::Image::BitmapData::readOnly);
+                for (int y = 0; y < H; ++y)
+                {
+                    const auto* ln = reinterpret_cast<const juce::PixelARGB*> (sb.getLinePointer (y));
+                    uint8* d = mSbuf.data() + (size_t) y * W;
+                    for (int x = 0; x < W; ++x)
+                    {
+                        const uint8 a = ln[x].getAlpha();
+                        d[x] = (a >= kSolid) ? 255 : static_cast<uint8> (a * 255 / kSolid);
+                    }
+                }
+                Sp = &mSbuf;
+            }
+            const std::vector<uint8>& S = *Sp;
+
             // 每个方向一次"窗内最小值"（单调队列滑窗，O(W·H)，与半径无关）。
             //   为做斜面归属：另算一个 capR 的"上方覆盖"bufCap——只有当某像素正上方 capR 内仍实心时
             //   才算真正的**竖直侧边**；斜面/上边界（上方会变透明）一律归给上边框，修 1c(3)。
@@ -349,11 +376,11 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
                     int hd = 0, tl = 0;
                     for (int y = 0; y < H; ++y)
                     {
-                        const uint8 v = mA[(size_t) y * W + x];
-                        while (tl > hd && mA[(size_t) dqV[tl - 1] * W + x] >= v) --tl;
+                        const uint8 v = S[(size_t) y * W + x];
+                        while (tl > hd && S[(size_t) dqV[tl - 1] * W + x] >= v) --tl;
                         dqV[tl++] = y;
                         while (dqV[hd] < y - rT) ++hd;
-                        bufT[(size_t) y * W + x] = (v ? mA[(size_t) dqV[hd] * W + x] : v);
+                        bufT[(size_t) y * W + x] = (v ? S[(size_t) dqV[hd] * W + x] : v);
                     }
                 }
             }
@@ -362,17 +389,17 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
                 int hd = 0, tl = 0;
                 for (int y = 0; y < H; ++y)
                 {
-                    const uint8 v = mA[(size_t) y * W + x];
-                    while (tl > hd && mA[(size_t) dqV[tl - 1] * W + x] >= v) --tl;
+                    const uint8 v = S[(size_t) y * W + x];
+                    while (tl > hd && S[(size_t) dqV[tl - 1] * W + x] >= v) --tl;
                     dqV[tl++] = y;
                     while (dqV[hd] < y - capR) ++hd;
-                    bufCap[(size_t) y * W + x] = v ? mA[(size_t) dqV[hd] * W + x] : 0;
+                    bufCap[(size_t) y * W + x] = v ? S[(size_t) dqV[hd] * W + x] : 0;
                 }
             }
             std::vector<int> dqH ((size_t) W + 2);
             for (int y = 0; y < H; ++y)
             {
-                const uint8* row = mA.data() + (size_t) y * W;
+                const uint8* row = S.data() + (size_t) y * W;
                 int hd = 0, tl = 0;                                  // 左缘窗 [x-rL, x]
                 for (int x = 0; x < W; ++x)
                 {
@@ -413,7 +440,7 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
             for (int y = 0; y < H; ++y)
             {
                 auto* line = reinterpret_cast<juce::PixelARGB*> (bd.getLinePointer (y));
-                const uint8* m  = mA.data()    + (size_t) y * W;
+                const uint8* m  = S.data()     + (size_t) y * W;
                 const uint8* tt = bufT.data()  + (size_t) y * W;
                 const uint8* l  = bufL.data()  + (size_t) y * W;
                 const uint8* rr = bufR.data()  + (size_t) y * W;
@@ -469,19 +496,19 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
                     int y = 0;
                     while (y < H)
                     {
-                        while (y < H && mA[(size_t) y * W + x] < 128) ++y;   // 跳过 gap → run 起点
+                        while (y < H && S[(size_t) y * W + x] < 128) ++y;   // 跳过 gap → run 起点
                         if (y >= H) break;
                         const int s = y;
-                        while (y < H && mA[(size_t) y * W + x] >= 128) ++y;  // run 终点
+                        while (y < H && S[(size_t) y * W + x] >= 128) ++y;  // run 终点
                         const int runH = y - s;
                         int y2 = y;
-                        while (y2 < H && mA[(size_t) y2 * W + x] < 128) ++y2; // 下方 gap
+                        while (y2 < H && S[(size_t) y2 * W + x] < 128) ++y2; // 下方 gap
                         const bool hasBelow = (y2 < H);                        // gap 后是否还有实体
                         if (runH > capThresh || ! hasBelow) { yt = s; break; } // 认定为主体顶
                         y = y2;                                                // 顶 run 太薄且下面有主体 → 当 cap 跳过
                     }
                     if (yt < 0) continue;
-                    const uint8 aTop = (yt == 0) ? 255 : mA[(size_t) (yt - 1) * W + x];
+                    const uint8 aTop = (yt == 0) ? 255 : S[(size_t) (yt - 1) * W + x];
                     float ye = (float) yt;
                     if (aTop < 128)
                     {
@@ -539,6 +566,36 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
                             }
                         }
                         strokeRun (s, r.second, plan.colColour[(size_t) s].withAlpha (cfg.outAlphaTop));
+                    }
+                }
+            }
+
+            // peak cap「边框样式」：把浮动帽像素(capOverlay 有、描边轮廓 S 无)重涂成"该柱边框色 + 帽已含厚度"，
+            //   使 peak cap 看起来就是边框的延续（同色同宽），而非独立峰色线。
+            if (capOverlay != nullptr && capOverlay->isValid()
+                && capOverlay->getWidth() == W && capOverlay->getHeight() == H)
+            {
+                juce::Image::BitmapData cb (*capOverlay, juce::Image::BitmapData::readOnly);
+                juce::Image::BitmapData ob (out, juce::Image::BitmapData::readWrite);
+                for (int y = 0; y < H; ++y)
+                {
+                    const auto* cf = reinterpret_cast<const juce::PixelARGB*> (cb.getLinePointer (y));
+                    const uint8*  srow = S.data() + (size_t) y * W;
+                    auto*       ol = reinterpret_cast<juce::PixelARGB*> (ob.getLinePointer (y));
+                    for (int x = 0; x < W; ++x)
+                    {
+                        const int ca = cf[x].getAlpha();
+                        if (ca <= 8 || srow[x] != 0) continue;      // 只画"有帽、无主体"的像素
+                        const juce::Colour col = perCol ? plan.colColour[(size_t) x] : plan.uniform;
+                        const float aF = (float) ca / 255.0f;       // 用帽自身 AA 作覆盖率
+                        juce::PixelARGB d = ol[x];
+                        const int ai = (int) (aF * 255.0f);
+                        const int inv = 255 - ai;
+                        d.setARGB (static_cast<uint8> (ai + d.getAlpha() * inv / 255),
+                                   static_cast<uint8> (juce::jmin (255, col.getRed()   * ai / 255 + d.getRed()   * inv / 255)),
+                                   static_cast<uint8> (juce::jmin (255, col.getGreen() * ai / 255 + d.getGreen() * inv / 255)),
+                                   static_cast<uint8> (juce::jmin (255, col.getBlue()  * ai / 255 + d.getBlue()  * inv / 255)));
+                        ol[x] = d;
                     }
                 }
             }

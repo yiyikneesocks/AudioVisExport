@@ -216,6 +216,9 @@ juce::String SpectrumParams::toJson() const
     s << "    \"baselineY\": " << baselineY << ",\n";
     s << "    \"capPull\": " << capPull << ",\n";
     s << "    \"lineOnly\": " << (lineOnly ? "true" : "false") << ",\n";
+    s << "    \"peakCapWidth\": " << peakCapWidth << ",\n";
+    s << "    \"peakLineDotted\": " << (peakLineDotted ? "true" : "false") << ",\n";
+    s << "    \"peakCapAsBorder\": " << (peakCapAsBorder ? "true" : "false") << ",\n";
     s << "    \"lineWidth\": " << lineWidth << ",\n";
     s << "    \"opacity\": " << opacity << ",\n";
     s << "    \"drawGrid\": " << (drawGrid ? "true" : "false") << ",\n";
@@ -479,6 +482,9 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
         p.baselineY     = juce::jlimit (0.0f, 1.0f, getFloat (vis, "baselineY", p.baselineY));
         p.capPull       = juce::jlimit (0.0f, 1.0f, getFloat (vis, "capPull", p.capPull));
         p.lineOnly      = getBool (vis, "lineOnly", p.lineOnly);
+        p.peakCapWidth  = juce::jlimit (0.5f, 24.0f, getFloat (vis, "peakCapWidth", p.peakCapWidth));
+        p.peakLineDotted= getBool (vis, "peakLineDotted", p.peakLineDotted);
+        p.peakCapAsBorder=getBool (vis, "peakCapAsBorder", p.peakCapAsBorder);
         p.lineWidth     = getFloat (vis, "lineWidth", p.lineWidth);
         p.opacity       = getFloat (vis, "opacity", p.opacity);
         p.drawGrid      = getBool (vis, "drawGrid", p.drawGrid);
@@ -687,6 +693,9 @@ bool SpectrumParams::applyOverride (const juce::String& dottedKey,
     if      (key == "visual.capPull")        { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); capPull=juce::jlimit(0.0f,1.0f,v); return true; }
     if      (key == "visual.lineOnly")       { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); lineOnly=v; return true; }
     if      (key == "visual.barParticles")   { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); barParticles=v; return true; }
+    if      (key == "visual.peakCapWidth")   { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); peakCapWidth=juce::jlimit(0.5f,24.0f,v); return true; }
+    if      (key == "visual.peakLineDotted") { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); peakLineDotted=v; return true; }
+    if      (key == "visual.peakCapAsBorder"){ bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); peakCapAsBorder=v; return true; }
     if      (key == "visual.drawGrid")       { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); drawGrid=v; return true; }
     if      (key == "visual.drawAxisLabels") { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); drawAxisLabels=v; return true; }
     if      (key == "visual.primaryColor")   { bool ok; auto c=parseColour(val, &ok); if(!ok) return setErr("invalid color (#rrggbb / #aarrggbb)"); primaryColor=c; return true; }

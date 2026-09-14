@@ -190,6 +190,10 @@ private:
     juce::ToggleButton* peakCapsTogglePtr = nullptr;   // #3: bar 系样式才有效
     juce::ToggleButton* lineOnlyTogglePtr = nullptr;  // #3: line 系样式才有效
     juce::Slider* capPullSliderPtr = nullptr;         // #3: 仅 bar-line
+    // v0.5.6：peak cap 外观（全局）+ 两模式开关（有蒙版时）
+    juce::Slider*       peakCapWidthSliderPtr = nullptr;
+    juce::ToggleButton* peakLineDottedPtr     = nullptr;
+    juce::ToggleButton* peakCapAsBorderPtr    = nullptr;
 public:
     void refreshStyleDependentControls();   // #3: 依当前样式置灰不适用控件
     // v0.5.6 新1-b：边框控件按"总开关 → 实时/逐柱 → 固定色按钮/性能项"层级互斥置灰，

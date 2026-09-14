@@ -24,7 +24,19 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-14 23:2x）
+## 当前状态（最后更新：2026-09-15 01:2x）
+
+- **peak cap 外观系统（INBOX r6 task2 追加需求，用户三决策：拆分裁剪/描边轮廓 · 帽颜色跟随该柱边框 · 厚度参数）**：
+  · 新参数 `SpectrumParams::{peakCapWidth, peakLineDotted, peakCapAsBorder}`（进 toJson/fromJson/applyOverride 与 RenderParams）。
+  · 全样式帽粗用 `peakCapWidth`（bar/bar-line 由 drawHorizontalLine→fillRect；bar-line 帽 strokePath 宽度）。
+  · line 家族（y2k/polyline/crystal）峰线：`peakLineDotted` true=点线(dash/gap 随直径自动放大、点间留空) / false=完整曲线。
+  · `compose` 拆成 **裁剪轮廓(mA=base)** 与 **描边轮廓(mS=strokeBase)**：
+    - 穿透模式(peakCapAsBorder=false)：base 传含帽版本 → 帽区透出 mask 图片；strokeBase 传无帽主体 → 帽不被描边。
+    - 边框样式(true)：base/strokeBase 都用无帽主体 → 帽像素由 compose 内 capOverlay 通道重涂成"该柱边框色"(perCol→colColour[x]，否则 uniform)。
+  · VisPipeline + SpectrumCanvas 两路按模式接线（保留 overlayCapsFrom 备用）。ParamPanel 加 3 控件（Peak cap width / Peak line dotted / Peak cap = border style）+ 回填。
+  · `vis_mask_test` 用例 17（穿透：帽处显白图无红框；边框样式：帽重涂成红）。四套回归全绿、双端干净、部署 `AudioVisGUI_09150123.exe`。
+- 另：本模型无法看用户发的图（image.png 读不了），border 观感请文字反馈。
+
 
 - **边框第 4 轮（用户复报，看图受阻——本模型无图像输入）**：bar/bar-line 顶缘仍"伸到左右边框下面 + 顶/左右不闭合"。
   根因＝顶缘用了居中 strokePath（圆帽横向外伸越过柱边、且与像素窗式侧边两套渲染在转角对不齐）。

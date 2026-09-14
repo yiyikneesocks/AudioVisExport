@@ -335,11 +335,20 @@ void CrystalStyle::renderPass (juce::Graphics& g, int pass,
             juce::Path peakPath;
             buildSmoothPath_ (peakPath, peakPts, false, yBot, yTop);
 
-            juce::Path dashedPeak;
-            const float dashes[] = { 3.0f, 3.0f };
-            juce::PathStrokeType (1.0f).createDashedStroke (dashedPeak, peakPath, dashes, 2);
+            const float peakW = juce::jmax (1.0f, rp.peakCapWidth);
+            const float dashes[] = { juce::jmax (1.0f, peakW), juce::jmax (3.0f, peakW * 1.5f) };
             g.setColour (rp.peak.withAlpha (0.60f));
-            g.fillPath (dashedPeak);
+            if (rp.peakLineDotted)
+            {
+                juce::Path dashedPeak;
+                juce::PathStrokeType (peakW).createDashedStroke (dashedPeak, peakPath, dashes, 2);
+                g.fillPath (dashedPeak);
+            }
+            else
+            {
+                g.strokePath (peakPath, juce::PathStrokeType (peakW,
+                    juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            }
 
             if (aP > 0.001f)
             {
@@ -352,10 +361,18 @@ void CrystalStyle::renderPass (juce::Graphics& g, int pass,
                     if (i == 0) peakDn.startNewSubPath (x, y);
                     else        peakDn.lineTo (x, y);
                 }
-                juce::Path dashedDn;
-                juce::PathStrokeType (1.0f).createDashedStroke (dashedDn, peakDn, dashes, 2);
                 g.setColour (rp.peak.withAlpha (0.60f));
-                g.fillPath (dashedDn);
+                if (rp.peakLineDotted)
+                {
+                    juce::Path dashedDn;
+                    juce::PathStrokeType (peakW).createDashedStroke (dashedDn, peakDn, dashes, 2);
+                    g.fillPath (dashedDn);
+                }
+                else
+                {
+                    g.strokePath (peakDn, juce::PathStrokeType (peakW,
+                        juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                }
             }
         }
         return;

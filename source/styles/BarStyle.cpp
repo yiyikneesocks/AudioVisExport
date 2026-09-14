@@ -165,6 +165,9 @@ void BarStyle::render (juce::Graphics& g,
     if (rp.barParticles)
     {
         g.setColour (rp.peak.withAlpha (0.80f));
+        const float capW_px = juce::jmax (1.0f, rp.peakCapWidth);   // v0.5.6：帽线粗细（fillRect 高度）
+        auto capLine = [&] (float y, float xa, float xb)
+        { g.fillRect (juce::Rectangle<float> (xa, y - capW_px * 0.5f, xb - xa, capW_px)); };
         for (int i = 0; i < N; ++i)
         {
             // peakDb → normalized：(peakDb - minDb) / (maxDb - minDb)
@@ -178,11 +181,11 @@ void BarStyle::render (juce::Graphics& g,
             // v0.5.4 #3.2：帽必须与柱顶同构地过基线轴映射（旧码用原始 pn → 帽根本不跟轴动）。
             //   上臂帽 = baselineTop(pn)；轴不在端点时下臂帽 = baselineBottom(pn)（双侧帽）。
             float y = normalizedToY_ (baselineTop (pn, a), canvas);
-            g.drawHorizontalLine ((int) std::round (y), capX, capX + capW);
+            capLine (y, capX, capX + capW);
             if (a > 0.001f)
             {
                 const float y2 = normalizedToY_ (baselineBottom (pn, a), canvas);
-                g.drawHorizontalLine ((int) std::round (y2), capX, capX + capW);
+                capLine (y2, capX, capX + capW);
             }
         }
     }

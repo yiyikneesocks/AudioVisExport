@@ -614,6 +614,9 @@ SpectrumStyle::RenderParams MainComponent::buildRp (const SpectrumParams& p)
     rp.barGapRatio    = p.barGapRatio;
     rp.barWidthRatio  = p.barWidthRatio;
     rp.barParticles   = p.barParticles;
+    rp.peakCapWidth   = p.peakCapWidth;
+    rp.peakLineDotted = p.peakLineDotted;
+    rp.peakCapAsBorder= p.peakCapAsBorder;
     rp.colorMap       = p.colorMap;
     return rp;
 }

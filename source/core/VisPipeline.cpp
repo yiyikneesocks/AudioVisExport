@@ -77,6 +77,9 @@ namespace
         rp.maxDb          = p.maxDb;
         rp.colorMap       = p.colorMap;
         rp.barParticles   = p.barParticles;
+        rp.peakCapWidth   = p.peakCapWidth;
+        rp.peakLineDotted = p.peakLineDotted;
+        rp.peakCapAsBorder= p.peakCapAsBorder;
         return rp;
     }
 
@@ -228,14 +231,16 @@ namespace
                             core.getBandFrame (bandFrameBody);
                             style.render (gb2, canvas, bandFrameBody, rpBody);
                         }
+                        // 帽两模式：
+                        //  · 穿透(false)：clip 用含帽 base(帽透出图片)，描边只认 baseBody(不框帽)。
+                        //  · 边框样式(true)：clip/描边都用 baseBody，帽像素由 compose 内部重涂成边框色。
+                        const bool asBorder = p.peakCapAsBorder;
                         juce::Image masked = SpectrumMask::compose (
-                            baseBody, adj, p.maskImage, stroke,
-                            SpectrumMask::isBarStyle (p.style));   // line 系禁左右侧边（新1c2）
-                        if (masked.isValid())
-                        {
-                            SpectrumMask::overlayCapsFrom (masked, base, baseBody);
-                            layer = masked;
-                        }
+                            asBorder ? baseBody : base, adj, p.maskImage, stroke,
+                            SpectrumMask::isBarStyle (p.style),
+                            &baseBody,                              // strokeBase：描边始终只认无帽主体
+                            asBorder ? &base : nullptr);            // capOverlay：边框样式时把帽重涂成边框色
+                        if (masked.isValid()) layer = masked;
                     }
                     catch (...) { }   // #2 防御：异常 → 回退裸频谱
                 }

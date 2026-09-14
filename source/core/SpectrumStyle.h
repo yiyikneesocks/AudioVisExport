@@ -52,6 +52,9 @@ public:
         float peakDecayDbPerSec        = 12.0f;  // #2: 峰帽下落速度（dB/s，与 core 同源）
         float peakDecayAccelDbPerSec2  = 0.0f;   // #2: 峰帽下落加速度（dB/s²）
         bool  barParticles  = true;   // 全样式：峰值标记开关（bar 系=峰帽横线；line 系=峰值保持虚线）
+        float peakCapWidth   = 2.0f;   // v0.5.6：峰帽线粗 / y2k 点线点直径（px）
+        bool  peakLineDotted = true;   // v0.5.6：line 系峰线 dotted(true) / 完整曲线(false)
+        bool  peakCapAsBorder= false;  // v0.5.6：帽=边框同色同宽(true) / 蒙版穿透(false)
 
         // 元素开关
         bool  drawGrid        = true;
