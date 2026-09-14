@@ -233,6 +233,24 @@ MainComponent::MainComponent() : canvas (params), panel (params)
     nowPlayingLabel.setText ("No audio loaded", juce::dontSendNotification);
     addAndMakeVisible (nowPlayingLabel);
 
+    // v0.5.6 task2：启动自动加载 exe 目录 config.json 作初值（缺失/空/解析失败 → 静默用内置默认，不阻断启动）
+    {
+        juce::String cerr;
+        const bool applied = params.loadFromDefaultConfig (cerr);
+        if (applied || ! cerr.isEmpty())
+            panel.syncAllFromParams();               // 把加载到的值回填到所有控件
+        if (! cerr.isEmpty())
+            panel.setProgressText ("config.json: " + cerr);   // 解析出错仅提示，仍按内置默认继续
+    }
+    panel.onSaveDefaults = [this]
+    {
+        juce::String serr;
+        if (params.saveToDefaultConfig (serr))
+            panel.setProgressText ("Saved defaults -> " + SpectrumParams::defaultConfigFile().getFileName());
+        else
+            panel.setProgressText ("Save defaults failed: " + serr);
+    };
+
     // 初始引擎
     currentStyleName = params.style;
     style = SpectrumStyle::create (params.style);

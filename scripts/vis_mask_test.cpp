@@ -629,6 +629,40 @@ int main()
         check (greenCap >= (CW-8) * 3 / 4, "peak cap re-composited on top in its own colour");
     }
 
+    // ============ 用例 15：config.json 默认值文件 save→load 往返（round-trip）============
+    {
+        SpectrumParams src;
+        src.width = 813; src.height = 457;
+        src.style = "bar-line";
+        src.baselineY = 0.33f;
+        src.maskImage.outWTop = 7.5f;
+        src.maskImage.outlineMode = "perbar";
+        juce::String serr;
+        const bool saved = src.saveToDefaultConfig (serr);
+        if (saved)
+        {
+            SpectrumParams fresh;                 // 内置默认起步
+            juce::String lerr;
+            const bool loaded = fresh.loadFromDefaultConfig (lerr);
+            check (saved && loaded, "config.json: save + loadFromDefaultConfig both succeed");
+            check (fresh.width == 813 && fresh.height == 457, "config.json: int fields round-trip");
+            check (fresh.style == "bar-line", "config.json: style string round-trip");
+            check (std::abs (fresh.baselineY - 0.33f) < 1e-4f, "config.json: float round-trip");
+            check (std::abs (fresh.maskImage.outWTop - 7.5f) < 1e-4f && fresh.maskImage.outlineMode == "perbar",
+                   "config.json: nested mask fields round-trip");
+            SpectrumParams::defaultConfigFile().deleteFile();   // 清理，别污染 build/
+        }
+        else
+        {
+            std::printf ("      [cfg] save failed on this FS (%s) — skipping load checks\n", serr.toRawUTF8());
+        }
+        // 缺失文件 → load 应静默返回 false 且不改动默认
+        SpectrumParams untouched;
+        juce::String e2;
+        const bool ap = untouched.loadFromDefaultConfig (e2);
+        check (! ap, "config.json: missing file -> load returns false, built-in defaults kept");
+    }
+
     std::printf (failures ? "FAILURES: %d\n" : "ALL PASS\n", failures);
     return failures ? 1 : 0;
 }

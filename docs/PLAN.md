@@ -24,7 +24,17 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-14 22:1x）
+## 当前状态（最后更新：2026-09-14 22:4x）
+
+- **实现 config.json 默认值文件（INBOX r6 task2，用户三选项全按推荐拍板）**：exe 同目录 `config.json`。
+  · 启动**自动加载**为初值（缺失/空/解析失败→静默内置默认、不阻断，解析错仅在进度条提示）；
+  · **稀疏覆盖不回写**：只应用文件里出现的键，缺字段吃内置默认（新增参数零维护）；
+  · 面板 Export 页新增 **"Set as startup default"** 按钮 → `saveToDefaultConfig()` 把当前**全部**面板值 `toJson()` 存成完整快照（可手改）。
+  复用现有 `fromJson/toJson`，新增 `SpectrumParams::{defaultConfigFile,defaultConfigExists,loadFromDefaultConfig,saveToDefaultConfig}`；
+  `defaultConfigFile()`= `File::getSpecialLocation(currentExecutableFile).getParentDirectory()/config.json`。
+  `vis_mask_test` 用例 15：save→load 往返（int/float/string/nested mask）+ 缺失文件返回 false；测后自动删 config.json。
+  vis_mask_test 目标补链 `SpectrumParams.cpp`。四套回归全绿、双端干净、部署 `AudioVisGUI_09142244.exe`。
+
 
 - **修 bar / bar-line 描边仍连 peak caps + 侧边错框（用户报，line 模式已 OK）**：根因是 peak cap 画进 `base` alpha 且
   **比柱体更宽**（capX=x−gap·0.25、capW=barW+gap·0.5）、alpha≈204 → 无论"柱顶"（外伸列被当成主体顶）还是

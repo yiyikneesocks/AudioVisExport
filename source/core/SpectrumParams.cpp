@@ -326,6 +326,55 @@ juce::String SpectrumParams::toJson() const
 }
 
 // =============================================================================
+// v0.5.6 默认值文件 config.json（exe 同目录）
+// =============================================================================
+juce::File SpectrumParams::defaultConfigFile()
+{
+    return juce::File::getSpecialLocation (juce::File::currentExecutableFile)
+             .getParentDirectory()
+             .getChildFile ("config.json");
+}
+
+bool SpectrumParams::defaultConfigExists()
+{
+    const auto f = defaultConfigFile();
+    return f.existsAsFile() && f.getSize() > 0;
+}
+
+bool SpectrumParams::loadFromDefaultConfig (juce::String& errorMessage)
+{
+    errorMessage.clear();
+    const auto f = defaultConfigFile();
+    if (! f.existsAsFile())
+        return false;                                   // 无文件 → 保持内置默认
+    const juce::String text = f.loadFileAsString().trim();
+    if (text.isEmpty())
+        return false;                                   // 空文件 → 保持内置默认
+    juce::String err;
+    const SpectrumParams parsed = SpectrumParams::fromJson (text, err);
+    if (! err.isEmpty())
+    {
+        errorMessage = err;                             // 解析失败 → 调用方可提示，但仍不破坏启动
+        return false;
+    }
+    *this = parsed;                                     // 覆盖为 config 值（fromJson 对缺失字段已填默认）
+    return true;
+}
+
+bool SpectrumParams::saveToDefaultConfig (juce::String& errorMessage) const
+{
+    errorMessage.clear();
+    const auto f = defaultConfigFile();
+    if (! f.replaceWithText (toJson()))
+    {
+        errorMessage = "Cannot write " + f.getFullPathName();
+        return false;
+    }
+    return true;
+}
+
+
+// =============================================================================
 // JSON 解析（用 juce::var / juce::JSON 解析，访问嵌套对象）
 // =============================================================================
 SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,

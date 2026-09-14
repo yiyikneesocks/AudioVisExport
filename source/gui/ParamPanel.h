@@ -42,6 +42,7 @@ public:
     std::function<void ()> onExportClicked;
     std::function<void ()> onExportVideoClicked;
     std::function<void ()> onBrowseOutputDir;
+    std::function<void ()> onSaveDefaults;    // v0.5.6 task2：把当前全部面板值写入 config.json
 
     // ---- 图层（Layers）区回调：MainComponent 接线，操作画布当前选中元素 ----
     std::function<void ()>     onAddImageClicked;    // 弹文件框添加图片图层
@@ -156,6 +157,7 @@ private:
     juce::ToggleButton checkerToggle  { "Checkerboard BG" };
     juce::TextButton primaryBtn{ "Primary" }, secondaryBtn{ "Secondary" }, peakBtn{ "Peak" }, bgBtn{ "BG" };
     juce::TextButton browseBtn{ "Browse" }, exportBtn{ "Export" }, exportVideoBtn{ "Export Video" };
+    juce::TextButton setDefaultsBtn{ "Set as startup default" };   // v0.5.6 task2
     juce::TextButton addImageBtn{ "Add image..." }, layerUpBtn{ "Up" },
                      layerDownBtn{ "Down" }, layerRemoveBtn{ "Remove" },
                      addSpectrumBtn{ "Add spectrum" }, selectSpectrumBtn{ "Select spectrum" };

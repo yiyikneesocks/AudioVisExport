@@ -200,6 +200,17 @@ struct SpectrumParams
     // 序列化为完整 JSON（含所有字段，便于作为 preset 模板）。
     juce::String toJson() const;
 
+    // ---- v0.5.6 默认值文件 config.json（放在 exe 同目录）----
+    //   语义（用户 2026-09-14 拍板）：
+    //   · 启动自动加载：exe 目录 config.json 若存在且能解析 → 用其值作初值（覆盖内置默认）；
+    //   · 稀疏覆盖：只应用文件里出现的键，缺失字段保持内置默认；**不自动回写补齐**（新增参数天然吃默认）；
+    //     文件缺失 / 空 / 解析失败 → 静默用内置默认，不影响启动；
+    //   · "Set as Default"：把当前全部面板值 toJson() 存成完整快照（直观、可手改）。
+    static juce::File defaultConfigFile();          // <exe目录>/config.json
+    static bool       defaultConfigExists();        // 存在且非空
+    bool loadFromDefaultConfig (juce::String& errorMessage);   // 成功应用返回 true
+    bool saveToDefaultConfig   (juce::String& errorMessage) const;  // 写完整快照
+
     // ---- CLI 覆盖（点路径 key=val）----
     // 例: "fft.fftOrder=12", "visual.style=bar", "visual.primaryColor=#ff00ff"
     // 支持的 value 类型: int / float / bool / string / #rrggbb / #aarrggbb

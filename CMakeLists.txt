@@ -253,7 +253,8 @@ target_link_libraries(vis_tabs_test PRIVATE juce::juce_gui_extra juce::juce_grap
 
 add_executable(vis_mask_test EXCLUDE_FROM_ALL
     scripts/vis_mask_test.cpp
-    source/core/SpectrumMask.cpp)
+    source/core/SpectrumMask.cpp
+    source/core/SpectrumParams.cpp)   # v0.5.6 task2：config.json 往返测试需要 SpectrumParams 序列化
 target_compile_definitions(vis_mask_test PRIVATE JUCE_USE_CURL=0)
 target_include_directories(vis_mask_test PRIVATE ${CMAKE_SOURCE_DIR})
 target_link_libraries(vis_mask_test PRIVATE juce::juce_graphics juce::juce_events)

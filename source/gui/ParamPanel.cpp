@@ -533,6 +533,13 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
                   notify();
               });
 
+    // v0.5.6 task2：把当前所有面板值快照写入 exe 目录 config.json，作为下次启动的默认值
+    setDefaultsBtn.onClick = [this] { if (onSaveDefaults) onSaveDefaults(); };
+    setDefaultsBtn.setTooltip ("Write ALL current panel values to config.json in the exe folder.\n"
+                               "They become the startup defaults next launch. Missing keys keep\n"
+                               "built-in defaults (no auto-backfill), so new params need no edit.");
+    addRow ("", &setDefaultsBtn);
+
     browseBtn.onClick = [this] { if (onBrowseOutputDir) onBrowseOutputDir(); };
     exportBtn.onClick = [this] { if (onExportClicked) onExportClicked(); };
     exportVideoBtn.onClick = [this] { if (onExportVideoClicked) onExportVideoClicked(); };
