@@ -24,7 +24,15 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-14 20:3x）
+## 当前状态（最后更新：2026-09-14 21:4x）
+
+- **修"边框盖到 peak caps 上"（用户报，回归）**：peak caps 由 style 画进 `base` alpha（柱体上方、隔 gap 的
+  1~2px 细线）。顶缘 strokePath 的"从顶取第一个实心像素"会把 **cap** 当表面 → 描边跟着 cap、盖到 cap 上方，
+  二者本应无关。修法：`composeWithPlan` 顶面提取改为按列做 run 分析——**跳过顶部"薄(≤4px)且下方隔着 gap 还有实体"
+  的孤立 run（=cap）**，把顶面对齐真正的柱体顶。侧边早有 `vertSide`（上方须实心）天然忽略浮动 cap，不受影响。
+  新增 `vis_mask_test` 用例 13：柱体 y=80 + 浮动 cap y=20，断言 cap 及其 gap 零描边、柱体顶 60/60 有描边。
+  四套回归全绿、双端干净、部署 `AudioVisGUI_09142139.exe`。
+
 
 - **修 Windows 下"顶缘完全消失"（INBOX r6 task1 复报 v3）**：`SpectrumMask::composeWithPlan` 里
   `BitmapData bd (out, readWrite)` 作用域跨到了后面 `juce::Graphics g (out)` 的 strokePath——JUCE 同一 Image

@@ -567,6 +567,38 @@ int main()
         }
     }
 
+    // ============ 用例 13：边框必须锚定柱体、忽略浮动的 peak cap（回归"盖到 peak caps 上"）============
+    {
+        const int CW = 60, CH = 140, rT = 6;
+        // 造一列结构：cap 细条在 y=20..21；gap y=22..79；柱体 y=80..139。多列同构。
+        auto base = juce::Image (juce::Image::ARGB, CW, CH, true);
+        { juce::Graphics g (base); g.setColour (juce::Colours::black);
+          g.fillRect (0, 80, CW, CH - 80);        // 柱体（顶在 y=80）
+          g.fillRect (0, 20, CW, 2);             // peak cap 细条（顶在 y=20，与柱体隔 gap）
+        }
+        auto img = solidImg (CW, CH, juce::Colours::black);
+        MaskImageLayer cfg; cfg.enabled = true; cfg.strokeEnabled = true; cfg.outlineMode = "image";
+        cfg.outTop = true; cfg.outWTop = (float) rT; cfg.outAlphaTop = 1.0f;
+        cfg.outLeft = false; cfg.outRight = false;
+        auto out = SpectrumMask::compose (base, img, cfg, juce::Colours::red, false);
+        juce::Image::BitmapData ob (out, juce::Image::BitmapData::readOnly);
+        auto isStroke = [&] (int x, int y) {
+            const auto px = reinterpret_cast<const juce::PixelARGB*>(ob.getLinePointer (y))[x];
+            return px.getRed() > 120 && px.getGreen() < 90 && px.getBlue() < 90 && px.getAlpha() > 40;
+        };
+        int capRegion = 0, aboveCap = 0, bodyTopRegion = 0;
+        for (int x = 0; x < CW; ++x)
+        {
+            for (int y = 0; y <= 21; ++y) if (isStroke (x, y)) ++aboveCap;        // cap 顶部及其以上不该有描边
+            for (int y = 22; y < 80 - rT; ++y) if (isStroke (x, y)) ++capRegion;  // gap 中段也不该有
+            if (isStroke (x, 80) || isStroke (x, 80 + 1)) ++bodyTopRegion;         // 柱体顶 y≈80 应有描边
+        }
+        std::printf ("      [cap-anchor] aboveCapStroke=%d gapMidStroke=%d bodyTopStroke=%d/%d\n",
+                     aboveCap, capRegion, bodyTopRegion, CW);
+        check (aboveCap == 0 && capRegion == 0, "border ignores the floating peak cap (no stroke at/above cap or in the gap)");
+        check (bodyTopRegion >= CW * 3 / 4, "border anchors to the bar BODY top, not the peak cap");
+    }
+
     std::printf (failures ? "FAILURES: %d\n" : "ALL PASS\n", failures);
     return failures ? 1 : 0;
 }

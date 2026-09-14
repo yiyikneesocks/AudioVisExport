@@ -409,11 +409,28 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
             if (rT != 0)
             {
                 std::vector<float> yEdge ((size_t) W, -1.0f);
+                // 顶面锚定"主体"而非 peak cap：peak cap 是浮在柱体上方、隔着 gap 的 1~2px 细线。
+                //   旧法"从顶取第一个实心像素"会把 cap 当成表面 → 描边跟着 cap 跑、盖到 cap 上方
+                //   （用户报：border 显示到 peak caps 上、二者本应无关）。改为：跳过顶部"薄且下方
+                //   隔着 gap 还有实体"的孤立细 run（=cap），把顶面对齐到真正的柱体顶。
+                const int capThresh = 4;   // 顶部 run ≤此高度且下面还有实体 → 判为浮动 cap，跳过
                 for (int x = 0; x < W; ++x)
                 {
                     int yt = -1;
-                    for (int y = 0; y < H; ++y)
-                        if (mA[(size_t) y * W + x] >= 128) { yt = y; break; }
+                    int y = 0;
+                    while (y < H)
+                    {
+                        while (y < H && mA[(size_t) y * W + x] < 128) ++y;   // 跳过 gap → run 起点
+                        if (y >= H) break;
+                        const int s = y;
+                        while (y < H && mA[(size_t) y * W + x] >= 128) ++y;  // run 终点
+                        const int runH = y - s;
+                        int y2 = y;
+                        while (y2 < H && mA[(size_t) y2 * W + x] < 128) ++y2; // 下方 gap
+                        const bool hasBelow = (y2 < H);                        // gap 后是否还有实体
+                        if (runH > capThresh || ! hasBelow) { yt = s; break; } // 认定为主体顶
+                        y = y2;                                                // 顶 run 太薄且下面有主体 → 当 cap 跳过
+                    }
                     if (yt < 0) continue;
                     const uint8 aTop = (yt == 0) ? 255 : mA[(size_t) (yt - 1) * W + x];
                     float ye = (float) yt;
