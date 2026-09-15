@@ -62,6 +62,9 @@ public:
         int   terraceLayers         = 24;     // v0.5.6 Terrace：堆叠层数
         float terraceDepthStep      = 3.0f;   // v0.5.6 Terrace：层间 y 抬高像素
         float terraceFade           = 0.55f;  // v0.5.6 Terrace：后层渐隐 0..1
+        int   spectrogramCellSize    = 4;      // v0.5.6 Spectrogram：方块粒度 px
+        float spectrogramScrollSpeed = 120.0f; // v0.5.6 Spectrogram：滚动 px/s
+        float spectrogramPersistence = 1.0f;   // v0.5.6 Spectrogram：拖尾保留度 0..1
 
         // 元素开关
         bool  drawGrid        = true;

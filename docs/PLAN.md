@@ -24,7 +24,11 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-15 19:5x）
+## 当前状态（最后更新：2026-09-15 20:2x）
+
+- **新样式 A1 频谱瀑布图 `spectrogram`（三样式收尾）**：`SpectrogramStyle.{h,cpp}` 内部持一张滚动 ARGB 画布：每帧按 `spectrogramScrollSpeed/fps` 左移并按 `spectrogramPersistence` 拖尾衰减、右端写入当前频谱列（`spectrogramCellSize` 方块化、低频在下、ColorMap 能量上色）；bandCount/尺寸变化重置（resize 安全）。3 新参数全链 + 工厂(spectrogram|waterfall|spectro) + CMake(4) + combo + CLI + 文档 + `vis_styles_test`。`styleSupportsOutline=false`。
+- **本轮 3 个新样式全部完成**：Ring / Terrace / Spectrogram（各自提交）。6 套回归全绿、Linux 双端干净。**待：Windows 交叉编译部署 + 用户肉眼验证（尤其瀑布滚动/旋转观感）；未 push（验证闸门）。**
+
 
 - **新样式 B6 地形剖面 `terrace`（已并入 Ring 之后）**：`TerraceStyle.{h,cpp}` 帧历史堆叠（front=最新），后→前逐层 y 抬高 + 渐隐伪 3D，ColorMap 上色；3 新参数 `terraceLayers/terraceDepthStep/terraceFade` 全链。工厂/CMake(AVX+3 测试目标)/GUI combo/CLI 帮助/文档/styleSupportsOutline=false。`vis_styles_test` 加 terrace 用例（ink、跨帧变化、resize 安全）。6 套回归全绿、Linux 双端干净。**待：Spectrogram；Windows 部署+肉眼验证；未 push。**
 

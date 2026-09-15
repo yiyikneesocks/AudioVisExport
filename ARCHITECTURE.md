@@ -157,7 +157,8 @@ AudioVisExport/
 │   │   ├── PolylineStyle.h/.cpp    # 折线图（直线段连接 + 填充 + 双层描边 + 虚线峰值）
 │   │   ├── CrystalStyle.h/.cpp     # 水晶/玻璃效果（3-pass：辉光 + 玻璃体 + 高光线）
 │   │   ├── RingStyle.h/.cpp        # 径向频谱（v0.5.6，非轴对齐）
-│   │   └── TerraceStyle.h/.cpp     # 地形剖面（v0.5.6，帧历史堆叠，非轴对齐）
+│   │   ├── TerraceStyle.h/.cpp     # 地形剖面（v0.5.6，帧历史堆叠）
+│   │   └── SpectrogramStyle.h/.cpp  # 频谱瀑布图（v0.5.6，滚动累积画布）
 │   │
 │   └── cli/                   # ===== CLI 入口 =====
 │       ├── CliArgs.h/.cpp          # 命令行参数解析（糖 flag + --set key=val + --config）
@@ -232,6 +233,7 @@ class SpectrumStyle {
 | CrystalStyle | `crystal` | 3-pass：辉光(bloom) + 玻璃体(渐变填充) + 高光线（验证多 pass 架构） |
 | RingStyle | `ring` | 径向频谱：band 值绕圆放射（外实时+内峰值双层），可旋转、ColorMap 上色；非轴对齐→`styleSupportsOutline=false`（v0.5.6）|
 | TerraceStyle | `terrace` | 地形剖面：过去 N 帧曲线层层堆叠（y 抬高 + 后层渐隐 伪3D），帧历史成员态；非轴对齐→描边不适用（v0.5.6）|
+| SpectrogramStyle | `spectrogram` | 频谱瀑布图：内部滚动 ARGB 画布，每帧左移+右端写新列，方块化、低频在下、能量上色，可拖尾淡出；帧历史成员态（v0.5.6）|
 
 **新增样式步骤**：
 1. 在 `source/styles/` 新建 `MyStyle.h/.cpp`，继承 `SpectrumStyle`

@@ -87,6 +87,9 @@ namespace
         rp.terraceLayers         = p.terraceLayers;
         rp.terraceDepthStep      = p.terraceDepthStep;
         rp.terraceFade           = p.terraceFade;
+        rp.spectrogramCellSize    = p.spectrogramCellSize;
+        rp.spectrogramScrollSpeed = p.spectrogramScrollSpeed;
+        rp.spectrogramPersistence = p.spectrogramPersistence;
         return rp;
     }
 

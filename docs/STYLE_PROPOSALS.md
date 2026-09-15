@@ -7,7 +7,7 @@
 
 | # | 样式 | 效果 | 预览 | 成本 |
 |---|---|---|---|---|
-| A1 | **频谱瀑布图 Spectrogram** | 时间从右往左滚动的像素方格热力图（复古像素风），频率纵轴、亮度=能量 | 维基：https://en.wikipedia.org/wiki/Spectrogram ；本地实物：跑 Y2Kmeter → Spectrogram 模块（`~/CodingProgram/AudioVisualizer/Y2Kmeter/source/ui/modules/SpectrogramModule.cpp`） | M |
+| A1 | ~~**频谱瀑布图 Spectrogram**~~ ✅已实现 v0.5.6（`spectrogram`：滚动方块热力图，方块粒度/滚动速度/拖尾） | 时间从右往左滚动的像素方格热力图（复古像素风），频率纵轴、亮度=能量 | 维基：https://en.wikipedia.org/wiki/Spectrogram ；本地实物：跑 Y2Kmeter → Spectrogram 模块（`~/CodingProgram/AudioVisualizer/Y2Kmeter/source/ui/modules/SpectrogramModule.cpp`） | M |
 | A2 | **3D 瀑布** | 瀑布图的伪 3D 透视版（Y2Kmeter 有 Spectrogram3D） | Y2Kmeter Spectrogram3D 模块 | L |
 | A3 | **示波器波形 / X-Y 李萨如** | 实时波形线；或左右声道合成的李萨如图形 | 维基：https://en.wikipedia.org/wiki/Lissajous_curve ；Y2Kmeter OscilloscopeModule | M |
 | A4 | **VU 指针表** | 复古模拟指针电平表（Y2Kmeter VuMeterModule），可作装饰图层 | Y2Kmeter 实物 | M |

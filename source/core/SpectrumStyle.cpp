@@ -9,6 +9,7 @@
 #include "../styles/CrystalStyle.h"
 #include "../styles/RingStyle.h"
 #include "../styles/TerraceStyle.h"
+#include "../styles/SpectrogramStyle.h"
 
 std::unique_ptr<SpectrumStyle> SpectrumStyle::create (const juce::String& name)
 {
@@ -31,5 +32,7 @@ std::unique_ptr<SpectrumStyle> SpectrumStyle::create (const juce::String& name)
         return std::make_unique<RingStyle>();
     if (lower == "terrace" || lower == "landscape" || lower == "terraces")
         return std::make_unique<TerraceStyle>();
+    if (lower == "spectrogram" || lower == "waterfall" || lower == "spectro")
+        return std::make_unique<SpectrogramStyle>();
     return nullptr;
 }

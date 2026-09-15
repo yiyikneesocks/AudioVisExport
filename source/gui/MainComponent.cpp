@@ -624,6 +624,9 @@ SpectrumStyle::RenderParams MainComponent::buildRp (const SpectrumParams& p)
     rp.terraceLayers         = p.terraceLayers;
     rp.terraceDepthStep      = p.terraceDepthStep;
     rp.terraceFade           = p.terraceFade;
+    rp.spectrogramCellSize    = p.spectrogramCellSize;
+    rp.spectrogramScrollSpeed = p.spectrogramScrollSpeed;
+    rp.spectrogramPersistence = p.spectrogramPersistence;
     rp.colorMap       = p.colorMap;
     return rp;
 }

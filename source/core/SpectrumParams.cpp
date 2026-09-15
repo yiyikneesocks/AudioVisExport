@@ -226,6 +226,9 @@ juce::String SpectrumParams::toJson() const
     s << "    \"terraceLayers\": " << terraceLayers << ",\n";
     s << "    \"terraceDepthStep\": " << terraceDepthStep << ",\n";
     s << "    \"terraceFade\": " << terraceFade << ",\n";
+    s << "    \"spectrogramCellSize\": " << spectrogramCellSize << ",\n";
+    s << "    \"spectrogramScrollSpeed\": " << spectrogramScrollSpeed << ",\n";
+    s << "    \"spectrogramPersistence\": " << spectrogramPersistence << ",\n";
     s << "    \"lineWidth\": " << lineWidth << ",\n";
     s << "    \"opacity\": " << opacity << ",\n";
     s << "    \"drawGrid\": " << (drawGrid ? "true" : "false") << ",\n";
@@ -499,6 +502,9 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
         p.terraceLayers         = juce::jlimit (4, 64,  getInt (vis, "terraceLayers", p.terraceLayers));
         p.terraceDepthStep      = juce::jlimit (1.0f, 12.0f, getFloat (vis, "terraceDepthStep", p.terraceDepthStep));
         p.terraceFade           = juce::jlimit (0.0f, 0.95f, getFloat (vis, "terraceFade", p.terraceFade));
+        p.spectrogramCellSize    = juce::jlimit (1, 16, getInt (vis, "spectrogramCellSize", p.spectrogramCellSize));
+        p.spectrogramScrollSpeed = juce::jlimit (10.0f, 600.0f, getFloat (vis, "spectrogramScrollSpeed", p.spectrogramScrollSpeed));
+        p.spectrogramPersistence = juce::jlimit (0.0f, 1.0f, getFloat (vis, "spectrogramPersistence", p.spectrogramPersistence));
         p.lineWidth     = getFloat (vis, "lineWidth", p.lineWidth);
         p.opacity       = getFloat (vis, "opacity", p.opacity);
         p.drawGrid      = getBool (vis, "drawGrid", p.drawGrid);
@@ -717,6 +723,9 @@ bool SpectrumParams::applyOverride (const juce::String& dottedKey,
     if      (key == "visual.terraceLayers")         { bool ok=true; int v=toInt(&ok); if(!ok) return setErr("invalid int"); terraceLayers=juce::jlimit(4,64,v); return true; }
     if      (key == "visual.terraceDepthStep")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); terraceDepthStep=juce::jlimit(1.0f,12.0f,v); return true; }
     if      (key == "visual.terraceFade")           { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); terraceFade=juce::jlimit(0.0f,0.95f,v); return true; }
+    if      (key == "visual.spectrogramCellSize")   { bool ok=true; int v=toInt(&ok); if(!ok) return setErr("invalid int"); spectrogramCellSize=juce::jlimit(1,16,v); return true; }
+    if      (key == "visual.spectrogramScrollSpeed"){ bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); spectrogramScrollSpeed=juce::jlimit(10.0f,600.0f,v); return true; }
+    if      (key == "visual.spectrogramPersistence") { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); spectrogramPersistence=juce::jlimit(0.0f,1.0f,v); return true; }
     if      (key == "visual.drawGrid")       { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); drawGrid=v; return true; }
     if      (key == "visual.drawAxisLabels") { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); drawAxisLabels=v; return true; }
     if      (key == "visual.primaryColor")   { bool ok; auto c=parseColour(val, &ok); if(!ok) return setErr("invalid color (#rrggbb / #aarrggbb)"); primaryColor=c; return true; }

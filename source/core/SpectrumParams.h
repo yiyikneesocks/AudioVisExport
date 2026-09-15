@@ -172,6 +172,10 @@ struct SpectrumParams
     int   terraceLayers          = 24;     // 堆叠层数（=保留历史帧数）4..64
     float terraceDepthStep       = 3.0f;   // 每层沿 y 抬高的像素（透视间距）
     float terraceFade            = 0.55f;  // 后层渐隐强度 0..1（越大越淡）
+    // v0.5.6 新样式：频谱瀑布图 Spectrogram（时间右→左滚动方块热力图）
+    int   spectrogramCellSize       = 4;     // 方块像素粒度 1..16
+    float spectrogramScrollSpeed    = 120.0f;// 滚动速度 px/s（每帧推进 = speed/fps）
+    float spectrogramPersistence    = 1.0f;  // 拖尾保留度 0..1（1=几乎不淡，0=快速淡出）
     bool  drawGrid        = false;     // 可视化视频默认不画坐标轴（需要时 CLI 开 --draw-grid on）
     bool  drawAxisLabels  = false;     // 同上（--draw-axis-labels on）
 
