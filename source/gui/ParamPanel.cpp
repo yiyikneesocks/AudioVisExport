@@ -108,18 +108,20 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
                                    "  bar / bar-line: falling peak caps (two-sided with a baseline).\n"
                                    "  y2k-line / polyline / crystal: the dashed peak-hold line.");
     // v0.5.6 task2：峰帽粗细 / 线家族峰线 dotted↔完整 / 有描边时帽=边框同色同宽
-    peakCapWidthSliderPtr = addSlider ("Peak cap width", 0.5, 24.0, 0.5, 1.0,
+    peakCapWidthSliderPtr = addSlider ("Peak cap thickness", 0.5, 24.0, 0.5, 1.0,
                [this] { return (double) params.peakCapWidth; },
                [this] (double v) { params.peakCapWidth = (float) v; notify(); });
-    peakCapWidthSliderPtr->setTooltip ("Peak-cap / peak-line thickness (px). For dotted line styles this\n"
-               "is the DOT diameter - gaps auto-widen so dots never merge.");
+    peakCapWidthSliderPtr->setTooltip ("Peak-cap / peak-line thickness (px) - INDEPENDENT of the outline\n"
+               "border width (separate knob). For dotted line styles this is the DOT diameter;\n"
+               "gaps auto-widen so dots never merge when it grows.");
     peakLineDottedPtr = addToggle ("   Peak line dotted (line styles)", params.peakLineDotted,
                [this] (bool v) { params.peakLineDotted = v; notify(); });
     peakLineDottedPtr->setTooltip ("y2k / polyline / crystal peak-hold line: ON = dotted, OFF = a solid curve.");
     peakCapAsBorderPtr = addToggle ("   Peak cap = border style (with mask)", params.peakCapAsBorder,
                [this] (bool v) { params.peakCapAsBorder = v; notify(); });
     peakCapAsBorderPtr->setTooltip ("With a mask outline on:\n"
-               "  ON  = peak cap drawn in the bar's border colour+width (reads as an outline).\n"
+               "  ON  = peak cap drawn in the bar's border COLOUR (its thickness stays the\n"
+               "        independent 'Peak cap thickness' above - it does NOT follow the border).\n"
                "  OFF = peak cap becomes part of the mask, showing the mask image through it.");
     // v0.5.4 #4：基线轴（0=底部；0.5=镜像；画布内可拖 + 吸附）
     auto* capPullSlider = addSlider ("Cap pull", 0, 100, 1, 1.0,

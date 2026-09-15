@@ -24,7 +24,12 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-15 02:0x）
+## 当前状态（最后更新：2026-09-15 15:4x）
+
+- **v0.5.5 已发版**（版本串全 bump、history/release-notes/ARCHITECTURE 同步、tag + GitHub Release 见本次发版；本文件转入下一版 v0.5.6 滚动）。
+  v0.5.5 主体＝蒙版描边体系重构 + peak cap 独立外观（含本次新增独立 "Peak cap thickness" 旋钮、修正"边框样式只跟随颜色、不跟随宽度"的误导文案）+ 双向多选 + config.json。
+- **下一版 v0.5.6 候选**（待用户排优先级）：命令式撤销/重做 + Ctrl+C/V 复制粘贴（见 ROADMAP）；描边可选"整条闭合轮廓(marching-squares)单描边"进一步统一 per-edge 宽度模型。
+
 
 - **新增通用 GitHub 推送文档 + 脚本（用户要求，跨工程参考）**：
   · `docs/GITHUB_PUSH.md` = 通用流程：职责分工（用户配一次 token / agent 只跑命令）· fine-grained PAT 创建 ·

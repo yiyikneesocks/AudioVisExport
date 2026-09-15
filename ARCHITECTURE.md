@@ -30,6 +30,7 @@
 >
 > | 文档 / 项目版本 | 日期 | tag（可）| 里程碑 |
 > |---|---|---|---|
+> | v0.5.5 | 2026-09-15 | `v0.5.5`（已 push + Release）| **蒙版描边体系重构**（三边独立/开关组 UI/perBar 颜色大小写 bug 修复/法向等宽抗锯齿/bar 向内闭合带/峰帽解耦-裁剪含帽 vs 描边无帽 + 边框色或穿透两模式/阴影暂禁）+ **peak cap 外观**（独立 Peak cap thickness·y2k 点线↔完整曲线·点距自适应）+ **画布↔图层列表双向多选**（Ctrl+A/点击/组拖/批删，修塌陷 + Windows 顶框不显示锁冲突）+ **config.json 默认值**（启动自动加载·稀疏不回写·Set as default 全量快照）+ CJK 拖放 `DragQueryFileW` + 图层列表 `updateContent` + **文档/工具**（`AGENTS.md` 自动注入硬规则·废 `PLAN_vX.Y.Z`·HISTORY 拆 `docs/history/`·`inbox.py` 多行块 prune·通用推送 `ghpush.sh`+`GITHUB_PUSH.md`） |
 > | v0.5.4 | 2026-09-12 | `v0.5.4`（已 push + Release）| **ColorMap**（gradient/rainbow/solid 全管线）+ ~~bar-mirror 镜像柱~~（#3.1 又删除：与"bar + 基线轴 50%"重复，保留别名兼容）+ **CrystalStyle v2 真 bloom**（Gaussian blur）+ **频谱蒙版图片**（独立 VisTransform + 平均色描边 + 编辑模式 + vis_mask_test）+ **Tabbed UI**（4 tab）+ **Baseline axis**（baselineY 可拖动+snap）+ **Bar 布局 pitch 模型**（gap=pitch−width + bandCount 联动）+ **Bar-line 峰帽 v3**（连贯分段+capPull+双面 cap）+ **Line-only 切换** + **Scale snapping** + **Crash reporter**（MiniDump+txt，Windows）+ **mp3 软件解码**（`JUCE_USE_MP3AUDIOFORMAT`，5 格式实测通过）+ **peak-caps 全样式跟随基线轴**（#3，`vis_peaks_test`）+ **compose 描边越界读根除**（#1b）+ **makeContainTransform pos 修正** + **收件箱三文件协议** + **style proposals + Y2Kmeter audit docs** + **（09-11 追加）peak-caps 双侧跟随轴 #3 / crystal 两侧亮度 #E / 选项卡一行多控件 + 未登记即隐藏安全网 #G / 拖放三根因 + 可见图层栈 #H / `vis_tabs_test`** |
 > | v0.5.3 | 2026-09-09 | `v0.5.3`（已 push + Release）| **锚定缩放修正**（旋转后非等比拉伸不再斜切成平行四边形：合成序 S·R→R·S；对角漂移修复）+ **CAD 吸附辅助线 + 9 特征点对齐**（边对边/角对角）+ **范围内外视觉区分**（超范围内容变暗发灰）+ **空格播放/暂停** + 峰值帽二阶下落 `peakDecayAccelDbPerSec2` + 键盘删除兜底/面板实时刷新 + 移除 Above spectrum 按钮 + 频谱自吸附修复 |
 > | v0.5.2 | 2026-09-07 | `v0.5.2`（已 push + Release）| **统一图层模型**（频谱=真图层：可删除/一键恢复/参与 z 序，严格命中序修复"加图后频谱无法拖放"）+ 对边锚定缩放（拖角对角钉死/拖边对边钉死）+ 吸附系统（旋转 90°×n / 移动边缘对齐，可开关）+ Delete/Backspace 删除图层 |
@@ -1096,7 +1097,7 @@ SpectrumParams.h 默认值
 ---
 
 
-*文档版本：v0.5.5  ·  最后更新：2026-09-12（v0.5.4 已发版；v0.5.5 增量：#5 描边实时平均色四件套 / 图层列表三点 / 快捷键 seek·undo·select）*
+*文档版本：v0.5.5  ·  最后更新：2026-09-15（v0.5.5 已发版：描边体系重构 / 峰帽外观可调 / 双向多选 / config.json 默认值 / 崩溃与稳健性 / 文档工具链大整）*
 *维护者：AudioVisExport 项目（GPL-3.0）*
 *协作规则：任何功能修改后，必须在对应版本档 `docs/history/<系列>/<版本>.md` 追加一条（发版则新建该档 + `HISTORY.md` §2 索引行），并在文档版本号处 bump。*
 *发布 / 验证闸门 / 纪律 / INBOX 等硬规则见工程根 `AGENTS.md`（每次会话自动注入）；变更日志按版归档在 `docs/history/`，`docs/HISTORY.md` 为索引。*
