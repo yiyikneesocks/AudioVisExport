@@ -34,7 +34,12 @@
 #   GH_PUSH_RETRY         默认 5
 #   GH_PUSH_CRED_DIR      独立凭据目录，默认 $HOME/.config/ghpush
 #   GH_PUSH_CRED_FILE     直接指定凭据文件路径（覆盖 slug 推导）
-#   GH_ALLOW_ANY_TOKEN=1  跳过 token 白名单（GitHub 改格式时用）
+#   GH_ALLOW_ANY_TOKEN=1          跳过 token 白名单（GitHub 改格式时用）
+#
+# 版本：v1.1（2026-09-15）修复"空仓首推误判已同步"——旧版 ahead 判断在本地尚无
+#   origin/<branch> tracking ref 时 rev-list 报错按 0 处理、直接跳过分支推送；
+#   现在无 tracking ref 一律视为需推送（push 本身幂等，安全）。
+# 母本：~/.config/opencode/scripts/ghpush.sh —— 各工程以本文件为准对齐自己的 scripts/ghpush.sh。
 # =============================================================================
 set -euo pipefail
 
@@ -59,7 +64,7 @@ while [ $# -gt 0 ]; do
     --tag)         TAG="${2:?--tag 需要值}"; shift ;;
     --username)    USERNAME="${2:?--username 需要值}"; shift ;;
     --credential-file) CRED_FILE="${2:?--credential-file 需要值}"; shift ;;
-    --help|-h)     sed -n '2,44p' "$0"; exit 0 ;;
+    --help|-h)     awk 'NR>1 && /^#/{sub(/^# ?/,""); print; next} NR>1{exit}' "$0"; exit 0 ;;
     *)             die "未知参数：$1（--help 看用法）" ;;
   esac
   shift
@@ -207,8 +212,13 @@ case "$ACTION" in
     has_credential || die "本仓库无凭据（$CRED_FILE）。请让用户先跑：$0 --setup-token"
     GIT_TERMINAL_PROMPT=0 gitx ls-remote --heads "$REMOTE" >/dev/null 2>&1 \
       || die "ls-remote 失败（凭据/网络/TLS）。可 GIT_BIN=<openssl-git> 重跑，或 --setup-token。"
-    ahead="$("$GIT_BIN" rev-list --count "$REMOTE/$BRANCH..$BRANCH" 2>/dev/null || echo 0)"
-    if [ "${ahead:-0}" -gt 0 ]; then
+    # v1.1 fix: 无本地 tracking ref（空仓/新分支首推）视为需推送，push 幂等安全
+    if "$GIT_BIN" rev-parse -q --verify "refs/remotes/$REMOTE/$BRANCH" >/dev/null 2>&1; then
+      ahead="$("$GIT_BIN" rev-list --count "$REMOTE/$BRANCH..$BRANCH")"
+    else
+      ahead=1
+    fi
+    if [ "${ahead:-1}" -gt 0 ]; then
       n=0
       until gitx push "$REMOTE" "$BRANCH"; do
         n=$((n+1)); [ "$n" -ge "$RETRY" ] && die "push $BRANCH 连续失败 $n 次（多为网络/TLS）。"
