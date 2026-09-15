@@ -33,6 +33,7 @@ bool SpectrumMask::styleSupportsOutline (const juce::String& style) noexcept
 {
     const juce::String s = style.toLowerCase();
     if (s == "ring" || s == "radial" || s == "circle"
+        || s == "ringline" || s == "ring-line" || s == "ringlinebar" || s == "ring-line-bar"
         || s == "spectrogram" || s == "waterfall" || s == "spectro"
         || s == "terrace" || s == "landscape")
         return false;                       // 非轴对齐轮廓：不适用三边描边

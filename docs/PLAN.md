@@ -24,7 +24,10 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-15 20:5x）
+## 当前状态（最后更新：2026-09-15 21:2x）
+
+- **Ring 家族新增两变体（独立样式名）**：`ringline`（极坐标闭合折线：外实时环+内峰值环，无柱）、`ringlinebar`（放射柱 + 柱顶闭合线 = 极坐标 bar-line）。复用 ring 全参数（旋转/内外圈/内径/辐条宽/lineWidth/ColorMap），无新参数；`styleSupportsOutline=false`。工厂/构建/GUI combo/CLI/`vis_styles_test`/文档全接。现 ring 家族可选：`ring`(柱)/`ringline`(线)/`ringlinebar`(柱+线)；terrace、spectrogram 仍禁用。6 套回归全绿、双端干净、部署 `AudioVisGUI_09160009.exe`。
+
 
 - **按用户要求：禁用 Terrace + Spectrogram**（观感问题大）——从工厂/构建(CMake)/GUI combo/CLI/测试/文档全部移除注册，**源文件保留**便于日后重启。ring 保留。
 - **Ring 新参数：内圈/外圈独立开关** `ringOuterOn` / `ringInnerOn`（取代旧 `ringLayers` 1/2），全链（Params+toJson/fromJson/override+RenderParams+双 buildRp+RingStyle 渲染门控）。config/CLI 可设。
