@@ -83,7 +83,7 @@ int main()
 {
     testStyle ("ring",   true);
     testStyle ("ringline",   true);
-    testStyle ("ringlinebar", true);
+    testStyle ("ring:bar-line", true);
     std::printf (failures ? "FAILURES: %d\n" : "ALL PASS\n", failures);
     return failures ? 1 : 0;
 }

@@ -158,7 +158,7 @@ AudioVisExport/
 │   │   ├── CrystalStyle.h/.cpp     # 水晶/玻璃效果（3-pass：辉光 + 玻璃体 + 高光线）
 │   │   ├── RingStyle.h/.cpp        # 径向频谱（v0.5.6，非轴对齐）
 │   │   ├── RingLineStyle.h/.cpp    # 极坐标闭合线谱（v0.5.6）
-│   │   ├── RingLineBarStyle.h/.cpp # 极坐标 柱+柱顶闭合线（v0.5.6）
+│   │   ├── RingLineBarStyle.h/.cpp # 极坐标 bar-line（柱顶斜接连续脊，v0.5.6）
 │   │   ├── TerraceStyle.h/.cpp     # 地形剖面（v0.5.6，暂禁用：不在构建/工厂）
 │   │   └── SpectrogramStyle.h/.cpp  # 频谱瀑布图（v0.5.6，暂禁用：不在构建/工厂）
 │   │
@@ -235,7 +235,7 @@ class SpectrumStyle {
 | CrystalStyle | `crystal` | 3-pass：辉光(bloom) + 玻璃体(渐变填充) + 高光线（验证多 pass 架构） |
 | RingStyle | `ring` | 径向频谱：band 值绕圆放射，**外圈 `ringOuterOn` / 内圈(峰值) `ringInnerOn` 独立开关**，可旋转、ColorMap 上色；非轴对齐→`styleSupportsOutline=false`（v0.5.6）|
 | RingLineStyle | `ringline` | 极坐标"线"谱：各带值连成一圈闭合折线（外实时环+内峰值环），无柱；复用 ring 几何/旋转/lineWidth；描边不适用（v0.5.6）|
-| RingLineBarStyle | `ringlinebar` | 极坐标 bar-line：放射柱（内外圈）+ 柱顶闭合连线；复用 ring 参数；描边不适用（v0.5.6）|
+| RingLineBarStyle | `ring:bar-line` | 极坐标 bar-line：每段扇形外缘为"本带→邻带"斜弦，柱顶斜接成连续脊线（非闭合线）；内外圈独立、复用 ring 参数；描边不适用（v0.5.6）|
 | ~~TerraceStyle~~ | `terrace` | **暂禁用**（v0.5.6 观感问题大；源文件保留、已从工厂/构建移除，未注册）|
 | ~~SpectrogramStyle~~ | `spectrogram` | **暂禁用**（同上；源文件保留、未注册）|
 

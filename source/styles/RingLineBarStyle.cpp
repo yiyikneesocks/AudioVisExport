@@ -1,5 +1,5 @@
 // =============================================================================
-// RingLineBarStyle.cpp — 柱 + 柱顶闭合线（极坐标 bar-line）
+// RingLineBarStyle.cpp — 极坐标 bar-line（斜接扇形条带，柱顶连续）
 // =============================================================================
 #include "RingLineBarStyle.h"
 #include "../core/ColorMap.h"
@@ -27,20 +27,20 @@ void RingLineBarStyle::render (juce::Graphics& g,
 
     const float twoPi = 6.2831853f;
     const float step  = twoPi / (float) N;
-    const float thick = step * 0.5f * juce::jlimit (0.05f, 1.0f, rp.ringBarThicknessRatio);
     const float baseA = -1.5707963f + spinDeg_ * 0.0174533f;
     const auto P = [&] (float ang, float r) { return juce::Point<float> (cx + r * std::cos (ang), cy + r * std::sin (ang)); };
 
     ColorMap cm; cm.configure (rp.colorMap, rp.primary, rp.secondary, rp.peak);
     const bool useMap = ! cm.isSolid();
-    const float lw = juce::jmax (1.0f, rp.lineWidth);
 
+    // 每条带一个外半径值；相邻段用 [i]→[i+1] 的斜弦顶 → 脊线连续（bar-line）
     std::vector<float> nv ((size_t) N), rOut ((size_t) N);
     for (int i = 0; i < N; ++i)
     {
-        nv[(size_t) i]    = juce::jlimit (0.0f, 1.0f, frame.normalized[(size_t) i]);
-        rOut[(size_t) i]  = innerR + nv[(size_t) i] * (maxR - innerR);
+        nv[(size_t) i] = juce::jlimit (0.0f, 1.0f, frame.normalized[(size_t) i]);
+        rOut[(size_t) i] = innerR + nv[(size_t) i] * (maxR - innerR);
     }
+    const auto nextIdx = [N] (int i) { return (i + 1) % N; };   // 首尾相接成完整一圈
 
     if (rp.drawGrid)
     {
@@ -49,46 +49,46 @@ void RingLineBarStyle::render (juce::Graphics& g,
         { const float r = innerR + (maxR - innerR) * f; g.drawEllipse (juce::Rectangle<float> (cx - r, cy - r, r + r, r + r), 1.0f); }
     }
 
-    // 外层柱（实时）
+    // 外圈：斜接扇形（实时）
     if (rp.ringOuterOn)
     for (int i = 0; i < N; ++i)
     {
-        const float a = baseA + (float) i * step, a0 = a - thick, a1 = a + thick, r1 = rOut[(size_t) i];
+        const int  j  = nextIdx (i);
+        const float aL = baseA + (float) i * step, aR = baseA + (float) j * step;
+        const float rL = rOut[(size_t) i], rR = rOut[(size_t) j];
         juce::Path quad;
-        quad.startNewSubPath (P (a0, innerR)); quad.lineTo (P (a1, innerR));
-        quad.lineTo (P (a1, r1));               quad.lineTo (P (a0, r1)); quad.closeSubPath();
+        quad.startNewSubPath (P (aL, innerR));
+        quad.lineTo (P (aR, innerR));
+        quad.lineTo (P (aR, rR));
+        quad.lineTo (P (aL, rL));
+        quad.closeSubPath();
         g.setColour (useMap ? cm.colourForBand (i, N, nv[(size_t) i]) : rp.primary);
         g.fillPath (quad);
     }
 
-    // 内层柱（峰值）
+    // 内圈：峰值斜接扇形
     if (rp.ringInnerOn && rp.barParticles)
     {
-        const float span = rp.maxDb - rp.minDb, outer = innerR * 0.90f, inr = innerR * 0.30f;
+        const float span = rp.maxDb - rp.minDb;
+        const float hi = innerR * 0.90f, lo = innerR * 0.30f;
+        std::vector<float> pk ((size_t) N);
         for (int i = 0; i < N; ++i)
         {
             const float pn = (span > 1e-3f) ? juce::jlimit (0.0f, 1.0f, (frame.peakDb[(size_t) i] - rp.minDb) / span) : 0.0f;
-            const float a = baseA + (float) i * step, a0 = a - thick, a1 = a + thick;
-            const float r0 = outer, r1 = outer - pn * (outer - inr);
+            pk[(size_t) i] = hi - pn * (hi - lo);   // 峰值越大越往圆心
+        }
+        for (int i = 0; i < N; ++i)
+        {
+            const int j = nextIdx (i);
+            const float aL = baseA + (float) i * step, aR = baseA + (float) j * step;
             juce::Path quad;
-            quad.startNewSubPath (P (a0, r0)); quad.lineTo (P (a1, r0));
-            quad.lineTo (P (a1, r1));          quad.lineTo (P (a0, r1)); quad.closeSubPath();
+            quad.startNewSubPath (P (aL, hi));
+            quad.lineTo (P (aR, hi));
+            quad.lineTo (P (aR, pk[(size_t) j]));
+            quad.lineTo (P (aL, pk[(size_t) i]));
+            quad.closeSubPath();
             g.setColour (cm.peakColor().withAlpha (0.9f));
             g.fillPath (quad);
         }
-    }
-
-    // 柱顶闭合线（连起各柱顶，极坐标 bar-line 的"线"）
-    if (rp.ringOuterOn)
-    {
-        juce::Path ridge;
-        for (int i = 0; i < N; ++i)
-        {
-            const auto pt = P (baseA + (float) i * step, rOut[(size_t) i]);
-            if (i == 0) ridge.startNewSubPath (pt); else ridge.lineTo (pt);
-        }
-        ridge.closeSubPath();
-        g.setColour (rp.secondary);
-        g.strokePath (ridge, juce::PathStrokeType (lw));
     }
 }

@@ -32,7 +32,8 @@ std::unique_ptr<SpectrumStyle> SpectrumStyle::create (const juce::String& name)
         return std::make_unique<RingStyle>();
     if (lower == "ringline" || lower == "ring-line" || lower == "ringlineo")
         return std::make_unique<RingLineStyle>();
-    if (lower == "ringlinebar" || lower == "ring-line-bar" || lower == "ringbarline")
+    if (lower == "ring:bar-line" || lower == "ringlinebar" || lower == "ring-line-bar"
+        || lower == "ringbarline" || lower == "ring-barline")
         return std::make_unique<RingLineBarStyle>();
     // v0.5.6：terrace / spectrogram 暂时禁用（观感问题大）；源文件保留但从工厂/构建移除，未来可再启用。
     return nullptr;
