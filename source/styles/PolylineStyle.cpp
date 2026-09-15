@@ -176,7 +176,7 @@ void PolylineStyle::render (juce::Graphics& g,
     // 3) 峰值折线虚线
     // #5：基线轴模式下峰线跟随上臂映射
     // v0.5.4 #3.3：改由 "Peak caps" 开关统一控制（此前对本样式置灰、无法关闭）
-    if (! rp.barParticles) return;
+    if (! rp.barParticles || (! rp.peakTopOn && ! rp.peakBottomOn)) return;
 
     auto peakY = [&] (float db) -> float
     {
@@ -199,6 +199,7 @@ void PolylineStyle::render (juce::Graphics& g,
         peakPath.lineTo (x, peakY (frame.peakDb[i]));
     }
     // v0.5.6 task2：peakLineDotted=false → 完整曲线；true → 点线，粗细=点直径且 gap 随直径同步放大
+    if (! (rp.peakTopOn && a < 0.999f)) peakPath.clear();   // 上峰关/轴到顶→不画上峰线
     const float peakW = juce::jmax (1.0f, rp.peakCapWidth);
     g.setColour (rp.peak.withAlpha (0.75f));
     if (rp.peakLineDotted)
@@ -216,7 +217,7 @@ void PolylineStyle::render (juce::Graphics& g,
             juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 
-    if (a > 0.001f)
+    if (rp.peakBottomOn && a > 0.001f)
     {
         juce::Path peakDnPath;
         peakDnPath.startNewSubPath (x0, peakYDn (frame.peakDb[0]));

@@ -162,7 +162,7 @@ void BarStyle::render (juce::Graphics& g,
     }
 
     // 峰值帽（可选）：peakDb → normalized 近似 → Y 位置，画 2px 水平线
-    if (rp.barParticles)
+    if (rp.barParticles && (rp.peakTopOn || rp.peakBottomOn))
     {
         g.setColour (rp.peak.withAlpha (0.80f));
         const float capW_px = juce::jmax (1.0f, rp.peakCapWidth);   // v0.5.6：帽线粗细（fillRect 高度）
@@ -180,13 +180,10 @@ void BarStyle::render (juce::Graphics& g,
             float capW = barW + gap * 0.5f;
             // v0.5.4 #3.2：帽必须与柱顶同构地过基线轴映射（旧码用原始 pn → 帽根本不跟轴动）。
             //   上臂帽 = baselineTop(pn)；轴不在端点时下臂帽 = baselineBottom(pn)（双侧帽）。
-            float y = normalizedToY_ (baselineTop (pn, a), canvas);
-            capLine (y, capX, capX + capW);
-            if (a > 0.001f)
-            {
-                const float y2 = normalizedToY_ (baselineBottom (pn, a), canvas);
-                capLine (y2, capX, capX + capW);
-            }
+            if (rp.peakTopOn && a < 0.999f)                    // 上臂峰（轴拉到最顶时无上臂→不画）
+            { float y = normalizedToY_ (baselineTop (pn, a), canvas); capLine (y, capX, capX + capW); }
+            if (rp.peakBottomOn && a > 0.001f)                 // 下臂峰（轴拉到最底时无下臂→不画）
+            { const float y2 = normalizedToY_ (baselineBottom (pn, a), canvas); capLine (y2, capX, capX + capW); }
         }
     }
 }

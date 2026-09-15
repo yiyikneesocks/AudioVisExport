@@ -101,13 +101,18 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     barPitchSlider->setTooltip ("Pitch = target band width as % of canvas width.\n"
                                 "Band count = floor(100 / pitch) — a small remainder may\n"
                                 "stay at the right edge. Moving Band count sets pitch = 100/N.");
-    peakCapsTogglePtr = addToggle ("Peak caps", params.barParticles,
-               [this] (bool v) { params.barParticles = v; notify(); });
+    peakTopTogglePtr = addToggle ("Peak (top arm)", params.peakTopOn,
+               [this] (bool v) { params.peakTopOn = v; notify(); });
+    peakBottomTogglePtr = addToggle ("   Peak (bottom arm)", params.peakBottomOn,
+               [this] (bool v) { params.peakBottomOn = v; notify(); });
     // v0.5.4 #3.3：此开关原先只对 bar 系有效；现在全样式统一——
     //   bar / bar-line = 峰值帽横线；y2k-line / polyline / crystal = 峰值保持虚线。
-    peakCapsTogglePtr->setTooltip ("Show peak-hold markers.\n"
-                                   "  bar / bar-line: falling peak caps (two-sided with a baseline).\n"
-                                   "  y2k-line / polyline / crystal: the dashed peak-hold line.");
+    peakTopTogglePtr->setTooltip ("Upper-arm peak markers (caps for bar / line for y2k..).\n"
+               "Auto-disabled when the Baseline axis sits at the very top (no upper arm).\n"
+               "Ring styles use their own ring peak switches.");
+    peakBottomTogglePtr->setTooltip ("Lower-arm peak markers. Only meaningful with a mid-height\n"
+               "baseline; auto-disabled at the very bottom (no lower arm).\n"
+               "Ring styles use their own ring peak switches.");
     // v0.5.6 task2：峰帽粗细 / 线家族峰线 dotted↔完整 / 有描边时帽=边框同色同宽
     peakCapWidthSliderPtr = addSlider ("Peak cap thickness", 0.5, 24.0, 0.5, 1.0,
                [this] { return (double) params.peakCapWidth; },
@@ -131,10 +136,10 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     capPullSliderPtr = capPullSlider;
     capPullSlider->setTooltip ("Peak-cap mutual pull strength (0..100). 0 = no pulling:\n"
                                "caps fall per-band with the legacy long-slope behaviour.");
-    auto* baselineSlider = addSlider ("Baseline %", 0, 100, 1, 1.0,
+    baselineSliderPtr = addSlider ("Baseline %", 0, 100, 1, 1.0,
                [this] { return (double) params.baselineY * 100.0; },
                [this] (double v) { params.baselineY = (float) (v / 100.0); notify(); });
-    baselineSlider->setTooltip ("Baseline axis: bars grow from this line, split above/below\n"
+    baselineSliderPtr->setTooltip ("Baseline axis: bars grow from this line, split above/below\n"
                                 "proportionally (50% = mirror look). Also draggable on the canvas\n"
                                 "with snapping (50% hints \"mirror\").");
     // v0.5.4 #6：line 系只画线
@@ -740,7 +745,8 @@ void ParamPanel::syncAllFromParams()
     syncBarLayoutSliders();      // 三联动（width/gap/pitch）互相回填
     syncMaskControls();          // 蒙版：勾选/颜色/四边开关+厚度/fps/平滑（已含 #5 控件）
     // 少数独立 toggle 直接读 params（不进 sliderGetters）
-    if (peakCapsTogglePtr  != nullptr) peakCapsTogglePtr ->setToggleState (params.barParticles, juce::dontSendNotification);
+    if (peakTopTogglePtr    != nullptr) peakTopTogglePtr   ->setToggleState (params.peakTopOn,    juce::dontSendNotification);
+    if (peakBottomTogglePtr != nullptr) peakBottomTogglePtr->setToggleState (params.peakBottomOn,   juce::dontSendNotification);
     if (peakLineDottedPtr  != nullptr) peakLineDottedPtr ->setToggleState (params.peakLineDotted, juce::dontSendNotification);
     if (peakCapAsBorderPtr != nullptr) peakCapAsBorderPtr->setToggleState (params.peakCapAsBorder, juce::dontSendNotification);
     if (lineOnlyTogglePtr  != nullptr) lineOnlyTogglePtr ->setToggleState (params.lineOnly,    juce::dontSendNotification);
@@ -1240,7 +1246,12 @@ void ParamPanel::refreshStyleDependentControls()
                                           if (auto* l = rowLabels[barGapSliderPtr].get()) l->setEnabled (barFam); }
     if (barPitchSliderPtr != nullptr)  { barPitchSliderPtr->setEnabled (barFam);
                                           if (auto* l = rowLabels[barPitchSliderPtr].get()) l->setEnabled (barFam); }
-    if (peakCapsTogglePtr != nullptr)   peakCapsTogglePtr->setEnabled (true);   // #3.3：全样式有效
+    const bool isRing = st.startsWithIgnoreCase ("ring");   // ring:bar / ringline / ring:bar-line
+    const float  aX   = params.baselineY;
+    if (peakTopTogglePtr    != nullptr) peakTopTogglePtr   ->setEnabled (! isRing && aX < 0.999f);
+    if (peakBottomTogglePtr != nullptr) peakBottomTogglePtr->setEnabled (! isRing && aX > 0.001f);
+    if (baselineSliderPtr   != nullptr) { baselineSliderPtr->setEnabled (! isRing);
+                                          if (auto* l = rowLabels[baselineSliderPtr].get()) l->setEnabled (! isRing); }
     if (capPullSliderPtr != nullptr)   { capPullSliderPtr->setEnabled (st == "bar-line");
                                           if (auto* l = rowLabels[capPullSliderPtr].get()) l->setEnabled (st == "bar-line"); }
     if (lineOnlyTogglePtr != nullptr)   lineOnlyTogglePtr->setEnabled (lineFam);

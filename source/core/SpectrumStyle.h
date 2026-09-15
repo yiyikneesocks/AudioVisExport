@@ -55,11 +55,19 @@ public:
         float peakCapWidth   = 2.0f;   // v0.5.6：峰帽线粗 / y2k 点线点直径（px）
         bool  peakLineDotted = true;   // v0.5.6：line 系峰线 dotted(true) / 完整曲线(false)
         bool  peakCapAsBorder= false;  // v0.5.6：帽=边框同色同宽(true) / 蒙版穿透(false)
+        bool  peakTopOn      = true;   // v0.5.6：普通模式上臂峰
+        bool  peakBottomOn   = true;   // v0.5.6：普通模式下臂峰
         float ringRotationDegPerSec = 12.0f;  // v0.5.6 Ring：旋转 deg/s（可负）
-        float ringInnerRadiusRatio  = 0.28f;  // v0.5.6 Ring：内圈空心半径比
+        float ringBaseRadiusRatio  = 0.28f;  // v0.5.6 Ring：内圈空心半径比
         float ringBarThicknessRatio = 0.6f;   // v0.5.6 Ring：辐条角宽比
         bool  ringOuterOn           = true;   // v0.5.6 Ring：外圈开关
-        bool  ringInnerOn           = true;   // v0.5.6 Ring：内圈开关
+        bool  ringInnerOn           = true;   // v0.5.6 Ring：内圈(镜像)开关
+        float ringOuterHeightScale  = 1.0f;   // v0.5.6 Ring：外圈高度拉伸
+        float ringInnerHeightScale  = 1.0f;   // v0.5.6 Ring：内圈高度拉伸
+        float ringMidGapRatio       = 0.12f;  // v0.5.6 Ring：基圆处内/外间隙
+        bool  ringPeakCapOn         = true;   // v0.5.6 Ring：外圈峰值帽
+        bool  ringPeakLineOn        = true;   // v0.5.6 Ring：外圈峰值线
+        bool  ringInnerPeakOn       = false;  // v0.5.6 Ring：内圈峰值(默认关)
         int   terraceLayers         = 24;     // v0.5.6 Terrace：堆叠层数
         float terraceDepthStep      = 3.0f;   // v0.5.6 Terrace：层间 y 抬高像素
         float terraceFade           = 0.55f;  // v0.5.6 Terrace：后层渐隐 0..1

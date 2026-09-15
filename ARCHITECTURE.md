@@ -233,9 +233,9 @@ class SpectrumStyle {
 | BarStyle | `bar` | 每带一根柱 + 垂直渐变填充 + 柱顶描边 + 峰值帽 |
 | PolylineStyle | `polyline` | 直线段连接（无平滑）+ 半透明填充 + 双层描边 + 虚线峰值 |
 | CrystalStyle | `crystal` | 3-pass：辉光(bloom) + 玻璃体(渐变填充) + 高光线（验证多 pass 架构） |
-| RingStyle | `ring:bar` | 径向柱（极坐标 bar）：每带一扇形辐条，**角宽 `ringBarThicknessRatio` 可调、柱间留隙**，外/内(峰值)圈独立开关，可旋转、ColorMap 上色；非轴对齐→`styleSupportsOutline=false`（v0.5.6）|
-| RingLineStyle | `ringline` | 极坐标"线"谱：各带值连成一圈闭合折线（外实时环+内峰值环），无柱；复用 ring 几何/旋转/lineWidth；描边不适用（v0.5.6）|
-| RingLineBarStyle | `ring:bar-line` | 极坐标 bar-line：柱顶取"本带→邻带"半径斜弦（相邻段边界半径相等→脊线连续），**柱宽/角隙同 `ring:bar` 可调、可留隙**；内外圈独立；描边不适用（v0.5.6）|
+| RingStyle | `ring:bar` | 径向柱：基圆半径 `ringBaseRadiusRatio`，外圈从基圆+间隙向外、内圈向内**实时镜像**生长（`ringOuter/InnerHeightScale` 各拉伸、`ringMidGapRatio` 留隙使 nv=0 不接触）；角宽 `ringBarThicknessRatio` 可调可留隙；外圈峰帽/峰线(`ringPeakCapOn`/`ringPeakLineOn`)、内圈峰(`ringInnerPeakOn`默认关)；可旋转、ColorMap 上色；非轴对齐→`styleSupportsOutline=false`（v0.5.6）|
+| RingLineStyle | `ringline` | 极坐标"线"谱：外实时闭合折线 + 内镜像闭合折线（基圆+间隙，不相连）；可选外峰线/峰帽、内峰(默认关)；复用 ring 几何/旋转/lineWidth；描边不适用（v0.5.6）|
+| RingLineBarStyle | `ring:bar-line` | 极坐标 bar-line：外缘取"本带→邻带"半径斜弦（边界半径相等→脊线连续），柱宽/角隙同 `ring:bar` 可调可留隙；内圈实时镜像；外峰帽/峰线、内峰(默认关)；描边不适用（v0.5.6）|
 | ~~TerraceStyle~~ | `terrace` | **暂禁用**（v0.5.6 观感问题大；源文件保留、已从工厂/构建移除，未注册）|
 | ~~SpectrogramStyle~~ | `spectrogram` | **暂禁用**（同上；源文件保留、未注册）|
 

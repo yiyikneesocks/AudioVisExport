@@ -314,7 +314,7 @@ void Y2KLineStyle::render (juce::Graphics& g,
 
     // 5) 峰值保持虚线（同样 Catmull-Rom 平滑后 createDashedStroke）
     //    v0.5.4 #3.3：line 系峰线改由 "Peak caps" 开关统一控制（此前该开关对本样式置灰、无法关闭）
-    if (! rp.barParticles) return;
+    if (! rp.barParticles || (! rp.peakTopOn && ! rp.peakBottomOn)) return;
 
     std::vector<float> pnv ((size_t) N);
     for (int i = 0; i < N; ++i)
@@ -333,6 +333,7 @@ void Y2KLineStyle::render (juce::Graphics& g,
     juce::Path peakPath;
     buildSmoothPath_ (peakPath, peakPts, /*closeToBottom*/ false, yBot, yTop);
 
+    if (! (rp.peakTopOn && a < 0.999f)) peakPath.clear();   // 上峰关/轴到顶
     const float peakW = juce::jmax (1.0f, rp.peakCapWidth);
     g.setColour (rp.peak.withAlpha (0.75f));
     if (rp.peakLineDotted)
@@ -350,7 +351,7 @@ void Y2KLineStyle::render (juce::Graphics& g,
 
     // v0.5.4 #3.4：轴不在底/顶时，下臂也要有一条峰线（此前只有上侧有）。
     //   下臂点在轴下方，buildSmoothPath_ 的贴底剪枝会砍平 → 手构折线（与下臂曲线同法）。
-    if (a > 0.001f)
+    if (rp.peakBottomOn && a > 0.001f)
     {
         juce::Path peakDnPath;
         for (int i = 0; i < N; ++i)

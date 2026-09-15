@@ -311,7 +311,7 @@ void CrystalStyle::renderPass (juce::Graphics& g, int pass,
 
         // 峰值虚线（与 Y2KLineStyle 一致，保持功能对等）
         // v0.5.4 #3.3：由 "Peak caps" 开关统一控制；#5/#3.4：跟随基线轴映射 + 轴在中部时下臂也有一条
-        if (rp.barParticles)
+        if (rp.barParticles && (rp.peakTopOn || rp.peakBottomOn))
         {
             const float aP   = juce::jlimit (0.0f, 1.0f, rp.baselineY);
             const float H    = (float) canvas.getHeight();
@@ -335,6 +335,7 @@ void CrystalStyle::renderPass (juce::Graphics& g, int pass,
             juce::Path peakPath;
             buildSmoothPath_ (peakPath, peakPts, false, yBot, yTop);
 
+            if (! (rp.peakTopOn && aP < 0.999f)) peakPath.clear();   // 上峰关/轴到顶
             const float peakW = juce::jmax (1.0f, rp.peakCapWidth);
             const float dashes[] = { juce::jmax (1.0f, peakW), juce::jmax (3.0f, peakW * 1.5f) };
             g.setColour (rp.peak.withAlpha (0.60f));
@@ -350,7 +351,7 @@ void CrystalStyle::renderPass (juce::Graphics& g, int pass,
                     juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
             }
 
-            if (aP > 0.001f)
+            if (rp.peakBottomOn && aP > 0.001f)
             {
                 juce::Path peakDn;
                 for (int i = 0; i < N; ++i)

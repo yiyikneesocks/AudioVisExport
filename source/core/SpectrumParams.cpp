@@ -213,6 +213,8 @@ juce::String SpectrumParams::toJson() const
     s << "    \"barGapRatio\": " << barGapRatio << ",\n";
     s << "    \"barWidthRatio\": " << barWidthRatio << ",\n";
     s << "    \"barParticles\": " << (barParticles ? "true" : "false") << ",\n";
+    s << "    \"peakTopOn\": " << (peakTopOn ? "true" : "false") << ",\n";
+    s << "    \"peakBottomOn\": " << (peakBottomOn ? "true" : "false") << ",\n";
     s << "    \"baselineY\": " << baselineY << ",\n";
     s << "    \"capPull\": " << capPull << ",\n";
     s << "    \"lineOnly\": " << (lineOnly ? "true" : "false") << ",\n";
@@ -220,10 +222,16 @@ juce::String SpectrumParams::toJson() const
     s << "    \"peakLineDotted\": " << (peakLineDotted ? "true" : "false") << ",\n";
     s << "    \"peakCapAsBorder\": " << (peakCapAsBorder ? "true" : "false") << ",\n";
     s << "    \"ringRotationDegPerSec\": " << ringRotationDegPerSec << ",\n";
-    s << "    \"ringInnerRadiusRatio\": " << ringInnerRadiusRatio << ",\n";
+    s << "    \"ringBaseRadiusRatio\": " << ringBaseRadiusRatio << ",\n";
     s << "    \"ringBarThicknessRatio\": " << ringBarThicknessRatio << ",\n";
     s << "    \"ringOuterOn\": " << (ringOuterOn ? "true" : "false") << ",\n";
     s << "    \"ringInnerOn\": " << (ringInnerOn ? "true" : "false") << ",\n";
+    s << "    \"ringOuterHeightScale\": " << ringOuterHeightScale << ",\n";
+    s << "    \"ringInnerHeightScale\": " << ringInnerHeightScale << ",\n";
+    s << "    \"ringMidGapRatio\": " << ringMidGapRatio << ",\n";
+    s << "    \"ringPeakCapOn\": " << (ringPeakCapOn ? "true" : "false") << ",\n";
+    s << "    \"ringPeakLineOn\": " << (ringPeakLineOn ? "true" : "false") << ",\n";
+    s << "    \"ringInnerPeakOn\": " << (ringInnerPeakOn ? "true" : "false") << ",\n";
     s << "    \"terraceLayers\": " << terraceLayers << ",\n";
     s << "    \"terraceDepthStep\": " << terraceDepthStep << ",\n";
     s << "    \"terraceFade\": " << terraceFade << ",\n";
@@ -490,6 +498,8 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
             p.setBarWidth ((1.0f - juce::jlimit (0.0f, 1.0f, gOld)) * wOld);
         }
         p.barParticles  = getBool (vis, "barParticles", p.barParticles);
+        p.peakTopOn     = getBool (vis, "peakTopOn", p.peakTopOn);
+        p.peakBottomOn  = getBool (vis, "peakBottomOn", p.peakBottomOn);
         p.baselineY     = juce::jlimit (0.0f, 1.0f, getFloat (vis, "baselineY", p.baselineY));
         p.capPull       = juce::jlimit (0.0f, 1.0f, getFloat (vis, "capPull", p.capPull));
         p.lineOnly      = getBool (vis, "lineOnly", p.lineOnly);
@@ -497,10 +507,16 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
         p.peakLineDotted= getBool (vis, "peakLineDotted", p.peakLineDotted);
         p.peakCapAsBorder=getBool (vis, "peakCapAsBorder", p.peakCapAsBorder);
         p.ringRotationDegPerSec = getFloat (vis, "ringRotationDegPerSec", p.ringRotationDegPerSec);
-        p.ringInnerRadiusRatio  = juce::jlimit (0.0f, 0.8f,  getFloat (vis, "ringInnerRadiusRatio",  p.ringInnerRadiusRatio));
+        p.ringBaseRadiusRatio  = juce::jlimit (0.0f, 0.8f,  getFloat (vis, "ringBaseRadiusRatio",  p.ringBaseRadiusRatio));
         p.ringBarThicknessRatio = juce::jlimit (0.05f, 1.0f, getFloat (vis, "ringBarThicknessRatio", p.ringBarThicknessRatio));
         p.ringOuterOn           = getBool (vis, "ringOuterOn", p.ringOuterOn);
         p.ringInnerOn           = getBool (vis, "ringInnerOn", p.ringInnerOn);
+        p.ringOuterHeightScale  = juce::jlimit (0.1f, 3.0f, getFloat (vis, "ringOuterHeightScale", p.ringOuterHeightScale));
+        p.ringInnerHeightScale  = juce::jlimit (0.1f, 3.0f, getFloat (vis, "ringInnerHeightScale", p.ringInnerHeightScale));
+        p.ringMidGapRatio       = juce::jlimit (0.0f, 0.4f,  getFloat (vis, "ringMidGapRatio", p.ringMidGapRatio));
+        p.ringPeakCapOn         = getBool (vis, "ringPeakCapOn", p.ringPeakCapOn);
+        p.ringPeakLineOn        = getBool (vis, "ringPeakLineOn", p.ringPeakLineOn);
+        p.ringInnerPeakOn       = getBool (vis, "ringInnerPeakOn", p.ringInnerPeakOn);
         p.terraceLayers         = juce::jlimit (4, 64,  getInt (vis, "terraceLayers", p.terraceLayers));
         p.terraceDepthStep      = juce::jlimit (1.0f, 12.0f, getFloat (vis, "terraceDepthStep", p.terraceDepthStep));
         p.terraceFade           = juce::jlimit (0.0f, 0.95f, getFloat (vis, "terraceFade", p.terraceFade));
@@ -715,14 +731,22 @@ bool SpectrumParams::applyOverride (const juce::String& dottedKey,
     if      (key == "visual.capPull")        { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); capPull=juce::jlimit(0.0f,1.0f,v); return true; }
     if      (key == "visual.lineOnly")       { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); lineOnly=v; return true; }
     if      (key == "visual.barParticles")   { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); barParticles=v; return true; }
+    if      (key == "visual.peakTopOn")      { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); peakTopOn=v; return true; }
+    if      (key == "visual.peakBottomOn")   { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); peakBottomOn=v; return true; }
     if      (key == "visual.peakCapWidth")   { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); peakCapWidth=juce::jlimit(0.5f,24.0f,v); return true; }
     if      (key == "visual.peakLineDotted") { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); peakLineDotted=v; return true; }
     if      (key == "visual.peakCapAsBorder"){ bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); peakCapAsBorder=v; return true; }
     if      (key == "visual.ringRotationDegPerSec"){ bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); ringRotationDegPerSec=juce::jlimit(-90.0f,90.0f,v); return true; }
-    if      (key == "visual.ringInnerRadiusRatio")  { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); ringInnerRadiusRatio=juce::jlimit(0.0f,0.8f,v); return true; }
+    if      (key == "visual.ringBaseRadiusRatio")  { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); ringBaseRadiusRatio=juce::jlimit(0.0f,0.8f,v); return true; }
     if      (key == "visual.ringBarThicknessRatio") { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); ringBarThicknessRatio=juce::jlimit(0.05f,1.0f,v); return true; }
     if      (key == "visual.ringOuterOn")           { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); ringOuterOn=v; return true; }
     if      (key == "visual.ringInnerOn")           { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); ringInnerOn=v; return true; }
+    if      (key == "visual.ringOuterHeightScale")   { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); ringOuterHeightScale=juce::jlimit(0.1f,3.0f,v); return true; }
+    if      (key == "visual.ringInnerHeightScale")   { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); ringInnerHeightScale=juce::jlimit(0.1f,3.0f,v); return true; }
+    if      (key == "visual.ringMidGapRatio")        { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); ringMidGapRatio=juce::jlimit(0.0f,0.4f,v); return true; }
+    if      (key == "visual.ringPeakCapOn")          { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); ringPeakCapOn=v; return true; }
+    if      (key == "visual.ringPeakLineOn")         { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); ringPeakLineOn=v; return true; }
+    if      (key == "visual.ringInnerPeakOn")        { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); ringInnerPeakOn=v; return true; }
     if      (key == "visual.terraceLayers")         { bool ok=true; int v=toInt(&ok); if(!ok) return setErr("invalid int"); terraceLayers=juce::jlimit(4,64,v); return true; }
     if      (key == "visual.terraceDepthStep")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); terraceDepthStep=juce::jlimit(1.0f,12.0f,v); return true; }
     if      (key == "visual.terraceFade")           { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); terraceFade=juce::jlimit(0.0f,0.95f,v); return true; }

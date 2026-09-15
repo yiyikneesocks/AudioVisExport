@@ -187,9 +187,11 @@ private:
     juce::Slider* barGapSliderPtr = nullptr;
     juce::Slider* barPitchSliderPtr = nullptr;
     juce::Slider* bandCountSliderPtr = nullptr;
-    juce::ToggleButton* peakCapsTogglePtr = nullptr;   // #3: bar 系样式才有效
+    juce::ToggleButton* peakTopTogglePtr = nullptr;      // v0.5.6：上峰开关
+    juce::ToggleButton* peakBottomTogglePtr = nullptr;   // v0.5.6：下峰开关
     juce::ToggleButton* lineOnlyTogglePtr = nullptr;  // #3: line 系样式才有效
     juce::Slider* capPullSliderPtr = nullptr;         // #3: 仅 bar-line
+    juce::Slider* baselineSliderPtr = nullptr;       // v0.5.6：ring 模式置灰基线轴
     // v0.5.6：peak cap 外观（全局）+ 两模式开关（有蒙版时）
     juce::Slider*       peakCapWidthSliderPtr = nullptr;
     juce::ToggleButton* peakLineDottedPtr     = nullptr;

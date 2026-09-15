@@ -155,7 +155,9 @@ struct SpectrumParams
         bandCount = juce::jlimit (2, 512, n);
         barPitchRatio = 1.0f / (float) bandCount;   // 从带数侧进入 = 恰好铺满
     }
-    bool  barParticles  = true;    // 峰值标记开关：bar/bar-line = 峰帽横线；y2k/polyline/crystal = 峰值虚线
+    bool  barParticles  = true;    // 峰值标记总开关（legacy，与下面上/下 AND）
+    bool  peakTopOn     = true;    // v0.5.6：普通模式上臂峰（帽/线）；轴拉到最顶时禁用
+    bool  peakBottomOn  = true;    // v0.5.6：普通模式下臂峰（帽/线）；轴拉到最底时禁用
     float baselineY     = 0.0f;    // v0.5.4 #4 基线轴：0=底部，0.5=镜像，1=顶部；柱以轴为零点上下按比例生长
     float capPull       = 0.35f;   // v0.5.4 #2峰帽：帽顶点邻域拉扯强度 0..1；0=关闭拉扯（斜面可拉得很长）
     bool  lineOnly      = false;   // v0.5.4 #6：line 系只画线条，不画内部填充（tint/玻璃体）
@@ -165,10 +167,16 @@ struct SpectrumParams
     bool  peakCapAsBorder = false; // 有蒙版描边时：true=峰帽画成"该柱边框同色同宽"的线；false=峰帽作为蒙版一部分透出 mask 图
     // v0.5.6 新样式：径向频谱 Ring（band 值绕圆放射；仅该样式生效，其它样式忽略）
     float ringRotationDegPerSec  = 12.0f;  // 旋转角速度（deg/s，可负；0=静止）
-    float ringInnerRadiusRatio   = 0.28f;  // 内圈空心半径占最大半径比例 0..0.8
-    float ringBarThicknessRatio  = 0.6f;   // 单根辐条角宽占带角步长比例 0.05..1
+    float ringBaseRadiusRatio   = 0.28f;  // 内圈空心半径占最大半径比例 0..0.8
+    float ringBarThicknessRatio  = 0.6f;   // 单根辐条角宽占带角步长比例 0.05..1（ring:bar / ring:bar-line 用，可留隙）
+    float ringOuterHeightScale   = 1.0f;   // v0.5.6：外圈高度拉伸 0.1..3
+    float ringInnerHeightScale   = 1.0f;   // v0.5.6：内圈高度拉伸（镜像）0.1..3
+    float ringMidGapRatio        = 0.12f;  // v0.5.6：基圆处内/外圈间隙比例 0..0.4（nv=0 不接触）
     bool  ringOuterOn            = true;   // 外圈（实时辐条）开关
-    bool  ringInnerOn            = true;   // 内圈（峰值辐条）开关（独立于外圈）
+    bool  ringInnerOn            = true;   // 内圈（实时镜像辐条）开关（独立于外圈）
+    bool  ringPeakCapOn          = true;   // v0.5.6：外圈峰值帽
+    bool  ringPeakLineOn         = true;   // v0.5.6：外圈峰值线
+    bool  ringInnerPeakOn        = false;  // v0.5.6：内圈峰值（默认关，可开）
     // v0.5.6 新样式：地形剖面 Terrace（堆叠历史曲线成层峦；band 驱动 + 帧历史）
     int   terraceLayers          = 24;     // 堆叠层数（=保留历史帧数）4..64
     float terraceDepthStep       = 3.0f;   // 每层沿 y 抬高的像素（透视间距）

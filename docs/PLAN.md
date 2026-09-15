@@ -24,7 +24,13 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-16 02:2x）
+## 当前状态（最后更新：2026-09-16 03:4x）
+
+- **ring 家族重构 + 普通模式峰帽上下拆分（用户 3 点）**：
+  ① `ringline` 内外圈留间隙不相连（基圆 `ringBaseRadiusRatio` + `ringMidGapRatio`）。② 内圈改为**实时镜像**（非峰值），内/外高度各自拉伸 `ringOuter/InnerHeightScale`；ring 模式**置灰基线轴**（Baseline% 滑杆 + 画布轴拖拽停用，ring 用基圆）。③ 外圈加峰值帽/线（`ringPeakCapOn`/`ringPeakLineOn` 默认开），内圈峰 `ringInnerPeakOn` 默认关可开；`ring:bar`/`ring:bar-line` 柱间可留隙（复用 `ringBarThicknessRatio`）。
+  另：普通（非 ring）模式把"Peak caps"单开关拆成 **Peak (top arm)/Peak (bottom arm)** 两开关（`peakTopOn`/`peakBottomOn`，轴到顶/底自动禁用对应边），跨 bar/bar-line/y2k/polyline/crystal 五样式生效；`barParticles` 保留为总开关(默认开)。
+  新参数全链 + 工厂 + GUI + CLI + 文档 + `vis_styles_test`。`ring`→`ring:bar` 上一步已改名。6 套回归全绿、Linux+Win 构建干净、部署 `AudioVisGUI_09160338.exe`。**未 push（验证闸门）。**
+
 
 - **ring 家族再调整**：① `ring` 改名 **`ring:bar`**（径向柱，本身已支持角宽 `ringBarThicknessRatio` + 柱间留隙，与直角 bar 同逻辑）。② `ring:bar-line` 按用户反馈**不再强制闭合相连**：柱顶仍取"本带→邻带"半径斜弦（相邻段**边界半径相等**→脊线连续），但**角宽/间隙随 `ringBarThicknessRatio` 可调、可留隙**（同 bar）。内圈峰值同样。`ringline`（闭合线）不变。三样式可选：`ring:bar` / `ringline` / `ring:bar-line`；工厂/outline/combo/CLI/文档/测试全更（`ring` 保留为别名）。6 套回归全绿、Linux 双端干净。**待 Windows 部署+肉眼验证；未 push。**
 

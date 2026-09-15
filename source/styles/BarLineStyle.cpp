@@ -136,7 +136,7 @@ void BarLineStyle::render (juce::Graphics& g,
     //     显示层再叠加"高处落得快"（+accel×当前高度）；
     //   · 邻域拉拽：向邻带均值靠拢（平直化趋势）→ 下坠可被邻带拽慢/提前/反向上升；
     //     拉拽后重新 clamp ≥ 柱顶（约束最高优先）。
-    if (rp.barParticles)
+    if (rp.barParticles && (rp.peakTopOn || rp.peakBottomOn))
     {
         const size_t nU = (size_t) N;
         if (capN_.size() != nU)
@@ -197,15 +197,18 @@ void BarLineStyle::render (juce::Graphics& g,
             capPath.startNewSubPath (xL, normalizedToY_ (baselineTop (capEdgeDraw (i),     a), canvas));
             capPath.lineTo          (xR, normalizedToY_ (baselineTop (capEdgeDraw (i + 1), a), canvas));
         }
-        g.setColour (rp.peak.withAlpha (0.9f));
-        g.strokePath (capPath, juce::PathStrokeType (
-            juce::jmax (1.0f, rp.peakCapWidth),
-            juce::PathStrokeType::curved,
-            juce::PathStrokeType::rounded));
+        if (rp.peakTopOn && a < 0.999f)
+        {
+            g.setColour (rp.peak.withAlpha (0.9f));
+            g.strokePath (capPath, juce::PathStrokeType (
+                juce::jmax (1.0f, rp.peakCapWidth),
+                juce::PathStrokeType::curved,
+                juce::PathStrokeType::rounded));
+        }
 
         // #3(1)（v0.5.4）：基线轴 a>0 时柱有下臂 → 下侧画镜像峰帽（同一 capN 状态，
         //   用 baselineBottom 映射；端点同样做"至少邻带 1/2"的末柱抬升）。
-        if (a > 0.001f)
+        if (rp.peakBottomOn && a > 0.001f)
         {
             auto capEdgeBot = [&] (int k) -> float
             {

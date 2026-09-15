@@ -296,7 +296,8 @@ void SpectrumCanvas::paintOverlay (juce::Graphics& g)
     const auto disp = displayAffine();
 
     // v0.5.4 #4：基线轴手柄（仅选中频谱、非蒙版编辑时显示；橙色横线 + 两端把手）
-    if (selectedImage < 0 && params.spectrumPresent && ! editMaskImage)
+    if (selectedImage < 0 && params.spectrumPresent && ! editMaskImage
+        && ! params.style.startsWithIgnoreCase ("ring"))   // ring 用基圆，不画/不拖基线轴
     {
         const float oh = (float) juce::jmax (1, params.height);
         const auto total = buildVisAffine (params.transform).followedBy (disp);
@@ -775,6 +776,7 @@ void SpectrumCanvas::mouseDown (const juce::MouseEvent& e)
 
     // v0.5.4 #4：基线轴命中（优先于手柄/元素拾取；仅选中频谱、非蒙版编辑）
     if (selectedImage < 0 && params.spectrumPresent && ! editMaskImage
+        && ! params.style.startsWithIgnoreCase ("ring")
         && std::abs (e.position.getY() - baselineScreenY) <= 8.0f)
     {
         dragMode = DragMode::BaselineAxis;
