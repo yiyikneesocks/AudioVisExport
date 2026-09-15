@@ -55,6 +55,10 @@ public:
         float peakCapWidth   = 2.0f;   // v0.5.6：峰帽线粗 / y2k 点线点直径（px）
         bool  peakLineDotted = true;   // v0.5.6：line 系峰线 dotted(true) / 完整曲线(false)
         bool  peakCapAsBorder= false;  // v0.5.6：帽=边框同色同宽(true) / 蒙版穿透(false)
+        float ringRotationDegPerSec = 12.0f;  // v0.5.6 Ring：旋转 deg/s（可负）
+        float ringInnerRadiusRatio  = 0.28f;  // v0.5.6 Ring：内圈空心半径比
+        float ringBarThicknessRatio = 0.6f;   // v0.5.6 Ring：辐条角宽比
+        int   ringLayers            = 2;      // v0.5.6 Ring：1=外层实时；2=加内层峰值
 
         // 元素开关
         bool  drawGrid        = true;

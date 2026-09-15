@@ -7,6 +7,7 @@
 #include "../styles/BarLineStyle.h"
 #include "../styles/PolylineStyle.h"
 #include "../styles/CrystalStyle.h"
+#include "../styles/RingStyle.h"
 
 std::unique_ptr<SpectrumStyle> SpectrumStyle::create (const juce::String& name)
 {
@@ -25,5 +26,7 @@ std::unique_ptr<SpectrumStyle> SpectrumStyle::create (const juce::String& name)
         return std::make_unique<PolylineStyle>();
     if (lower == "crystal" || lower == "glass")
         return std::make_unique<CrystalStyle>();
+    if (lower == "ring" || lower == "radial" || lower == "circle")
+        return std::make_unique<RingStyle>();
     return nullptr;
 }

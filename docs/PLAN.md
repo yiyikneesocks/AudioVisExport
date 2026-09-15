@@ -24,7 +24,15 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-15 18:4x）
+## 当前状态（最后更新：2026-09-15 19:3x）
+
+- **新样式 B1 径向频谱 `ring`（v0.5.6 进行中，本轮勾选：Ring→Terrace→Spectrogram）**：
+  新增 `RingStyle.{h,cpp}`（band→绕圆辐条，外层实时/内层峰值双层，`ringRotationDegPerSec` 跨帧累计旋转，ColorMap 上色）。
+  4 新参数 `ringRotationDegPerSec/ringInnerRadiusRatio/ringBarThicknessRatio/ringLayers` 全链（Params+toJson/fromJson/override+RenderParams+双 buildRp+CLI help）。
+  工厂 + CMake(AVX_ENGINE_SOURCES + vis_peaks/vis_tabs/新 vis_styles_test) + GUI combo(两数组) + CLI 帮助。
+  **非轴对齐 → 描边不适用**：新增 `SpectrumMask::styleSupportsOutline()`，compose 加 `outlineAllowed` 门（VisPipeline/SpectrumCanvas 传入），面板对 ring 把描边区置灰；图片裁剪仍工作。
+  `vis_styles_test` 冒烟（ink>200、跨帧变化、resize 安全）+ 四套回归全绿、Linux 双端构建干净。**待：Terrace、Spectrogram；Windows 部署与肉眼验证；未 push（验证闸门）。**
+
 
 - **GitHub 推送隔离·从"文档自觉"升级为"机器级强制"**：全局 shell credential helper `~/.config/git/git-credential-perrepo`
   （源 `scripts/git-credential-perrepo.sh`）+ `git config --global credential.helper="" + '!…'`。任何仓库、哪怕手敲

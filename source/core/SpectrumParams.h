@@ -163,6 +163,11 @@ struct SpectrumParams
     float peakCapWidth  = 2.0f;    // 峰帽线粗细 / y2k 点线里"点"的直径（px）；dotted 时自动保证点间留空隙
     bool  peakLineDotted = true;   // line 系峰线样式：true=点(虚)线，false=完整平滑曲线
     bool  peakCapAsBorder = false; // 有蒙版描边时：true=峰帽画成"该柱边框同色同宽"的线；false=峰帽作为蒙版一部分透出 mask 图
+    // v0.5.6 新样式：径向频谱 Ring（band 值绕圆放射；仅该样式生效，其它样式忽略）
+    float ringRotationDegPerSec  = 12.0f;  // 旋转角速度（deg/s，可负；0=静止）
+    float ringInnerRadiusRatio   = 0.28f;  // 内圈空心半径占最大半径比例 0..0.8
+    float ringBarThicknessRatio  = 0.6f;   // 单根辐条角宽占带角步长比例 0.05..1
+    int   ringLayers             = 2;      // 1=仅实时外层；2=外层实时 + 内层峰值双层
     bool  drawGrid        = false;     // 可视化视频默认不画坐标轴（需要时 CLI 开 --draw-grid on）
     bool  drawAxisLabels  = false;     // 同上（--draw-axis-labels on）
 

@@ -20,6 +20,10 @@ namespace SpectrumMask
     // 该样式是否有"左右竖直侧边"（bar 系有、line 系没有）——决定 sideEdgesAllowed（新1c2）。
     bool isBarStyle (const juce::String& style) noexcept;
 
+    // v0.5.6：该样式轮廓是否适用"上/左/右三边描边"。径向/瀑布/地形等非轴对齐形状返回 false，
+    //   compose 据此跳过描边（仍做图片裁剪），面板同步把描边区置灰，避免"半截描边"观感。
+    bool styleSupportsOutline (const juce::String& style) noexcept;
+
     // 计算一张图片的平均色（按其自身 alpha 加权；全透明则返回不透明灰）。
     juce::Colour averageColour (const juce::Image& img);
 
@@ -58,7 +62,8 @@ namespace SpectrumMask
                          juce::Colour resolvedStroke,
                          bool sideEdgesAllowed = true,
                          const juce::Image* strokeBase = nullptr,
-                         const juce::Image* capOverlay = nullptr);
+                         const juce::Image* capOverlay = nullptr,
+                         bool outlineAllowed = true);
 
     // ---- v0.5.5 INBOX #5：描边调色板（实时平均色）+ 预览节流/插值 ----
 
@@ -114,5 +119,6 @@ namespace SpectrumMask
                                  double nowSec,
                                  bool sideEdgesAllowed = true,
                                  const juce::Image* strokeBase = nullptr,
-                                 const juce::Image* capOverlay = nullptr);
+                                 const juce::Image* capOverlay = nullptr,
+                                 bool outlineAllowed = true);
 }

@@ -131,7 +131,8 @@ void SpectrumCanvas::paint (juce::Graphics& g)
                         asBorder ? baseBody : base, adj, params.maskImage, stroke, &maskPalette, nowSec,
                         SpectrumMask::isBarStyle (params.style),
                         &baseBody,                                   // 描边只认无帽主体
-                        asBorder ? &base : nullptr);                 // 边框样式：帽重涂成边框色
+                        asBorder ? &base : nullptr,                // 边框样式：帽重涂成边框色
+                        SpectrumMask::styleSupportsOutline (params.style));  // 径向/瀑布/地形等跳过描边
                     if (masked.isValid()) specLayer = masked;
                 }
                 catch (...) { }   // #2 防御：异常 → specLayer 保持 base（无蒙版回退）

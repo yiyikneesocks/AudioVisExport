@@ -29,6 +29,16 @@ bool SpectrumMask::isBarStyle (const juce::String& style) noexcept
     return s == "bar" || s == "bars" || s == "bar-line" || s == "barline" || s == "perbar";
 }
 
+bool SpectrumMask::styleSupportsOutline (const juce::String& style) noexcept
+{
+    const juce::String s = style.toLowerCase();
+    if (s == "ring" || s == "radial" || s == "circle"
+        || s == "spectrogram" || s == "waterfall" || s == "spectro"
+        || s == "terrace" || s == "landscape")
+        return false;                       // 非轴对齐轮廓：不适用三边描边
+    return true;
+}
+
 juce::Colour SpectrumMask::averageColour (const juce::Image& img)
 {
     if (! img.isValid())
@@ -212,9 +222,10 @@ juce::Image SpectrumMask::compose (const juce::Image& base,
                                    juce::Colour resolvedStroke,
                                    bool sideEdgesAllowed,
                                    const juce::Image* strokeBase,
-                                   const juce::Image* capOverlay)
+                                   const juce::Image* capOverlay,
+                                   bool outlineAllowed)
 {
-    return composeWithPlan (base, image, cfg, resolvedStroke, nullptr, 0.0, sideEdgesAllowed, strokeBase, capOverlay);
+    return composeWithPlan (base, image, cfg, resolvedStroke, nullptr, 0.0, sideEdgesAllowed, strokeBase, capOverlay, outlineAllowed);
 }
 
 juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
@@ -225,7 +236,8 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
                                            double nowSec,
                                            bool sideEdgesAllowed,
                                            const juce::Image* strokeBase,
-                                           const juce::Image* capOverlay)
+                                           const juce::Image* capOverlay,
+                                           bool outlineAllowed)
 {
     if (! base.isValid() || ! image.isValid())
         return {};
@@ -309,7 +321,8 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
 
     // ---- 4. 描边（v0.5.6 新1c：上/左/右三边各 开关+厚度+透明度+阴影；底部取消）----
     //   sideEdgesAllowed=false（line 系）→ 左右侧边强制关，整条只走上边框。
-    if (cfg.strokeEnabled)
+    //   outlineAllowed=false（径向/瀑布/地形等）→ 整段描边跳过（仍保留图片裁剪）。
+    if (cfg.strokeEnabled && outlineAllowed)
     {
         const int rT = cfg.outTop   ? juce::jlimit (1, 32, (int) std::lround (cfg.outWTop )) : 0;
         const int rL = (cfg.outLeft  && sideEdgesAllowed) ? juce::jlimit (1, 32, (int) std::lround (cfg.outWLeft )) : 0;

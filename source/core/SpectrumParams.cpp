@@ -219,6 +219,10 @@ juce::String SpectrumParams::toJson() const
     s << "    \"peakCapWidth\": " << peakCapWidth << ",\n";
     s << "    \"peakLineDotted\": " << (peakLineDotted ? "true" : "false") << ",\n";
     s << "    \"peakCapAsBorder\": " << (peakCapAsBorder ? "true" : "false") << ",\n";
+    s << "    \"ringRotationDegPerSec\": " << ringRotationDegPerSec << ",\n";
+    s << "    \"ringInnerRadiusRatio\": " << ringInnerRadiusRatio << ",\n";
+    s << "    \"ringBarThicknessRatio\": " << ringBarThicknessRatio << ",\n";
+    s << "    \"ringLayers\": " << ringLayers << ",\n";
     s << "    \"lineWidth\": " << lineWidth << ",\n";
     s << "    \"opacity\": " << opacity << ",\n";
     s << "    \"drawGrid\": " << (drawGrid ? "true" : "false") << ",\n";
@@ -485,6 +489,10 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
         p.peakCapWidth  = juce::jlimit (0.5f, 24.0f, getFloat (vis, "peakCapWidth", p.peakCapWidth));
         p.peakLineDotted= getBool (vis, "peakLineDotted", p.peakLineDotted);
         p.peakCapAsBorder=getBool (vis, "peakCapAsBorder", p.peakCapAsBorder);
+        p.ringRotationDegPerSec = getFloat (vis, "ringRotationDegPerSec", p.ringRotationDegPerSec);
+        p.ringInnerRadiusRatio  = juce::jlimit (0.0f, 0.8f,  getFloat (vis, "ringInnerRadiusRatio",  p.ringInnerRadiusRatio));
+        p.ringBarThicknessRatio = juce::jlimit (0.05f, 1.0f, getFloat (vis, "ringBarThicknessRatio", p.ringBarThicknessRatio));
+        p.ringLayers            = juce::jlimit (1, 2, getInt (vis, "ringLayers", p.ringLayers));
         p.lineWidth     = getFloat (vis, "lineWidth", p.lineWidth);
         p.opacity       = getFloat (vis, "opacity", p.opacity);
         p.drawGrid      = getBool (vis, "drawGrid", p.drawGrid);
@@ -696,6 +704,10 @@ bool SpectrumParams::applyOverride (const juce::String& dottedKey,
     if      (key == "visual.peakCapWidth")   { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); peakCapWidth=juce::jlimit(0.5f,24.0f,v); return true; }
     if      (key == "visual.peakLineDotted") { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); peakLineDotted=v; return true; }
     if      (key == "visual.peakCapAsBorder"){ bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); peakCapAsBorder=v; return true; }
+    if      (key == "visual.ringRotationDegPerSec"){ bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); ringRotationDegPerSec=juce::jlimit(-90.0f,90.0f,v); return true; }
+    if      (key == "visual.ringInnerRadiusRatio")  { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); ringInnerRadiusRatio=juce::jlimit(0.0f,0.8f,v); return true; }
+    if      (key == "visual.ringBarThicknessRatio") { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); ringBarThicknessRatio=juce::jlimit(0.05f,1.0f,v); return true; }
+    if      (key == "visual.ringLayers")            { bool ok=true; int v=toInt(&ok); if(!ok) return setErr("invalid int"); ringLayers=juce::jlimit(1,2,v); return true; }
     if      (key == "visual.drawGrid")       { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); drawGrid=v; return true; }
     if      (key == "visual.drawAxisLabels") { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); drawAxisLabels=v; return true; }
     if      (key == "visual.primaryColor")   { bool ok; auto c=parseColour(val, &ok); if(!ok) return setErr("invalid color (#rrggbb / #aarrggbb)"); primaryColor=c; return true; }

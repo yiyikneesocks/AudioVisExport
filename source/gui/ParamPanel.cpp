@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <set>
 #include "ParamPanel.h"
+#include "../core/SpectrumMask.h"   // v0.5.6：styleSupportsOutline（径向/瀑布/地形禁用描边区）
 #include <juce_gui_extra/juce_gui_extra.h>
 
 namespace
@@ -65,10 +66,10 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
 
     // ---- Style（Spectrum 页）----
     addHeader ("Style");
-    addCombo ("Render style", { "y2k-line", "bar", "bar-line", "polyline", "crystal" }, 1,
+    addCombo ("Render style", { "y2k-line", "bar", "bar-line", "polyline", "crystal", "ring" }, 1,
               [this] (int id)
               {
-                  static const char* names[] = { "y2k-line", "bar", "bar-line", "polyline", "crystal" };
+                  static const char* names[] = { "y2k-line", "bar", "bar-line", "polyline", "crystal", "ring" };
                   params.style = names[id - 1];
                   refreshStyleDependentControls();   // #3
                   notify();
@@ -772,7 +773,8 @@ void ParamPanel::syncOutlineEnablement()
     const juce::String st = params.style;
     const bool barFam   = (st == "bar" || st == "bar-line");   // line 系：无左右侧边、无逐柱（新1c2/1b4）
 
-    maskStrokeToggle.setEnabled (true);                 // 总开关永远能点
+    const bool outlineSupported = SpectrumMask::styleSupportsOutline (st);   // 径向/瀑布/地形等无三边轮廓
+    maskStrokeToggle.setEnabled (outlineSupported);       // 不适用时置灰（compose 侧亦以 outlineAllowed=false 跳过描边）
     if (outlineRealtimePtr != nullptr)
     {
         outlineRealtimePtr->setToggleState (mode != "image", juce::dontSendNotification);

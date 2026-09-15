@@ -80,6 +80,10 @@ namespace
         rp.peakCapWidth   = p.peakCapWidth;
         rp.peakLineDotted = p.peakLineDotted;
         rp.peakCapAsBorder= p.peakCapAsBorder;
+        rp.ringRotationDegPerSec = p.ringRotationDegPerSec;
+        rp.ringInnerRadiusRatio  = p.ringInnerRadiusRatio;
+        rp.ringBarThicknessRatio = p.ringBarThicknessRatio;
+        rp.ringLayers            = p.ringLayers;
         return rp;
     }
 
@@ -239,7 +243,8 @@ namespace
                             asBorder ? baseBody : base, adj, p.maskImage, stroke,
                             SpectrumMask::isBarStyle (p.style),
                             &baseBody,                              // strokeBase：描边始终只认无帽主体
-                            asBorder ? &base : nullptr);            // capOverlay：边框样式时把帽重涂成边框色
+                            asBorder ? &base : nullptr,             // capOverlay：边框样式时把帽重涂成边框色
+                            SpectrumMask::styleSupportsOutline (p.style));   // 径向/瀑布/地形等跳过描边
                         if (masked.isValid()) layer = masked;
                     }
                     catch (...) { }   // #2 防御：异常 → 回退裸频谱

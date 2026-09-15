@@ -617,6 +617,10 @@ SpectrumStyle::RenderParams MainComponent::buildRp (const SpectrumParams& p)
     rp.peakCapWidth   = p.peakCapWidth;
     rp.peakLineDotted = p.peakLineDotted;
     rp.peakCapAsBorder= p.peakCapAsBorder;
+    rp.ringRotationDegPerSec = p.ringRotationDegPerSec;
+    rp.ringInnerRadiusRatio  = p.ringInnerRadiusRatio;
+    rp.ringBarThicknessRatio = p.ringBarThicknessRatio;
+    rp.ringLayers            = p.ringLayers;
     rp.colorMap       = p.colorMap;
     return rp;
 }

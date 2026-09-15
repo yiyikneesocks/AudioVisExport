@@ -104,6 +104,8 @@ set(AVX_ENGINE_SOURCES
     source/styles/PolylineStyle.cpp
     source/styles/CrystalStyle.h
     source/styles/CrystalStyle.cpp
+    source/styles/RingStyle.h
+    source/styles/RingStyle.cpp
     source/core/VisPipeline.h
     source/core/VisPipeline.cpp
 )
@@ -228,10 +230,26 @@ add_executable(vis_peaks_test EXCLUDE_FROM_ALL
     source/styles/BarLineStyle.cpp
     source/styles/Y2KLineStyle.cpp
     source/styles/PolylineStyle.cpp
-    source/styles/CrystalStyle.cpp)
+    source/styles/CrystalStyle.cpp
+    source/styles/RingStyle.cpp)
 target_compile_definitions(vis_peaks_test PRIVATE JUCE_USE_CURL=0)
 target_include_directories(vis_peaks_test PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/source)
 target_link_libraries(vis_peaks_test PRIVATE juce::juce_graphics juce::juce_events)
+
+# v0.5.6 新样式（径向/瀑布/地形）无头渲染冒烟测试
+add_executable(vis_styles_test EXCLUDE_FROM_ALL
+    scripts/vis_styles_test.cpp
+    source/core/SpectrumStyle.cpp
+    source/core/ColorMap.cpp
+    source/styles/BarStyle.cpp
+    source/styles/BarLineStyle.cpp
+    source/styles/Y2KLineStyle.cpp
+    source/styles/PolylineStyle.cpp
+    source/styles/CrystalStyle.cpp
+    source/styles/RingStyle.cpp)
+target_compile_definitions(vis_styles_test PRIVATE JUCE_USE_CURL=0)
+target_include_directories(vis_styles_test PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/source)
+target_link_libraries(vis_styles_test PRIVATE juce::juce_graphics juce::juce_events)
 
 # v0.5.4 #G：选项卡控件归属不变式（漏登记必被安全网隐藏，杜绝切页残留）
 add_executable(vis_tabs_test EXCLUDE_FROM_ALL
@@ -246,7 +264,8 @@ add_executable(vis_tabs_test EXCLUDE_FROM_ALL
     source/styles/BarStyle.cpp
     source/styles/BarLineStyle.cpp
     source/styles/PolylineStyle.cpp
-    source/styles/CrystalStyle.cpp)
+    source/styles/CrystalStyle.cpp
+    source/styles/RingStyle.cpp)
 target_compile_definitions(vis_tabs_test PRIVATE JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0)
 target_include_directories(vis_tabs_test PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/source)
 target_link_libraries(vis_tabs_test PRIVATE juce::juce_gui_extra juce::juce_graphics juce::juce_events juce::juce_dsp)
