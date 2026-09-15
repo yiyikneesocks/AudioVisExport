@@ -13,7 +13,7 @@
 class RingStyle : public SpectrumStyle
 {
 public:
-    juce::String getName() const override { return "ring"; }
+    juce::String getName() const override { return "ring:bar"; }
     void render (juce::Graphics& g,
                  const juce::Rectangle<int>& canvas,
                  const BandFrame& frame,

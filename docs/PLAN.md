@@ -24,7 +24,10 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-15 21:2x）
+## 当前状态（最后更新：2026-09-16 02:2x）
+
+- **ring 家族再调整**：① `ring` 改名 **`ring:bar`**（径向柱，本身已支持角宽 `ringBarThicknessRatio` + 柱间留隙，与直角 bar 同逻辑）。② `ring:bar-line` 按用户反馈**不再强制闭合相连**：柱顶仍取"本带→邻带"半径斜弦（相邻段**边界半径相等**→脊线连续），但**角宽/间隙随 `ringBarThicknessRatio` 可调、可留隙**（同 bar）。内圈峰值同样。`ringline`（闭合线）不变。三样式可选：`ring:bar` / `ringline` / `ring:bar-line`；工厂/outline/combo/CLI/文档/测试全更（`ring` 保留为别名）。6 套回归全绿、Linux 双端干净。**待 Windows 部署+肉眼验证；未 push。**
+
 
 - **Ring 家族两变体**：`ringline`（极坐标闭合折线：外实时环+内峰值环，无柱）；`ring:bar-line`（**极坐标 bar-line**：每段扇形外缘取"本带→邻带"斜弦 → 柱顶斜接成**连续脊线**，非独立闭合线；内外圈独立）。复用 ring 全参数、无新参数、`styleSupportsOutline=false`。现可选 `ring`(柱)/`ringline`(线)/`ring:bar-line`(斜接柱)；terrace、spectrogram 禁用。6 套回归全绿。
 

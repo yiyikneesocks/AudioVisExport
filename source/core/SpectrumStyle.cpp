@@ -28,7 +28,7 @@ std::unique_ptr<SpectrumStyle> SpectrumStyle::create (const juce::String& name)
         return std::make_unique<PolylineStyle>();
     if (lower == "crystal" || lower == "glass")
         return std::make_unique<CrystalStyle>();
-    if (lower == "ring" || lower == "radial" || lower == "circle")
+    if (lower == "ring:bar" || lower == "ring" || lower == "radial" || lower == "circle")
         return std::make_unique<RingStyle>();
     if (lower == "ringline" || lower == "ring-line" || lower == "ringlineo")
         return std::make_unique<RingLineStyle>();

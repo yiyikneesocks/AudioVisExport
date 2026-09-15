@@ -27,6 +27,8 @@ void RingLineBarStyle::render (juce::Graphics& g,
 
     const float twoPi = 6.2831853f;
     const float step  = twoPi / (float) N;
+    const float barW  = juce::jlimit (0.05f, 1.0f, rp.ringBarThicknessRatio);   // 角宽占比
+    const float halfGap = step * 0.5f * (1.0f - barW);                          // 两侧各留一半间隙
     const float baseA = -1.5707963f + spinDeg_ * 0.0174533f;
     const auto P = [&] (float ang, float r) { return juce::Point<float> (cx + r * std::cos (ang), cy + r * std::sin (ang)); };
 
@@ -54,7 +56,7 @@ void RingLineBarStyle::render (juce::Graphics& g,
     for (int i = 0; i < N; ++i)
     {
         const int  j  = nextIdx (i);
-        const float aL = baseA + (float) i * step, aR = baseA + (float) j * step;
+        const float aL = baseA + (float) i * step + halfGap, aR = baseA + (float) j * step - halfGap;
         const float rL = rOut[(size_t) i], rR = rOut[(size_t) j];
         juce::Path quad;
         quad.startNewSubPath (P (aL, innerR));
@@ -80,7 +82,7 @@ void RingLineBarStyle::render (juce::Graphics& g,
         for (int i = 0; i < N; ++i)
         {
             const int j = nextIdx (i);
-            const float aL = baseA + (float) i * step, aR = baseA + (float) j * step;
+            const float aL = baseA + (float) i * step + halfGap, aR = baseA + (float) j * step - halfGap;
             juce::Path quad;
             quad.startNewSubPath (P (aL, hi));
             quad.lineTo (P (aR, hi));

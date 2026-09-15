@@ -32,7 +32,7 @@ bool SpectrumMask::isBarStyle (const juce::String& style) noexcept
 bool SpectrumMask::styleSupportsOutline (const juce::String& style) noexcept
 {
     const juce::String s = style.toLowerCase();
-    if (s == "ring" || s == "radial" || s == "circle"
+    if (s == "ring" || s == "ring:bar" || s == "radial" || s == "circle"
         || s == "ringline" || s == "ring-line"
         || s == "ring:bar-line" || s == "ringlinebar" || s == "ring-line-bar" || s == "ring-barline"
         || s == "spectrogram" || s == "waterfall" || s == "spectro"

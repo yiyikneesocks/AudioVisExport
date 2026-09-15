@@ -81,7 +81,7 @@ static void testStyle (const char* name, bool expectStateful)
 
 int main()
 {
-    testStyle ("ring",   true);
+    testStyle ("ring:bar", true);
     testStyle ("ringline",   true);
     testStyle ("ring:bar-line", true);
     std::printf (failures ? "FAILURES: %d\n" : "ALL PASS\n", failures);
