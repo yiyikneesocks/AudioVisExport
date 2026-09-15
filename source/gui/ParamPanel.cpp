@@ -66,10 +66,10 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
 
     // ---- Style（Spectrum 页）----
     addHeader ("Style");
-    addCombo ("Render style", { "y2k-line", "bar", "bar-line", "polyline", "crystal", "ring", "terrace", "spectrogram" }, 1,
+    addCombo ("Render style", { "y2k-line", "bar", "bar-line", "polyline", "crystal", "ring" }, 1,
               [this] (int id)
               {
-                  static const char* names[] = { "y2k-line", "bar", "bar-line", "polyline", "crystal", "ring", "terrace", "spectrogram" };
+                  static const char* names[] = { "y2k-line", "bar", "bar-line", "polyline", "crystal", "ring" };
                   params.style = names[id - 1];
                   refreshStyleDependentControls();   // #3
                   notify();

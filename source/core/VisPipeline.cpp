@@ -83,7 +83,8 @@ namespace
         rp.ringRotationDegPerSec = p.ringRotationDegPerSec;
         rp.ringInnerRadiusRatio  = p.ringInnerRadiusRatio;
         rp.ringBarThicknessRatio = p.ringBarThicknessRatio;
-        rp.ringLayers            = p.ringLayers;
+        rp.ringOuterOn           = p.ringOuterOn;
+        rp.ringInnerOn           = p.ringInnerOn;
         rp.terraceLayers         = p.terraceLayers;
         rp.terraceDepthStep      = p.terraceDepthStep;
         rp.terraceFade           = p.terraceFade;

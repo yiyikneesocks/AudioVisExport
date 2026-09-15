@@ -45,7 +45,8 @@ void RingStyle::render (juce::Graphics& g,
         }
     }
 
-    // 外层：实时辐条（innerR → innerR + nv*(maxR-innerR)）
+    // 外层（实时）：受 ringOuterOn 独立控制
+    if (rp.ringOuterOn)
     for (int i = 0; i < N; ++i)
     {
         const float nv = juce::jlimit (0.0f, 1.0f, frame.normalized[(size_t) i]);
@@ -63,8 +64,8 @@ void RingStyle::render (juce::Graphics& g,
         g.fillPath (quad);
     }
 
-    // 内层（峰值双层）：从 innerR 内侧向圆心生长的峰值辐条
-    if (rp.ringLayers >= 2 && rp.barParticles)
+    // 内层（峰值）：受 ringInnerOn 独立控制
+    if (rp.ringInnerOn && rp.barParticles)
     {
         const float span  = rp.maxDb - rp.minDb;
         const float outer = innerR * 0.90f, inr = innerR * 0.30f;

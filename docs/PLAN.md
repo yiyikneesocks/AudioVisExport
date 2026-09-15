@@ -24,7 +24,12 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-15 20:2x）
+## 当前状态（最后更新：2026-09-15 20:5x）
+
+- **按用户要求：禁用 Terrace + Spectrogram**（观感问题大）——从工厂/构建(CMake)/GUI combo/CLI/测试/文档全部移除注册，**源文件保留**便于日后重启。ring 保留。
+- **Ring 新参数：内圈/外圈独立开关** `ringOuterOn` / `ringInnerOn`（取代旧 `ringLayers` 1/2），全链（Params+toJson/fromJson/override+RenderParams+双 buildRp+RingStyle 渲染门控）。config/CLI 可设。
+- 6 套回归全绿、Linux 双端干净。**待：Windows 部署；并确认 ringline / ringlinebar 两个 ring 变体的具体观感再实现。**
+
 
 - **新样式 A1 频谱瀑布图 `spectrogram`（三样式收尾）**：`SpectrogramStyle.{h,cpp}` 内部持一张滚动 ARGB 画布：每帧按 `spectrogramScrollSpeed/fps` 左移并按 `spectrogramPersistence` 拖尾衰减、右端写入当前频谱列（`spectrogramCellSize` 方块化、低频在下、ColorMap 能量上色）；bandCount/尺寸变化重置（resize 安全）。3 新参数全链 + 工厂(spectrogram|waterfall|spectro) + CMake(4) + combo + CLI + 文档 + `vis_styles_test`。`styleSupportsOutline=false`。
 - **本轮 3 个新样式全部完成**：Ring / Terrace / Spectrogram（各自提交）。6 套回归全绿、Linux 双端干净。**待：Windows 交叉编译部署 + 用户肉眼验证（尤其瀑布滚动/旋转观感）；未 push（验证闸门）。**

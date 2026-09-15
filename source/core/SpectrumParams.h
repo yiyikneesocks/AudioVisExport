@@ -167,7 +167,8 @@ struct SpectrumParams
     float ringRotationDegPerSec  = 12.0f;  // 旋转角速度（deg/s，可负；0=静止）
     float ringInnerRadiusRatio   = 0.28f;  // 内圈空心半径占最大半径比例 0..0.8
     float ringBarThicknessRatio  = 0.6f;   // 单根辐条角宽占带角步长比例 0.05..1
-    int   ringLayers             = 2;      // 1=仅实时外层；2=外层实时 + 内层峰值双层
+    bool  ringOuterOn            = true;   // 外圈（实时辐条）开关
+    bool  ringInnerOn            = true;   // 内圈（峰值辐条）开关（独立于外圈）
     // v0.5.6 新样式：地形剖面 Terrace（堆叠历史曲线成层峦；band 驱动 + 帧历史）
     int   terraceLayers          = 24;     // 堆叠层数（=保留历史帧数）4..64
     float terraceDepthStep       = 3.0f;   // 每层沿 y 抬高的像素（透视间距）

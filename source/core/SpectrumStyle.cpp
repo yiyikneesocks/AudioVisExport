@@ -8,8 +8,6 @@
 #include "../styles/PolylineStyle.h"
 #include "../styles/CrystalStyle.h"
 #include "../styles/RingStyle.h"
-#include "../styles/TerraceStyle.h"
-#include "../styles/SpectrogramStyle.h"
 
 std::unique_ptr<SpectrumStyle> SpectrumStyle::create (const juce::String& name)
 {
@@ -30,9 +28,6 @@ std::unique_ptr<SpectrumStyle> SpectrumStyle::create (const juce::String& name)
         return std::make_unique<CrystalStyle>();
     if (lower == "ring" || lower == "radial" || lower == "circle")
         return std::make_unique<RingStyle>();
-    if (lower == "terrace" || lower == "landscape" || lower == "terraces")
-        return std::make_unique<TerraceStyle>();
-    if (lower == "spectrogram" || lower == "waterfall" || lower == "spectro")
-        return std::make_unique<SpectrogramStyle>();
+    // v0.5.6：terrace / spectrogram 暂时禁用（观感问题大）；源文件保留但从工厂/构建移除，未来可再启用。
     return nullptr;
 }

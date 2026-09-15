@@ -106,10 +106,6 @@ set(AVX_ENGINE_SOURCES
     source/styles/CrystalStyle.cpp
     source/styles/RingStyle.h
     source/styles/RingStyle.cpp
-    source/styles/TerraceStyle.h
-    source/styles/TerraceStyle.cpp
-    source/styles/SpectrogramStyle.h
-    source/styles/SpectrogramStyle.cpp
     source/core/VisPipeline.h
     source/core/VisPipeline.cpp
 )
@@ -235,9 +231,7 @@ add_executable(vis_peaks_test EXCLUDE_FROM_ALL
     source/styles/Y2KLineStyle.cpp
     source/styles/PolylineStyle.cpp
     source/styles/CrystalStyle.cpp
-    source/styles/RingStyle.cpp
-    source/styles/TerraceStyle.cpp
-    source/styles/SpectrogramStyle.cpp)
+    source/styles/RingStyle.cpp)
 target_compile_definitions(vis_peaks_test PRIVATE JUCE_USE_CURL=0)
 target_include_directories(vis_peaks_test PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/source)
 target_link_libraries(vis_peaks_test PRIVATE juce::juce_graphics juce::juce_events)
@@ -252,9 +246,7 @@ add_executable(vis_styles_test EXCLUDE_FROM_ALL
     source/styles/Y2KLineStyle.cpp
     source/styles/PolylineStyle.cpp
     source/styles/CrystalStyle.cpp
-    source/styles/RingStyle.cpp
-    source/styles/TerraceStyle.cpp
-    source/styles/SpectrogramStyle.cpp)
+    source/styles/RingStyle.cpp)
 target_compile_definitions(vis_styles_test PRIVATE JUCE_USE_CURL=0)
 target_include_directories(vis_styles_test PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/source)
 target_link_libraries(vis_styles_test PRIVATE juce::juce_graphics juce::juce_events)
@@ -273,9 +265,7 @@ add_executable(vis_tabs_test EXCLUDE_FROM_ALL
     source/styles/BarLineStyle.cpp
     source/styles/PolylineStyle.cpp
     source/styles/CrystalStyle.cpp
-    source/styles/RingStyle.cpp
-    source/styles/TerraceStyle.cpp
-    source/styles/SpectrogramStyle.cpp)
+    source/styles/RingStyle.cpp)
 target_compile_definitions(vis_tabs_test PRIVATE JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0)
 target_include_directories(vis_tabs_test PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/source)
 target_link_libraries(vis_tabs_test PRIVATE juce::juce_gui_extra juce::juce_graphics juce::juce_events juce::juce_dsp)

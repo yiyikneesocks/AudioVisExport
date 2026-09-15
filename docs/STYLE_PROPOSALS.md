@@ -7,7 +7,7 @@
 
 | # | 样式 | 效果 | 预览 | 成本 |
 |---|---|---|---|---|
-| A1 | ~~**频谱瀑布图 Spectrogram**~~ ✅已实现 v0.5.6（`spectrogram`：滚动方块热力图，方块粒度/滚动速度/拖尾） | 时间从右往左滚动的像素方格热力图（复古像素风），频率纵轴、亮度=能量 | 维基：https://en.wikipedia.org/wiki/Spectrogram ；本地实物：跑 Y2Kmeter → Spectrogram 模块（`~/CodingProgram/AudioVisualizer/Y2Kmeter/source/ui/modules/SpectrogramModule.cpp`） | M |
+| A1 | **频谱瀑布图 Spectrogram**（⏸ v0.5.6 已实现但**暂禁用**：观感问题大，源保留未注册） | 时间从右往左滚动的像素方格热力图（复古像素风），频率纵轴、亮度=能量 | 维基：https://en.wikipedia.org/wiki/Spectrogram ；本地实物：跑 Y2Kmeter → Spectrogram 模块（`~/CodingProgram/AudioVisualizer/Y2Kmeter/source/ui/modules/SpectrogramModule.cpp`） | M |
 | A2 | **3D 瀑布** | 瀑布图的伪 3D 透视版（Y2Kmeter 有 Spectrogram3D） | Y2Kmeter Spectrogram3D 模块 | L |
 | A3 | **示波器波形 / X-Y 李萨如** | 实时波形线；或左右声道合成的李萨如图形 | 维基：https://en.wikipedia.org/wiki/Lissajous_curve ；Y2Kmeter OscilloscopeModule | M |
 | A4 | **VU 指针表** | 复古模拟指针电平表（Y2Kmeter VuMeterModule），可作装饰图层 | Y2Kmeter 实物 | M |
@@ -22,7 +22,7 @@
 | B3 | **波形进度条** | 整首歌的静态波形 + 播放进度覆盖（可导出全曲时间轴动画） | M |
 | B4 | **粒子星域** | 音频能量驱动的粒子喷泉/星域（速度/颜色映射频段） | M |
 | B5 | **文字驱动** | 用户文字按频谱形变（轮廓随 band 起伏） | L |
-| B6 | ~~**地形剖面 Terrace**~~ ✅已实现 v0.5.6（`terrace`：层数/层距/渐隐；帧历史堆叠伪3D） | 多层历史曲线堆叠成"山丘地形"（每层为过去 N 帧的曲线，向下透明渐隐） | M |
+| B6 | **地形剖面 Terrace**（⏸ v0.5.6 已实现但**暂禁用**：观感问题大，源保留未注册） | 多层历史曲线堆叠成"山丘地形"（每层为过去 N 帧的曲线，向下透明渐隐） | M |
 
 ## C. 建议实施顺序（拍板后）
 1. **B1 径向频谱**（最出效果、独立性强，与基线轴/蒙版体系兼容）
