@@ -24,7 +24,16 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-15 15:4x）
+## 当前状态（最后更新：2026-09-15 16:1x）
+
+- **GitHub 推送根治：按工程隔离凭据（工具/文档）**：`scripts/ghpush.sh` 重写为 per-repo 隔离
+  （`--init` 把仓库 helper 指到 `~/.config/ghpush/<host>-<owner>-<repo>.credentials`；approve/reject 只动本文件；
+  目标若指全局文件直接拒绝；改前快照；写探针 `push --dry-run` 防 public 读假绿；token 隐藏录入+格式校验）；
+  `docs/GITHUB_PUSH.md` 改为"按工程隔离"通用版；AGENTS §4.2 + ARCHITECTURE §7.5 同步指向；事故记录
+  `~/CodingProgram/github-credential-incident-2026-09-15.md`。根因：一次跨仓库共享 `~/.git-credentials` 的 `reject`
+  清空了本工程凭据（现该文件空 → 本工程读可用、写 401）。**本工程已 `--init` 隔离；待用户 `--setup-token` 恢复写权限。**
+  （无代码/构建影响；bash -n 通过。）
+
 
 - **v0.5.5 已发版**（版本串全 bump、history/release-notes/ARCHITECTURE 同步、tag + GitHub Release 见本次发版；本文件转入下一版 v0.5.6 滚动）。
   v0.5.5 主体＝蒙版描边体系重构 + peak cap 独立外观（含本次新增独立 "Peak cap thickness" 旋钮、修正"边框样式只跟随颜色、不跟随宽度"的误导文案）+ 双向多选 + config.json。

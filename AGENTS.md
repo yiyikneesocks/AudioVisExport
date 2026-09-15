@@ -116,7 +116,8 @@
 
 ### 4.2 Git 暂存与认证防爆
 - **禁止 `git add -A`**: 严禁批量暂存！**仅精确 stage (`git add <file>`) 明确修改的路径**。
-- **Windows Push 认证**: 使用 HTTP/1.1 + PAT，详见 `ARCHITECTURE.md §7.5`（凭据存在 `~/.git-credentials`）。
+- **Windows Push 认证**: HTTP/1.1 + PAT，走 `scripts/ghpush.sh`（先 `--init` 再 `--setup-token`，推送用 `ghpush.sh [--tag]`）；细节见 `docs/GITHUB_PUSH.md` 与 `ARCHITECTURE.md §7.5`。
+- **凭据按工程隔离（防跨仓库互相覆盖）**: 每仓库凭据落**各自文件** `~/.config/ghpush/<host>-<owner>-<repo>.credentials`；**任何 agent 不得读写全局 `~/.git-credentials`、不得亲自 `--setup-token`/碰 token 明文**（只跑 `ghpush.sh`）。同账号多仓库共享全局 store 曾被一次 `reject` 牵连清空（见 `~/CodingProgram/github-credential-incident-2026-09-15.md`）。
 
 ---
 
