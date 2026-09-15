@@ -797,7 +797,7 @@ PATH=/home/azulores/miniconda3/envs/gitenv/bin:$PATH git -c http.version=HTTP/1.
 **发 Release**：push tag 后用 GitHub API POST `/repos/yiyikneesocks/AudioVisExport/releases`
 （正文取 `docs/RELEASE_NOTES.md` 对应版本节），或网页 Releases → Draft a new release。
 
-> **通用化 + 按工程隔离版（现行）**：`docs/GITHUB_PUSH.md` + `scripts/ghpush.sh`。要点：**每仓库用独立凭据文件**
+> **通用化 + 按工程隔离版（现行）**：`docs/GITHUB_PUSH.md` + `scripts/ghpush.sh`；机器级强制由全局 shell helper `~/.config/git/git-credential-perrepo` 兜底（见 §0.5）。要点：**每仓库用独立凭据文件**
 > `~/.config/ghpush/<host>-<owner>-<repo>.credentials`，`approve/reject` 只动本仓库文件，**杜绝共享全局 `~/.git-credentials`
 > 被别的仓库 `reject` 牵连清空**（2026-09-15 曾发生，见 `~/CodingProgram/github-credential-incident-2026-09-15.md`）。
 > 本仓库已 `--init` 隔离；录入/轮换由**用户**跑：`scripts/ghpush.sh --setup-token`（隐藏输入、防粘错/重复、改前快照）；

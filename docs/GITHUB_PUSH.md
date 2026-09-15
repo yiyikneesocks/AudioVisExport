@@ -19,6 +19,29 @@
 
 ---
 
+## 0.5 强制执行层（**与本文件是否被读到无关**）
+"读文档自觉遵守"并不牢靠——agent 可能没读，或照旧手敲 `git credential reject ~/.git-credentials`。
+所以本机把隔离做成**机器级强制**：装一个全局 shell credential helper，任何 `git credential` 都按**当前仓库**路由到各自文件。
+
+- 助手源文件：本仓库 `scripts/git-credential-perrepo.sh`；装到固定路径并生效：
+  ```bash
+  mkdir -p ~/.config/git && cp scripts/git-credential-perrepo.sh ~/.config/git/git-credential-perrepo && chmod +x ~/.config/git/git-credential-perrepo
+  ```
+  它据 `remote.origin.url` 推导 `~/.config/ghpush/<host>-<owner>-<repo>.credentials`（与 `scripts/ghpush.sh` 同 slug、同文件）。
+- 启用（一次性，机器级）：
+  ```bash
+  git config --global credential.helper ""
+  git config --global --add credential.helper '!/home/azulores/.config/git/git-credential-perrepo'
+  ```
+- 效果：即便某仓库**没**跑过 `--init`、即便有人**手敲** `git credential reject`，也只动该仓库自己那一个文件；
+  共享全局 `~/.git-credentials` 从此不再被任何仓库读写。→ **agent 读不读文档都安全**。
+- 回滚（确要退回默认全局 store）：`git config --global --unset-all credential.helper`。
+- 全局 OpenCode 规则同步落在 `~/.config/opencode/AGENTS.md`（对**所有**工程会话注入）：agent 禁碰 token / 禁改全局 helper / 只调 `ghpush.sh`。
+
+> 结论：本文件其余章节是"规范与便捷"；**真正的隔离由 §0.5 这层兜底**。
+
+---
+
 ## 1. 铁律（人和 agent 都要守）
 
 1. **agent / CI 绝不接触 token 明文、绝不做 `--setup-token`**；只有**人**在自己的终端里录入一次。

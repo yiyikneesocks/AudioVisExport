@@ -24,7 +24,14 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-15 16:1x）
+## 当前状态（最后更新：2026-09-15 18:4x）
+
+- **GitHub 推送隔离·从"文档自觉"升级为"机器级强制"**：全局 shell credential helper `~/.config/git/git-credential-perrepo`
+  （源 `scripts/git-credential-perrepo.sh`）+ `git config --global credential.helper="" + '!…'`。任何仓库、哪怕手敲
+  `git credential reject` 也只路由到该仓库专属 `~/.config/ghpush/<slug>.credentials`；全局 `~/.git-credentials` 不再被读写。
+  另建全局 `~/.config/opencode/AGENTS.md`（对所有工程会话注入：agent 禁碰 token/禁改全局 helper/只调 ghpush.sh）。
+  `docs/GITHUB_PUSH.md` 加 §0.5 强制层 + 源文件安装法；AGENTS/ARCHITECTURE/事故记录同步。实测：模拟外来仓库 `git credential fill` 命中其专属文件、本工程写探针通过。已 push。
+
 
 - **GitHub 推送根治：按工程隔离凭据（工具/文档）**：`scripts/ghpush.sh` 重写为 per-repo 隔离
   （`--init` 把仓库 helper 指到 `~/.config/ghpush/<host>-<owner>-<repo>.credentials`；approve/reject 只动本文件；
