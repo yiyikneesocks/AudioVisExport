@@ -59,6 +59,9 @@ public:
         float ringInnerRadiusRatio  = 0.28f;  // v0.5.6 Ring：内圈空心半径比
         float ringBarThicknessRatio = 0.6f;   // v0.5.6 Ring：辐条角宽比
         int   ringLayers            = 2;      // v0.5.6 Ring：1=外层实时；2=加内层峰值
+        int   terraceLayers         = 24;     // v0.5.6 Terrace：堆叠层数
+        float terraceDepthStep      = 3.0f;   // v0.5.6 Terrace：层间 y 抬高像素
+        float terraceFade           = 0.55f;  // v0.5.6 Terrace：后层渐隐 0..1
 
         // 元素开关
         bool  drawGrid        = true;

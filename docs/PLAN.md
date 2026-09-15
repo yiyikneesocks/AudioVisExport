@@ -24,7 +24,10 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-15 19:3x）
+## 当前状态（最后更新：2026-09-15 19:5x）
+
+- **新样式 B6 地形剖面 `terrace`（已并入 Ring 之后）**：`TerraceStyle.{h,cpp}` 帧历史堆叠（front=最新），后→前逐层 y 抬高 + 渐隐伪 3D，ColorMap 上色；3 新参数 `terraceLayers/terraceDepthStep/terraceFade` 全链。工厂/CMake(AVX+3 测试目标)/GUI combo/CLI 帮助/文档/styleSupportsOutline=false。`vis_styles_test` 加 terrace 用例（ink、跨帧变化、resize 安全）。6 套回归全绿、Linux 双端干净。**待：Spectrogram；Windows 部署+肉眼验证；未 push。**
+
 
 - **新样式 B1 径向频谱 `ring`（v0.5.6 进行中，本轮勾选：Ring→Terrace→Spectrogram）**：
   新增 `RingStyle.{h,cpp}`（band→绕圆辐条，外层实时/内层峰值双层，`ringRotationDegPerSec` 跨帧累计旋转，ColorMap 上色）。

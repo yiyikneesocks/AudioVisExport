@@ -223,6 +223,9 @@ juce::String SpectrumParams::toJson() const
     s << "    \"ringInnerRadiusRatio\": " << ringInnerRadiusRatio << ",\n";
     s << "    \"ringBarThicknessRatio\": " << ringBarThicknessRatio << ",\n";
     s << "    \"ringLayers\": " << ringLayers << ",\n";
+    s << "    \"terraceLayers\": " << terraceLayers << ",\n";
+    s << "    \"terraceDepthStep\": " << terraceDepthStep << ",\n";
+    s << "    \"terraceFade\": " << terraceFade << ",\n";
     s << "    \"lineWidth\": " << lineWidth << ",\n";
     s << "    \"opacity\": " << opacity << ",\n";
     s << "    \"drawGrid\": " << (drawGrid ? "true" : "false") << ",\n";
@@ -493,6 +496,9 @@ SpectrumParams SpectrumParams::fromJson (const juce::String& jsonText,
         p.ringInnerRadiusRatio  = juce::jlimit (0.0f, 0.8f,  getFloat (vis, "ringInnerRadiusRatio",  p.ringInnerRadiusRatio));
         p.ringBarThicknessRatio = juce::jlimit (0.05f, 1.0f, getFloat (vis, "ringBarThicknessRatio", p.ringBarThicknessRatio));
         p.ringLayers            = juce::jlimit (1, 2, getInt (vis, "ringLayers", p.ringLayers));
+        p.terraceLayers         = juce::jlimit (4, 64,  getInt (vis, "terraceLayers", p.terraceLayers));
+        p.terraceDepthStep      = juce::jlimit (1.0f, 12.0f, getFloat (vis, "terraceDepthStep", p.terraceDepthStep));
+        p.terraceFade           = juce::jlimit (0.0f, 0.95f, getFloat (vis, "terraceFade", p.terraceFade));
         p.lineWidth     = getFloat (vis, "lineWidth", p.lineWidth);
         p.opacity       = getFloat (vis, "opacity", p.opacity);
         p.drawGrid      = getBool (vis, "drawGrid", p.drawGrid);
@@ -708,6 +714,9 @@ bool SpectrumParams::applyOverride (const juce::String& dottedKey,
     if      (key == "visual.ringInnerRadiusRatio")  { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); ringInnerRadiusRatio=juce::jlimit(0.0f,0.8f,v); return true; }
     if      (key == "visual.ringBarThicknessRatio") { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); ringBarThicknessRatio=juce::jlimit(0.05f,1.0f,v); return true; }
     if      (key == "visual.ringLayers")            { bool ok=true; int v=toInt(&ok); if(!ok) return setErr("invalid int"); ringLayers=juce::jlimit(1,2,v); return true; }
+    if      (key == "visual.terraceLayers")         { bool ok=true; int v=toInt(&ok); if(!ok) return setErr("invalid int"); terraceLayers=juce::jlimit(4,64,v); return true; }
+    if      (key == "visual.terraceDepthStep")      { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); terraceDepthStep=juce::jlimit(1.0f,12.0f,v); return true; }
+    if      (key == "visual.terraceFade")           { bool ok=true; float v=toFloat(&ok); if(!ok) return setErr("invalid float"); terraceFade=juce::jlimit(0.0f,0.95f,v); return true; }
     if      (key == "visual.drawGrid")       { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); drawGrid=v; return true; }
     if      (key == "visual.drawAxisLabels") { bool ok=true; bool v=toBool(&ok); if(!ok) return setErr("invalid bool"); drawAxisLabels=v; return true; }
     if      (key == "visual.primaryColor")   { bool ok; auto c=parseColour(val, &ok); if(!ok) return setErr("invalid color (#rrggbb / #aarrggbb)"); primaryColor=c; return true; }

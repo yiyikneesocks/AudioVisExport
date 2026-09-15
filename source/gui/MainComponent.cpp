@@ -621,6 +621,9 @@ SpectrumStyle::RenderParams MainComponent::buildRp (const SpectrumParams& p)
     rp.ringInnerRadiusRatio  = p.ringInnerRadiusRatio;
     rp.ringBarThicknessRatio = p.ringBarThicknessRatio;
     rp.ringLayers            = p.ringLayers;
+    rp.terraceLayers         = p.terraceLayers;
+    rp.terraceDepthStep      = p.terraceDepthStep;
+    rp.terraceFade           = p.terraceFade;
     rp.colorMap       = p.colorMap;
     return rp;
 }

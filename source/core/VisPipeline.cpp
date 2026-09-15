@@ -84,6 +84,9 @@ namespace
         rp.ringInnerRadiusRatio  = p.ringInnerRadiusRatio;
         rp.ringBarThicknessRatio = p.ringBarThicknessRatio;
         rp.ringLayers            = p.ringLayers;
+        rp.terraceLayers         = p.terraceLayers;
+        rp.terraceDepthStep      = p.terraceDepthStep;
+        rp.terraceFade           = p.terraceFade;
         return rp;
     }
 

@@ -168,6 +168,10 @@ struct SpectrumParams
     float ringInnerRadiusRatio   = 0.28f;  // 内圈空心半径占最大半径比例 0..0.8
     float ringBarThicknessRatio  = 0.6f;   // 单根辐条角宽占带角步长比例 0.05..1
     int   ringLayers             = 2;      // 1=仅实时外层；2=外层实时 + 内层峰值双层
+    // v0.5.6 新样式：地形剖面 Terrace（堆叠历史曲线成层峦；band 驱动 + 帧历史）
+    int   terraceLayers          = 24;     // 堆叠层数（=保留历史帧数）4..64
+    float terraceDepthStep       = 3.0f;   // 每层沿 y 抬高的像素（透视间距）
+    float terraceFade            = 0.55f;  // 后层渐隐强度 0..1（越大越淡）
     bool  drawGrid        = false;     // 可视化视频默认不画坐标轴（需要时 CLI 开 --draw-grid on）
     bool  drawAxisLabels  = false;     // 同上（--draw-axis-labels on）
 
