@@ -796,6 +796,10 @@ PATH=/home/azulores/miniconda3/envs/gitenv/bin:$PATH git -c http.version=HTTP/1.
 **发 Release**：push tag 后用 GitHub API POST `/repos/yiyikneesocks/AudioVisExport/releases`
 （正文取 `docs/RELEASE_NOTES.md` 对应版本节），或网页 Releases → Draft a new release。
 
+> **通用化 + 交互录入版**：完整跨工程流程（用户隐藏录入 PAT · 格式防粘错/防重复 · git credential 安全落盘 ·
+> agent 一条命令推送 · TLS/HTTP1.1 · Release API）见 `docs/GITHUB_PUSH.md`；脚本 = `scripts/ghpush.sh`。
+> 本仓库推送示例：`GIT_BIN=~/miniconda3/envs/gitenv/bin/git scripts/ghpush.sh [--tag vX.Y.Z]`（先 `--check` 自检）。
+
 ---
 
 ## 7.8 协作 / 编辑工具链避坑（AI 高频踩，务必先读）

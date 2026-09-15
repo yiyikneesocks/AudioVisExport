@@ -24,7 +24,16 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-15 01:2x）
+## 当前状态（最后更新：2026-09-15 02:0x）
+
+- **新增通用 GitHub 推送文档 + 脚本（用户要求，跨工程参考）**：
+  · `docs/GITHUB_PUSH.md` = 通用流程：职责分工（用户配一次 token / agent 只跑命令）· fine-grained PAT 创建 ·
+    **隐藏录入**（`read -rs` 不回显）· **格式校验防粘错/防重复粘贴**（去 CR/引号/空白、前缀计数、长度白名单、掩码预览）·
+    `git credential reject→approve` 安全落盘 + chmod 600 · 日常推送 + TLS(HTTP/1.1)+openssl-git 应对 · Release API（取凭据不回显）。
+  · `scripts/ghpush.sh` = 可复制到任意 HTTPS+PAT 仓库的助手：`--setup-token` / `--check` / `--tag`；已在本仓库
+    `--check` 验证（openssl git 下 ls-remote 成功；系统 git 触发 TLS 失败——正好印证文档 §4）。bash -n 通过。
+  · ARCHITECTURE §7.5 加了指向本通用文档的交叉引用。纯文档+脚本，无构建影响。
+
 
 - **peak cap 外观系统（INBOX r6 task2 追加需求，用户三决策：拆分裁剪/描边轮廓 · 帽颜色跟随该柱边框 · 厚度参数）**：
   · 新参数 `SpectrumParams::{peakCapWidth, peakLineDotted, peakCapAsBorder}`（进 toJson/fromJson/applyOverride 与 RenderParams）。
