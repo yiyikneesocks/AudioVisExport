@@ -51,7 +51,7 @@ build/AudioVisGUI_artefacts/Release/AudioVisGUI
 
 | 分组 | 控件 |
 |---|---|
-| **Style** | Render style（y2k-line / bar / **bar-line** / polyline / crystal / **ring:bar** / **ringline** / **ring:bar-line**）（ring 系：基圆+内外镜像+间隙+外圈峰帽/峰线；ring 下 Baseline% 轴置灰）、Band count、Bar gap %、Bar width %（bar / bar-line 生效）、**Reset element transform**、Freq scale、Min/Max Hz |
+| **Style** | Render style（y2k-line / bar / **bar-line** / polyline / crystal / **ring:bar** / **ringline** / **ring:bar-line**）（ring 系：基圆+内外镜像+间隙+外圈峰帽/峰线；ring 下 **Ring base %** 调基圆大小、Baseline% 轴置灰）、Band count、Bar gap %、Bar width %（bar / bar-line 生效）、**Reset element transform**、Freq scale、Min/Max Hz |
 | **Layers** | **[Add image]**、[Up] / [Down]（图层顺序）、[Remove]、Opacity（选中图层） |
 | **Time** | FPS、Attack ms、Release ms、Peak hold ms、Peak decay dB/s、Temporal smooth |
 | **Dynamics** | Y-axis curve、Gain、Gamma、Slope comp、Slope dB/oct |

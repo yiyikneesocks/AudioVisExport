@@ -2,7 +2,7 @@
 // RingStyle.cpp — ring:bar 径向柱（基圆 + 内外镜像 + 间隙 + 外圈峰值帽/线）
 //
 //   基圆半径 = ringBaseRadiusRatio*maxR。外圈从 (baseR+gap) 向外生长到 rO(nv)，
-//   内圈从 (baseR-gap) 向内（实时镜像，非峰值）生长到 rI(nv)；gap=ringMidGapRatio*maxR，
+//   内圈从 (baseR-gap) 向内（实时镜像，非峰值）生长到 rI(nv)；gap=ringMidGapRatio*baseR，
 //   使 nv=0 时内外不接触。角宽 ringBarThicknessRatio（<1 留柱隙）。外圈可加峰值帽(ringPeakCapOn)
 //   + 峰值线(ringPeakLineOn)；内圈峰值默认关(ringInnerPeakOn)。
 // =============================================================================
@@ -21,7 +21,7 @@ void RingStyle::render (juce::Graphics& g, const juce::Rectangle<int>& canvas,
     const float cy = (float) canvas.getY() + (float) canvas.getHeight() * 0.5f;
     const float maxR  = std::min ((float) canvas.getWidth(), (float) canvas.getHeight()) * 0.5f * 0.92f;
     const float baseR = maxR * juce::jlimit (0.05f, 0.8f, rp.ringBaseRadiusRatio);
-    const float gapR  = maxR * juce::jlimit (0.0f, 0.4f, rp.ringMidGapRatio);
+    const float gapR  = baseR * juce::jlimit (0.0f, 0.5f, rp.ringMidGapRatio);   // 间隙相对"基圆半径"（比相对 maxR 小得多）
     const float oEdge = baseR + gapR;                 // 外圈起点
     const float iEdge = baseR - gapR;                 // 内圈起点（向外看的最外）
     const float minR  = maxR * 0.02f;

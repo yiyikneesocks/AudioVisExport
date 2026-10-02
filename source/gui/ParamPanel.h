@@ -192,6 +192,7 @@ private:
     juce::ToggleButton* lineOnlyTogglePtr = nullptr;  // #3: line 系样式才有效
     juce::Slider* capPullSliderPtr = nullptr;         // #3: 仅 bar-line
     juce::Slider* baselineSliderPtr = nullptr;       // v0.5.6：ring 模式置灰基线轴
+    juce::Slider* ringBaseSliderPtr = nullptr;       // v0.5.6：ring 基圆半径（对标普通模式基线轴）
     // v0.5.6：peak cap 外观（全局）+ 两模式开关（有蒙版时）
     juce::Slider*       peakCapWidthSliderPtr = nullptr;
     juce::ToggleButton* peakLineDottedPtr     = nullptr;

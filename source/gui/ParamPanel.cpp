@@ -142,6 +142,12 @@ ParamPanel::ParamPanel (SpectrumParams& paramsRef) : params (paramsRef)
     baselineSliderPtr->setTooltip ("Baseline axis: bars grow from this line, split above/below\n"
                                 "proportionally (50% = mirror look). Also draggable on the canvas\n"
                                 "with snapping (50% hints \"mirror\").");
+    // v0.5.6：ring 系"基圆半径"（对标普通模式的基线轴；ring 模式下可调、普通模式置灰）
+    ringBaseSliderPtr = addSlider ("Ring base %", 5, 80, 1, 1.0,
+               [this] { return (double) params.ringBaseRadiusRatio * 100.0; },
+               [this] (double v) { params.ringBaseRadiusRatio = (float) (v / 100.0); notify(); });
+    ringBaseSliderPtr->setTooltip ("Ring styles only: base-circle radius (the ring's 'axis').\n"
+               "Outer ring grows outward, inner ring mirrors inward. Greyed in non-ring styles.");
     // v0.5.4 #6：line 系只画线
     lineOnlyTogglePtr = addToggle ("Line only (no fill)", params.lineOnly,
                [this] (bool v) { params.lineOnly = v; notify(); });
@@ -1252,6 +1258,8 @@ void ParamPanel::refreshStyleDependentControls()
     if (peakBottomTogglePtr != nullptr) peakBottomTogglePtr->setEnabled (! isRing && aX > 0.001f);
     if (baselineSliderPtr   != nullptr) { baselineSliderPtr->setEnabled (! isRing);
                                           if (auto* l = rowLabels[baselineSliderPtr].get()) l->setEnabled (! isRing); }
+    if (ringBaseSliderPtr   != nullptr) { ringBaseSliderPtr->setEnabled (isRing);
+                                          if (auto* l = rowLabels[ringBaseSliderPtr].get()) l->setEnabled (isRing); }
     if (capPullSliderPtr != nullptr)   { capPullSliderPtr->setEnabled (st == "bar-line");
                                           if (auto* l = rowLabels[capPullSliderPtr].get()) l->setEnabled (st == "bar-line"); }
     if (lineOnlyTogglePtr != nullptr)   lineOnlyTogglePtr->setEnabled (lineFam);

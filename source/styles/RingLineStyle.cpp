@@ -16,7 +16,7 @@ void RingLineStyle::render (juce::Graphics& g, const juce::Rectangle<int>& canva
     const float cy = (float) canvas.getY() + (float) canvas.getHeight() * 0.5f;
     const float maxR  = std::min ((float) canvas.getWidth(), (float) canvas.getHeight()) * 0.5f * 0.92f;
     const float baseR = maxR * juce::jlimit (0.05f, 0.8f, rp.ringBaseRadiusRatio);
-    const float gapR  = maxR * juce::jlimit (0.0f, 0.4f, rp.ringMidGapRatio);
+    const float gapR  = baseR * juce::jlimit (0.0f, 0.5f, rp.ringMidGapRatio);
     const float oEdge = baseR + gapR, iEdge = baseR - gapR, minR = maxR * 0.02f;
     const float oScale = juce::jlimit (0.1f, 3.0f, rp.ringOuterHeightScale);
     const float iScale = juce::jlimit (0.1f, 3.0f, rp.ringInnerHeightScale);

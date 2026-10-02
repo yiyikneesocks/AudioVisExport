@@ -24,7 +24,10 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-16 03:4x）
+## 当前状态（最后更新：2026-09-16 04:1x）
+
+- **ring 间隙收窄 + 基圆半径 GUI 可调**：`ringMidGapRatio` 由"×maxR"改为"×baseR"（间隙大幅变小，默认 0.12 → 约 12% 基圆半径）；新增 **Ring base %** 滑杆（绑定 `ringBaseRadiusRatio`，对标普通模式 Baseline%，仅 ring 系可用/普通模式置灰）。三 ring 样式共用。6 套回归全绿、Linux+Win 干净、部署 `AudioVisGUI_091604xx`。**未 push（验证闸门）。**
+
 
 - **ring 家族重构 + 普通模式峰帽上下拆分（用户 3 点）**：
   ① `ringline` 内外圈留间隙不相连（基圆 `ringBaseRadiusRatio` + `ringMidGapRatio`）。② 内圈改为**实时镜像**（非峰值），内/外高度各自拉伸 `ringOuter/InnerHeightScale`；ring 模式**置灰基线轴**（Baseline% 滑杆 + 画布轴拖拽停用，ring 用基圆）。③ 外圈加峰值帽/线（`ringPeakCapOn`/`ringPeakLineOn` 默认开），内圈峰 `ringInnerPeakOn` 默认关可开；`ring:bar`/`ring:bar-line` 柱间可留隙（复用 `ringBarThicknessRatio`）。
