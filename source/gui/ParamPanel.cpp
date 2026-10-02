@@ -741,6 +741,13 @@ void ParamPanel::syncBarLayoutSliders()
         bandCountSliderPtr->setValue ((double) params.bandCount, juce::dontSendNotification);
 }
 
+void ParamPanel::syncBaselineFromParams()
+{
+    // 画布直接改 params.baselineY（拖基线轴）时，滑杆不会自动跟随 → 每 tick 回填一次（dontSend 无副作用）
+    if (baselineSliderPtr != nullptr) baselineSliderPtr->setValue (params.baselineY * 100.0, juce::dontSendNotification);
+    if (ringBaseSliderPtr != nullptr) ringBaseSliderPtr->setValue (params.ringBaseRadiusRatio * 100.0, juce::dontSendNotification);
+}
+
 void ParamPanel::syncAllFromParams()
 {
     // v0.5.5 新 #3：undo 后把面板显示回填。滑块的 read lambda 只在构造时求值一次，

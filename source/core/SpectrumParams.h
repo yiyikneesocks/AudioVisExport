@@ -171,7 +171,7 @@ struct SpectrumParams
     float ringBarThicknessRatio  = 0.6f;   // 单根辐条角宽占带角步长比例 0.05..1（ring:bar / ring:bar-line 用，可留隙）
     float ringOuterHeightScale   = 1.0f;   // v0.5.6：外圈高度拉伸 0.1..3
     float ringInnerHeightScale   = 1.0f;   // v0.5.6：内圈高度拉伸（镜像）0.1..3
-    float ringMidGapRatio        = 0.12f;  // v0.5.6：基圆处内/外圈间隙比例 0..0.4（nv=0 不接触）
+    float ringMidGapRatio        = 0.02f;  // v0.5.6：基圆处内/外圈间隙比例(×基圆半径) 0..0.5；默认极小(近贴合)
     bool  ringOuterOn            = true;   // 外圈（实时辐条）开关
     bool  ringInnerOn            = true;   // 内圈（实时镜像辐条）开关（独立于外圈）
     bool  ringPeakCapOn          = true;   // v0.5.6：外圈峰值帽

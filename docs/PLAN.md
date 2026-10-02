@@ -24,7 +24,9 @@
 
 ---
 
-## 当前状态（最后更新：2026-09-16 04:1x）
+## 当前状态（最后更新：2026-10-02 02:3x）
+
+- **四修**：① 画布拖基线轴 → sidepane Baseline%/Ring base% 滑杆**每 tick 回填同步**（`ParamPanel::syncBaselineFromParams` 在 MainComponent timer 调用）。② ring 内外圈间隙默认由 0.12 收到 **0.02**（×基圆半径，近乎贴合）。③ `ring:bar` 峰值帽改为**仅有帽、无连线**，且帽角宽=柱角宽（半径越大弧长越宽）；`ringPeakLineOn` 在 ring:bar 不再用。④ 回复格式：逐条用英文复述问题（本机 AGENTS 约定）。6 套回归全绿、Linux+Win 干净。
 
 - **ring 间隙收窄 + 基圆半径 GUI 可调**：`ringMidGapRatio` 由"×maxR"改为"×baseR"（间隙大幅变小，默认 0.12 → 约 12% 基圆半径）；新增 **Ring base %** 滑杆（绑定 `ringBaseRadiusRatio`，对标普通模式 Baseline%，仅 ring 系可用/普通模式置灰）。三 ring 样式共用。6 套回归全绿、Linux+Win 干净、部署 `AudioVisGUI_091604xx`。**未 push（验证闸门）。**
 

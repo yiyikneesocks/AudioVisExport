@@ -70,24 +70,21 @@ void RingStyle::render (juce::Graphics& g, const juce::Rectangle<int>& canvas,
         g.fillPath (q);
     }
 
-    // 外圈峰值线（闭合折线，连各带峰半径）
-    if (rp.ringOuterOn && rp.barParticles && rp.ringPeakLineOn)
-    {
-        juce::Path lp;
-        for (int i = 0; i < N; ++i)
-        { const auto pt = P (baseA + ((float) i + 0.5f) * step, rO (pvOf (i))); if (i==0) lp.startNewSubPath (pt); else lp.lineTo (pt); }
-        lp.closeSubPath();
-        g.setColour (cm.peakColor());
-        g.strokePath (lp, juce::PathStrokeType (juce::jmax (1.0f, rp.lineWidth)));
-    }
-    // 外圈峰值帽（各带峰半径处一小段切向粗线）
+    // 外圈峰值帽：**只有帽、无连线**；帽角宽 = 该柱角宽（半径越大，弧长越宽 → 视觉上逐渐变宽），
+    //   径向厚度 = peakCapWidth（以峰半径为中线的一小段环带）。
     if (rp.ringOuterOn && rp.barParticles && rp.ringPeakCapOn)
     {
-        const float cw = juce::jmax (1.5f, rp.peakCapWidth);
+        const float cw = juce::jmax (1.0f, rp.peakCapWidth);
         g.setColour (cm.peakColor());
         for (int i = 0; i < N; ++i)
-        { const float a = baseA + ((float) i + 0.5f) * step, r = rO (pvOf (i));
-          g.drawLine (juce::Line<float> (P (a - thick, r), P (a + thick, r)), cw); }
+        {
+            const float a = baseA + ((float) i + 0.5f) * step, a0 = a - thick, a1 = a + thick;
+            const float r = rO (pvOf (i)), ri = juce::jmax (0.0f, r - cw * 0.5f), ro = r + cw * 0.5f;
+            juce::Path cap;
+            cap.startNewSubPath (P (a0, ri)); cap.lineTo (P (a1, ri));
+            cap.lineTo (P (a1, ro));          cap.lineTo (P (a0, ro)); cap.closeSubPath();
+            g.fillPath (cap);
+        }
     }
     // 内圈峰值（默认关）
     if (rp.ringInnerPeakOn && rp.barParticles)

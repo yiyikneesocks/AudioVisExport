@@ -199,6 +199,7 @@ private:
     juce::ToggleButton* peakCapAsBorderPtr    = nullptr;
 public:
     void refreshStyleDependentControls();   // #3: 依当前样式置灰不适用控件
+    void syncBaselineFromParams();           // v0.5.6：画布拖轴后回填基线/基圆滑杆
     // v0.5.6 新1-b：边框控件按"总开关 → 实时/逐柱 → 固定色按钮/性能项"层级互斥置灰，
     //   并把 realtime/perbar 两个开关的勾选态从 outlineMode 反推。所有改描边状态处都要调它。
     void syncOutlineEnablement();

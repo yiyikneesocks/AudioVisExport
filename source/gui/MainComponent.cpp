@@ -299,6 +299,7 @@ void MainComponent::resized()
 // ---------------------------------------------------------------------------
 void MainComponent::timerCallback()
 {
+    panel.syncBaselineFromParams();   // v0.5.6：画布拖基线轴 → sidepane 滑杆同步
     // v0.5.5 新 #3：←/→ seek 走 keyPressed 的 OS 自动重发（不需要 timer，也不需要 keyUp）——
     //   Windows/Linux 按住方向键会以 ~30ms 间隔重复触发 keyPressed，按时间窗去抖 + 计次即可"逐级加速"。
     // 面板改动过参数：样式变化则重建 style；重建 core 让参数立即生效
