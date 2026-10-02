@@ -24,7 +24,9 @@
 
 ---
 
-## 当前状态（最后更新：2026-10-02 02:3x）
+## 当前状态（最后更新：2026-10-02 03:1x）
+
+- **ring bar 布局对齐普通 bar + ring:bar-line 斜向峰值帽**：`ring:bar` / `ring:bar-line` 的柱角宽/间隙改用与普通 bar 相同的 **barWidthRatio / barGapRatio / barPitchRatio**（映射 W→2π、W/N→step；`ringBarThicknessRatio` 不再参与这两个样式）；面板 bar width/gap/pitch 三滑杆对这两个 ring 样式同样可用。`ring:bar-line` 峰值改为**仅斜向帽、无连线**：沿该段"本带→邻带峰半径"斜弦画平头帽，厚度 `peakCapWidth`，帽宽随段宽/半径变化。6 套回归全绿、Linux+Win 干净。
 
 - **四修**：① 画布拖基线轴 → sidepane Baseline%/Ring base% 滑杆**每 tick 回填同步**（`ParamPanel::syncBaselineFromParams` 在 MainComponent timer 调用）。② ring 内外圈间隙默认由 0.12 收到 **0.02**（×基圆半径，近乎贴合）。③ `ring:bar` 峰值帽改为**仅有帽、无连线**，且帽角宽=柱角宽（半径越大弧长越宽）；`ringPeakLineOn` 在 ring:bar 不再用。④ 回复格式：逐条用英文复述问题（本机 AGENTS 约定）。6 套回归全绿、Linux+Win 干净。
 

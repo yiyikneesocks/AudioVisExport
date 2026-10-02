@@ -1253,12 +1253,14 @@ void ParamPanel::refreshStyleDependentControls()
     const juce::String st = params.style;
     const bool barFam   = (st == "bar" || st == "bar-line");
     const bool lineFam  = (st == "y2k-line" || st == "polyline" || st == "crystal");
-    if (barWidthSliderPtr != nullptr)  { barWidthSliderPtr->setEnabled (barFam);
-                                          if (auto* l = rowLabels[barWidthSliderPtr].get()) l->setEnabled (barFam); }
-    if (barGapSliderPtr != nullptr)    { barGapSliderPtr->setEnabled (barFam);
-                                          if (auto* l = rowLabels[barGapSliderPtr].get()) l->setEnabled (barFam); }
-    if (barPitchSliderPtr != nullptr)  { barPitchSliderPtr->setEnabled (barFam);
-                                          if (auto* l = rowLabels[barPitchSliderPtr].get()) l->setEnabled (barFam); }
+    // v0.5.6：ring:bar / ring:bar-line 用与普通 bar 相同的 gap/width/pitch 布局 → 这三个滑杆对它们同样可用
+    const bool barCtlFam = barFam || (st == "ring:bar" || st == "ring:bar-line");
+    if (barWidthSliderPtr != nullptr)  { barWidthSliderPtr->setEnabled (barCtlFam);
+                                          if (auto* l = rowLabels[barWidthSliderPtr].get()) l->setEnabled (barCtlFam); }
+    if (barGapSliderPtr != nullptr)    { barGapSliderPtr->setEnabled (barCtlFam);
+                                          if (auto* l = rowLabels[barGapSliderPtr].get()) l->setEnabled (barCtlFam); }
+    if (barPitchSliderPtr != nullptr)  { barPitchSliderPtr->setEnabled (barCtlFam);
+                                          if (auto* l = rowLabels[barPitchSliderPtr].get()) l->setEnabled (barCtlFam); }
     const bool isRing = st.startsWithIgnoreCase ("ring");   // ring:bar / ringline / ring:bar-line
     const float  aX   = params.baselineY;
     if (peakTopTogglePtr    != nullptr) peakTopTogglePtr   ->setEnabled (! isRing && aX < 0.999f);

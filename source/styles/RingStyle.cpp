@@ -34,8 +34,13 @@ void RingStyle::render (juce::Graphics& g, const juce::Rectangle<int>& canvas,
     if (spinDeg_ < 0.0f)   spinDeg_ += 360.0f;
 
     const float twoPi = 6.2831853f, step = twoPi / (float) N;
-    const float thick = step * 0.5f * juce::jlimit (0.05f, 1.0f, rp.ringBarThicknessRatio);
+    // v0.5.6：与普通 bar 相同的布局模型（W→2π，W/N→step）：
+    //   pitchAng = 2π·barPitchRatio（锚点角距）；barAng = barWidthRatio·step（柱角宽）；gap = barGapRatio·step。
     const float baseA = -1.5707963f + spinDeg_ * 0.0174533f;
+    const float pitchAng = twoPi * juce::jlimit (0.001f, 1.0f, rp.barPitchRatio);
+    const float barAng   = juce::jlimit (0.02f, 2.5f, rp.barWidthRatio) * step;
+    const float a0off    = (pitchAng - barAng) * 0.5f;
+    const auto  aLof = [&] (int i) { return baseA + a0off + (float) i * pitchAng; };
     const auto P = [&] (float ang, float r) { return juce::Point<float> (cx + r * std::cos (ang), cy + r * std::sin (ang)); };
     const auto rO = [&] (float v) { return oEdge + juce::jlimit (0.0f, 1.0f, v) * (maxR - oEdge) * oScale; };
     const auto rI = [&] (float v) { return iEdge - juce::jlimit (0.0f, 1.0f, v) * (iEdge - minR) * iScale; };
@@ -50,7 +55,7 @@ void RingStyle::render (juce::Graphics& g, const juce::Rectangle<int>& canvas,
     for (int i = 0; i < N; ++i)
     {
         const float nv = juce::jlimit (0.0f, 1.0f, frame.normalized[(size_t) i]);
-        const float a = baseA + ((float) i + 0.5f) * step, a0 = a - thick, a1 = a + thick, r1 = rO (nv);
+        const float a0 = aLof (i), a1 = a0 + barAng, r1 = rO (nv);
         juce::Path q;
         q.startNewSubPath (P (a0, oEdge)); q.lineTo (P (a1, oEdge));
         q.lineTo (P (a1, r1));             q.lineTo (P (a0, r1)); q.closeSubPath();
@@ -62,7 +67,7 @@ void RingStyle::render (juce::Graphics& g, const juce::Rectangle<int>& canvas,
     for (int i = 0; i < N; ++i)
     {
         const float nv = juce::jlimit (0.0f, 1.0f, frame.normalized[(size_t) i]);
-        const float a = baseA + ((float) i + 0.5f) * step, a0 = a - thick, a1 = a + thick, r1 = rI (nv);
+        const float a0 = aLof (i), a1 = a0 + barAng, r1 = rI (nv);
         juce::Path q;
         q.startNewSubPath (P (a0, iEdge)); q.lineTo (P (a1, iEdge));
         q.lineTo (P (a1, r1));             q.lineTo (P (a0, r1)); q.closeSubPath();
@@ -78,7 +83,7 @@ void RingStyle::render (juce::Graphics& g, const juce::Rectangle<int>& canvas,
         g.setColour (cm.peakColor());
         for (int i = 0; i < N; ++i)
         {
-            const float a = baseA + ((float) i + 0.5f) * step, a0 = a - thick, a1 = a + thick;
+            const float a0 = aLof (i), a1 = a0 + barAng;
             const float r = rO (pvOf (i)), ri = juce::jmax (0.0f, r - cw * 0.5f), ro = r + cw * 0.5f;
             juce::Path cap;
             cap.startNewSubPath (P (a0, ri)); cap.lineTo (P (a1, ri));
