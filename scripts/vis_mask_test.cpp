@@ -8,6 +8,7 @@
 #include <cmath>
 #include <tuple>
 #include <fstream>
+#include <cstdlib>
 
 namespace
 {
@@ -725,6 +726,50 @@ int main()
             bool red, white, green; classify (out, 25, 31, red, white, green);
             check (red && ! green, "border-style: peak cap recolored to the bar's border colour (not peak green)");
         }
+    }
+
+    // ============ 诊断 18：bar 斜顶 + 仅右缘（复现"右缘不到顶/斜面误绘"）============
+    {
+        auto dump = [] (const juce::Image& im, const char* path)
+        {
+            juce::MemoryOutputStream mem; juce::PNGImageFormat png;
+            if (! png.writeImageToStream (im, mem)) return;
+            std::ofstream out (path, std::ios::binary);
+            if (out) out.write ((const char*) mem.getData(), (std::streamsize) mem.getDataSize());
+        };
+        const int CW = 300, CH = 160;
+        // 造 5 根柱，每根顶面为斜线（左高右低 / 右高左低交替），模拟 bar-line 斜顶
+        auto base = juce::Image (juce::Image::ARGB, CW, CH, true);
+        {
+            juce::Graphics g (base); g.setColour (juce::Colours::black);
+            const int bx[5] = { 20, 80, 140, 200, 250 };
+            for (int i = 0; i < 5; ++i)
+            {
+                const int x0 = bx[i], bw = 34;
+                const int ytl = 30 + (i % 2) * 40;   // 左顶
+                const int ytr = ytl;                  // 平顶（先验"右缘是否到顶/无空白"；改 ytl±25 可看斜顶）
+                juce::Path p; p.startNewSubPath ((float) x0, (float) ytl);
+                p.lineTo ((float) (x0 + bw), (float) ytr);
+                p.lineTo ((float) (x0 + bw), (float) CH);
+                p.lineTo ((float) x0, (float) CH);
+                p.closeSubPath(); g.fillPath (p);
+            }
+        }
+        auto img = solidImg (CW, CH, juce::Colours::black);
+        auto run = [&] (bool top, bool left, bool right, const char* path)
+        {
+            MaskImageLayer cfg; cfg.enabled = true; cfg.strokeEnabled = true; cfg.outlineMode = "image";
+            cfg.outTop = top; cfg.outWTop = 6.0f; cfg.outAlphaTop = 1.0f;
+            cfg.outLeft = left; cfg.outWLeft = 6.0f; cfg.outAlphaLeft = 1.0f;
+            cfg.outRight = right; cfg.outWRight = 6.0f; cfg.outAlphaRight = 1.0f;
+            auto out = SpectrumMask::compose (base, img, cfg, juce::Colours::red, true);
+            dump (out, path);
+            std::printf ("      [dump] %s\n", path);
+        };
+        std::system ("mkdir -p /tmp/opencode/shots");
+        run (false, false, true,  "/tmp/opencode/shots/border_right_only.png");
+        run (true,  false, true,  "/tmp/opencode/shots/border_top_right.png");
+        run (false, true,  true,  "/tmp/opencode/shots/border_left_right.png");
     }
 
     std::printf (failures ? "FAILURES: %d\n" : "ALL PASS\n", failures);

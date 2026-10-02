@@ -411,25 +411,58 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
                     bufCap[(size_t) y * W + x] = v ? S[(size_t) dqV[hd] * W + x] : 0;
                 }
             }
-            std::vector<int> dqH ((size_t) W + 2);
+            // 侧边带（bar 家族）：只有"真正竖直的边界段"才算侧边——即同一列 x 连续多行都是
+            //   "实心且右侧(左)紧邻透明"。斜顶每行边界 x 都在变 → 不满足同列竖直 → 归上边（不在侧边），
+            //   从而①侧边能一直画到柱顶(无留白) ②斜顶不会被误画成侧边。非 bar 家族 rL=rR=0 → 原样透传。
+            // 侧边带（bar 家族）：只认"**连续 K 行同列都是竖边界**"的真实竖直边（K=3，与 rR 无关，
+            //   故不会在上端留大空白）。斜顶每行边界列都在移动 → 同列连续不成立 → 归上边，不画侧边。
+            // 侧边带（bar 家族）：先把"竖直边列"认出来——某列在很长一段高度上都是"实心且右侧(左)紧邻透明"
+            //   的边界列 → 判为真实竖直边（斜顶列每行边界都在移动，最长连续段很短 → 不算）。
+            //   再把这些列的**整段高度**（含柱顶角）都铺上侧边带 → 侧边直达柱顶、无空白；斜顶不画侧边。
+            static thread_local std::vector<int> maxRunR, maxRunL, curRunR, curRunL;
+            if ((int) maxRunR.size() < W)
+            { maxRunR.assign ((size_t) W, 0); maxRunL.assign ((size_t) W, 0);
+              curRunR.assign ((size_t) W, 0); curRunL.assign ((size_t) W, 0); }
+            const uint8* Sdata = S.data();
+            int maxAnyR = 0, maxAnyL = 0;
+            for (int x = 0; x < W; ++x) { maxRunR[(size_t) x] = 0; maxRunL[(size_t) x] = 0; curRunR[(size_t) x] = 0; curRunL[(size_t) x] = 0; }
             for (int y = 0; y < H; ++y)
             {
-                const uint8* row = S.data() + (size_t) y * W;
-                int hd = 0, tl = 0;                                  // 左缘窗 [x-rL, x]
+                const uint8* row = Sdata + (size_t) y * W;
                 for (int x = 0; x < W; ++x)
                 {
-                    while (tl > hd && row[dqH[tl - 1]] >= row[x]) --tl;
-                    dqH[tl++] = x;
-                    while (dqH[hd] < x - rL) ++hd;
-                    bufL[(size_t) y * W + x] = (rL && row[x]) ? row[dqH[hd]] : row[x];
+                    const bool solid = row[x] > 0;
+                    const bool rb = solid && ((x + 1 >= W) || row[x + 1] == 0);
+                    const bool lb = solid && ((x == 0)     || row[x - 1] == 0);
+                    curRunR[(size_t) x] = rb ? curRunR[(size_t) x] + 1 : 0;
+                    curRunL[(size_t) x] = lb ? curRunL[(size_t) x] + 1 : 0;
+                    if (curRunR[(size_t) x] > maxRunR[(size_t) x]) maxRunR[(size_t) x] = curRunR[(size_t) x];
+                    if (curRunL[(size_t) x] > maxRunL[(size_t) x]) maxRunL[(size_t) x] = curRunL[(size_t) x];
                 }
-                hd = tl = 0;                                         // 右缘窗 [x, x+rR]
-                for (int x = W - 1; x >= 0; --x)
+            }
+            for (int x = 0; x < W; ++x) { maxAnyR = juce::jmax (maxAnyR, maxRunR[(size_t) x]); maxAnyL = juce::jmax (maxAnyL, maxRunL[(size_t) x]); }
+            const int minRun = juce::jmax (4, juce::jmin (H / 6, (int) (0.5f * juce::jmax (maxAnyR, maxAnyL))));   // 相对阈值
+            const auto vertRightCol = [&] (int x) { return maxRunR[(size_t) x] >= minRun; };
+            const auto vertLeftCol  = [&] (int x) { return maxRunL[(size_t) x] >= minRun; };
+            for (int y = 0; y < H; ++y)
+            {
+                const uint8* row = Sdata + (size_t) y * W;
+                int remR = 0, remL = 0;
+                for (int x = W - 1; x >= 0; --x)   // 右缘：向左铺 rR
                 {
-                    while (tl > hd && row[dqH[tl - 1]] >= row[x]) --tl;
-                    dqH[tl++] = x;
-                    while (dqH[hd] > x + rR) ++hd;
-                    bufR[(size_t) y * W + x] = (rR && row[x]) ? row[dqH[hd]] : row[x];
+                    if (! rR) { bufR[(size_t) y * W + x] = row[x]; continue; }
+                    if (row[x] == 0) { remR = 0; bufR[(size_t) y * W + x] = 0; continue; }
+                    if (vertRightCol (x)) remR = rR;
+                    bufR[(size_t) y * W + x] = (remR > 0) ? 0 : row[x];
+                    if (remR > 0) --remR;
+                }
+                for (int x = 0; x < W; ++x)        // 左缘：向右铺 rL
+                {
+                    if (! rL) { bufL[(size_t) y * W + x] = row[x]; continue; }
+                    if (row[x] == 0) { remL = 0; bufL[(size_t) y * W + x] = 0; continue; }
+                    if (vertLeftCol (x)) remL = rL;
+                    bufL[(size_t) y * W + x] = (remL > 0) ? 0 : row[x];
+                    if (remL > 0) --remL;
                 }
             }
 
@@ -467,10 +500,9 @@ juce::Image SpectrumMask::composeWithPlan (const juce::Image& base,
                     int rim = 0;
                     if (barFamily && rT != 0)                      // bar：顶缘向内带（与左右同法→闭合）
                         rim = juce::jmax (rim, edgeRim (mv, tt[x], rT, shT, cfg.outAlphaTop));
-                    // 侧边仅当"上方 capR 内仍实心"（= 真正竖直边）；斜面/上边界交给上边框（修 1c(3)）
-                    const bool vertSide = (cp[x] >= 250);
-                    if (rL != 0 && vertSide) rim = juce::jmax (rim, edgeRim (mv, l[x],  rL, shL, cfg.outAlphaLeft));
-                    if (rR != 0 && vertSide) rim = juce::jmax (rim, edgeRim (mv, rr[x], rR, shR, cfg.outAlphaRight));
+                    // 侧边：bufL/bufR 已在上面按"竖直边界带"编码（带内=0 → 满描边），不再用 vertSide gate。
+                    if (rL != 0) rim = juce::jmax (rim, edgeRim (mv, l[x],  rL, shL, cfg.outAlphaLeft));
+                    if (rR != 0) rim = juce::jmax (rim, edgeRim (mv, rr[x], rR, shR, cfg.outAlphaRight));
                     if (rim <= 0) continue;
                     const juce::Colour col = perCol ? plan.colColour[(size_t) x] : plan.uniform;
                     const int inv = 255 - rim;
