@@ -10,6 +10,8 @@
 #include <vector>
 #include <string>
 #include <cmath>
+#include <fstream>
+#include <cstdlib>
 
 static int failures = 0;
 static void check (bool ok, const char* msg)
@@ -29,6 +31,17 @@ static void fillFrame (BandFrame& f, int seed, float base)
         f.db[(size_t) i]         = -80.0f + 80.0f * v;
         f.peakDb[(size_t) i]     = -80.0f + 80.0f * std::min (1.0f, v + 0.15f);
     }
+}
+
+static void dumpPng (const juce::Image& im, const std::string& path)
+{
+    // 压到深灰背景（透明可见）
+    juce::Image flat (juce::Image::ARGB, im.getWidth(), im.getHeight(), true);
+    { juce::Graphics g (flat); g.fillAll (juce::Colour (0xff202024)); g.drawImageAt (im, 0, 0); }
+    juce::MemoryOutputStream mem; juce::PNGImageFormat png;
+    if (! png.writeImageToStream (flat, mem)) return;
+    std::ofstream out (path, std::ios::binary);
+    if (out) out.write ((const char*) mem.getData(), (std::streamsize) mem.getDataSize());
 }
 
 static long inkAnd (const juce::Image& im, long& sumOut)
@@ -55,6 +68,8 @@ static void testStyle (const char* name, bool expectStateful)
         juce::Graphics g (im);
         BandFrame f; fillFrame (f, seed, base);
         SpectrumStyle::RenderParams rp; rp.width = W; rp.height = H;
+        rp.barPitchRatio = 1.0f / (float) juce::jmax (1, f.bandCount);   // 与真实 app 一致（铺满一圈）
+        rp.drawGrid = false;
         st->render (g, juce::Rectangle<int> (0, 0, W, H), f, rp);
         return im;
     };
@@ -62,6 +77,11 @@ static void testStyle (const char* name, bool expectStateful)
     long sa = 0; long ink = inkAnd (a, sa);
     std::printf ("      [%s] frame0 ink=%ld alphaSum=%ld\n", name, ink, sa);
     check (a.isValid() && ink > 200, name);
+    {
+        std::string safe (name); for (auto& c : safe) if (c == ':') c = '_';
+        std::system ("mkdir -p /tmp/opencode/shots");
+        dumpPng (a, "/tmp/opencode/shots/" + safe + ".png");
+    }
 
     if (expectStateful)
     {
@@ -74,6 +94,7 @@ static void testStyle (const char* name, bool expectStateful)
         juce::Image im (juce::Image::ARGB, 220, 180, true);
         juce::Graphics g (im); BandFrame f; fillFrame (f, 7, 0.5f);
         SpectrumStyle::RenderParams rp; rp.width = 220; rp.height = 180;
+        rp.barPitchRatio = 1.0f / (float) juce::jmax (1, f.bandCount);
         st->render (g, juce::Rectangle<int> (0, 0, 220, 180), f, rp);
         check (im.isValid(), (std::string(name) + ": resize-safe render ok").c_str());
     }
